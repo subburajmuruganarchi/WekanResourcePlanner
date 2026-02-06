@@ -1,6 +1,7 @@
 import { Employee } from '../employees/employee.model';
-import { ProjectAllocation } from './allocation.model';
-import { Types } from 'mongoose';
+import { ProjectAllocation, AllocationOverrideLog, IProjectAllocation } from './allocation.model';
+import { Project } from '../projects/project.model';
+import { Types, startSession } from 'mongoose';
 
 export interface RankingRequest {
     projectId: string;
@@ -23,6 +24,34 @@ export interface RankedEmployee {
     };
 }
 
+export interface CreateAllocationRequest {
+    projectId: string;
+    employeeId: string;
+    roleId: string;
+    startDate: string;
+    endDate: string;
+    percentage: number;
+    isAdminOverride?: boolean;
+    overrideReason?: string;
+    authorizedById?: string;
+}
+
+export interface AllocationResponse {
+    id: string;
+    projectId: string;
+    employeeId: string;
+    roleId: string;
+    startDate: string;
+    endDate: string;
+    percentage: number;
+    isActive: boolean;
+}
+
+export interface ValidationError {
+    field: string;
+    message: string;
+}
+
 interface PopulatedEmployee {
     _id: Types.ObjectId;
     firstName: string;
@@ -39,6 +68,139 @@ interface PopulatedEmployee {
 }
 
 export class AllocationService {
+    async createAllocation(request: CreateAllocationRequest): Promise<AllocationResponse> {
+        const session = await startSession();
+        session.startTransaction();
+
+        try {
+            // Validate IDs
+            if (!Types.ObjectId.isValid(request.projectId)) {
+                throw new Error('Invalid project ID');
+            }
+            if (!Types.ObjectId.isValid(request.employeeId)) {
+                throw new Error('Invalid employee ID');
+            }
+            if (!Types.ObjectId.isValid(request.roleId)) {
+                throw new Error('Invalid role ID');
+            }
+
+            // Validate dates
+            const startDate = new Date(request.startDate);
+            const endDate = new Date(request.endDate);
+
+            if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                throw new Error('Invalid date format');
+            }
+            if (endDate <= startDate) {
+                throw new Error('End date must be after start date');
+            }
+
+            // Validate project exists and check date range
+            const project = await Project.findById(request.projectId).session(session);
+            if (!project) {
+                throw new Error('Project not found');
+            }
+
+            if (startDate < project.startDate) {
+                throw new Error(`Allocation start date cannot be before project start date (${project.startDate.toISOString().split('T')[0]})`);
+            }
+            if (project.endDate && endDate > project.endDate) {
+                throw new Error(`Allocation end date cannot be after project end date (${project.endDate.toISOString().split('T')[0]})`);
+            }
+
+            // Validate employee exists
+            const employee = await Employee.findById(request.employeeId).session(session);
+            if (!employee) {
+                throw new Error('Employee not found');
+            }
+            if (!employee.isActive) {
+                throw new Error('Cannot allocate inactive employee');
+            }
+
+            // Validate allocation percentage
+            if (request.percentage <= 0 || request.percentage > 100) {
+                throw new Error('Allocation percentage must be between 1 and 100');
+            }
+
+            // Calculate current allocation for the employee during the requested period
+            const overlappingAllocations = await ProjectAllocation.find({
+                employeeId: new Types.ObjectId(request.employeeId),
+                isActive: true,
+                startDate: { $lte: endDate },
+                endDate: { $gte: startDate }
+            }).session(session);
+
+            const currentTotalAllocation = overlappingAllocations.reduce(
+                (sum, alloc) => sum + alloc.percentage, 0
+            );
+            const newTotalAllocation = currentTotalAllocation + request.percentage;
+
+            // Check if over-allocation (requires admin override)
+            if (newTotalAllocation > 100) {
+                if (!request.isAdminOverride) {
+                    throw new Error(
+                        `Allocation would exceed 100% capacity. Employee is currently at ${currentTotalAllocation}% allocation. ` +
+                        `Requested ${request.percentage}% would result in ${newTotalAllocation}% total. ` +
+                        `Admin override required.`
+                    );
+                }
+
+                // Validate override requirements
+                if (!request.overrideReason || request.overrideReason.trim().length < 10) {
+                    throw new Error('Admin override requires a reason of at least 10 characters');
+                }
+                if (!request.authorizedById || !Types.ObjectId.isValid(request.authorizedById)) {
+                    throw new Error('Admin override requires valid authorizer ID');
+                }
+            }
+
+            // Create the allocation
+            const [allocation] = await ProjectAllocation.create([{
+                projectId: new Types.ObjectId(request.projectId),
+                employeeId: new Types.ObjectId(request.employeeId),
+                roleId: new Types.ObjectId(request.roleId),
+                startDate,
+                endDate,
+                percentage: request.percentage,
+                isActive: true
+            }], { session });
+
+            // Log admin override if applicable
+            if (request.isAdminOverride && request.overrideReason && request.authorizedById) {
+                await AllocationOverrideLog.create([{
+                    allocationId: allocation._id,
+                    projectId: new Types.ObjectId(request.projectId),
+                    employeeId: new Types.ObjectId(request.employeeId),
+                    requestedPercentage: request.percentage,
+                    reason: request.overrideReason,
+                    authorizedBy: new Types.ObjectId(request.authorizedById)
+                }], { session });
+            }
+
+            await session.commitTransaction();
+
+            return this.mapAllocationToResponse(allocation);
+        } catch (error) {
+            await session.abortTransaction();
+            throw error;
+        } finally {
+            session.endSession();
+        }
+    }
+
+    private mapAllocationToResponse(allocation: IProjectAllocation): AllocationResponse {
+        return {
+            id: allocation._id.toString(),
+            projectId: allocation.projectId.toString(),
+            employeeId: allocation.employeeId.toString(),
+            roleId: allocation.roleId.toString(),
+            startDate: allocation.startDate.toISOString().split('T')[0],
+            endDate: allocation.endDate.toISOString().split('T')[0],
+            percentage: allocation.percentage,
+            isActive: allocation.isActive
+        };
+    }
+
     async rankEmployees(request: RankingRequest): Promise<RankedEmployee[]> {
         // Get all active employees
         const employees = await Employee.find({ isActive: true })
@@ -107,3 +269,4 @@ export class AllocationService {
 }
 
 export const allocationService = new AllocationService();
+

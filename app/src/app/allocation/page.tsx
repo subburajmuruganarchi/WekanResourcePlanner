@@ -18,9 +18,9 @@ export function Allocation() {
     const [searchQuery, setSearchQuery] = useState("")
     const [requiredSkill, setRequiredSkill] = useState("React")
     const [isDialogOpen, setIsDialogOpen] = useState(false)
-    const [selectedEmployee, setSelectedEmployee] = useState<{ name: string } | null>(null)
+    const [selectedEmployee, setSelectedEmployee] = useState<RankedEmployee | null>(null)
 
-    const { rankedEmployees, loading: rankLoading, error: rankError } = useRankedEmployees({
+    const { rankedEmployees, loading: rankLoading, error: rankError, refetch } = useRankedEmployees({
         projectId: selectedProjectId,
         skill: requiredSkill,
     })
@@ -197,8 +197,11 @@ export function Allocation() {
             <AllocationDialog
                 open={isDialogOpen}
                 onOpenChange={setIsDialogOpen}
+                employeeId={selectedEmployee?.id || ""}
                 employeeName={selectedEmployee?.name || ""}
+                projectId={selectedProjectId || ""}
                 projectName={selectedProjectName}
+                onSuccess={refetch}
             />
         </PageContainer>
     )

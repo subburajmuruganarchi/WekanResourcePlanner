@@ -1,22 +1,88 @@
 import { useState } from "react"
-import { Percent } from "lucide-react"
+import { Percent, Loader2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { api } from "@/lib/api-client"
 
 interface AllocationDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
+    employeeId: string
     employeeName: string
+    projectId: string
     projectName: string
+    onSuccess?: () => void
 }
 
-export function AllocationDialog({ open, onOpenChange, employeeName, projectName }: AllocationDialogProps) {
+interface AllocationRequest {
+    projectId: string
+    employeeId: string
+    roleId: string
+    startDate: string
+    endDate: string
+    percentage: number
+    isAdminOverride?: boolean
+    overrideReason?: string
+    authorizedById?: string
+}
+
+export function AllocationDialog({
+    open,
+    onOpenChange,
+    employeeId,
+    employeeName,
+    projectId,
+    projectName,
+    onSuccess
+}: AllocationDialogProps) {
     const [percentage, setPercentage] = useState("50")
+    const [startDate, setStartDate] = useState("")
+    const [endDate, setEndDate] = useState("")
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+
+    // Placeholder role ID - in real implementation, this would come from the form or context
+    const roleId = "000000000000000000000001"
+
+    const handleSubmit = async () => {
+        setLoading(true)
+        setError(null)
+
+        try {
+            const request: AllocationRequest = {
+                projectId,
+                employeeId,
+                roleId,
+                startDate,
+                endDate,
+                percentage: parseInt(percentage, 10),
+            }
+
+            await api.post('/allocations', request)
+
+            // Success - close dialog and notify parent
+            onOpenChange(false)
+            onSuccess?.()
+        } catch (err) {
+            // Display backend validation errors verbatim
+            if (err instanceof Error) {
+                setError(err.message)
+            } else {
+                setError('An unexpected error occurred')
+            }
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleClose = () => {
+        setError(null)
+        onOpenChange(false)
+    }
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleClose}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle>Allocate Resource</DialogTitle>
@@ -24,6 +90,14 @@ export function AllocationDialog({ open, onOpenChange, employeeName, projectName
                         Allocate <strong>{employeeName}</strong> to <strong>{projectName}</strong>.
                     </DialogDescription>
                 </DialogHeader>
+
+                {error && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                        <p className="text-sm text-red-700">{error}</p>
+                    </div>
+                )}
+
                 <div className="grid gap-4 py-4">
                     <div className="grid grid-cols-4 items-center gap-4">
                         <label className="text-right text-sm font-medium text-gray-700">Percentage</label>
@@ -34,41 +108,45 @@ export function AllocationDialog({ open, onOpenChange, employeeName, projectName
                                 onChange={(e) => setPercentage(e.target.value)}
                                 className="pl-9"
                                 type="number"
-                                min="0"
+                                min="1"
                                 max="100"
                             />
                         </div>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
-                        <label className="text-right text-sm font-medium text-gray-700">Duration</label>
-                        <div className="col-span-3 flex gap-2">
-                            <div className="relative flex-1">
-                                <Input type="date" className="w-full" />
-                            </div>
-                            <span className="self-center text-gray-500">-</span>
-                            <div className="relative flex-1">
-                                <Input type="date" className="w-full" />
-                            </div>
+                        <label className="text-right text-sm font-medium text-gray-700">Start Date</label>
+                        <div className="col-span-3">
+                            <Input
+                                type="date"
+                                className="w-full"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                            />
                         </div>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
-                        <label className="text-right text-sm font-medium text-gray-700">Role</label>
-                        <Select defaultValue="developer">
-                            <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder="Select role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="developer">Developer</SelectItem>
-                                <SelectItem value="senior-developer">Senior Developer</SelectItem>
-                                <SelectItem value="lead">Tech Lead</SelectItem>
-                                <SelectItem value="architect">Architect</SelectItem>
-                            </SelectContent>
-                        </Select>
+                        <label className="text-right text-sm font-medium text-gray-700">End Date</label>
+                        <div className="col-span-3">
+                            <Input
+                                type="date"
+                                className="w-full"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                            />
+                        </div>
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                    <Button type="submit" onClick={() => onOpenChange(false)}>Confirm Allocation</Button>
+                    <Button variant="outline" onClick={handleClose} disabled={loading}>
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={handleSubmit}
+                        disabled={loading || !startDate || !endDate}
+                    >
+                        {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        Confirm Allocation
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
