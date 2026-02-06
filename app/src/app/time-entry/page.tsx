@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react"
-import { Calendar, Save, Clock, Info } from "lucide-react"
+import { Calendar, Save, Clock, Info, Loader2, AlertCircle } from "lucide-react"
 import { PageContainer } from "@/components/layout/page-container"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,11 +7,12 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { useTimeEntries } from "@/lib/use-time-entries"
 
-// Mock Data
+// Mock Data - In production, these would come from allocated projects API
 const allocatedProjects = [
-    { code: "PRJ-001", name: "E-Commerce Platform Redesign", role: "Frontend" },
-    { code: "PRJ-002", name: "Mobile App Development", role: "Frontend" },
+    { code: "PRJ-001", name: "E-Commerce Platform Redesign", role: "Frontend", id: "000000000000000000000001" },
+    { code: "PRJ-002", name: "Mobile App Development", role: "Frontend", id: "000000000000000000000002" },
 ]
 
 const leaveTypes = [
@@ -24,21 +25,52 @@ const otherCodes = [
     { code: "MEETING", name: "Internal Meetings" },
 ]
 
-// Mock Initial State
-const initialEntries = [
-    { id: 1, day: "Monday", date: "Feb 3", hours: 8, projectCode: "PRJ-001", comments: "" },
-    { id: 2, day: "Tuesday", date: "Feb 4", hours: 8, projectCode: "PRJ-001", comments: "" },
-    { id: 3, day: "Wednesday", date: "Feb 5", hours: 8, projectCode: "PRJ-001", comments: "" },
-    { id: 4, day: "Thursday", date: "Feb 6", hours: 6, projectCode: "PRJ-001", comments: "" },
-    { id: 5, day: "Thursday", date: "Feb 6", hours: 2, projectCode: "TRAINING", comments: "Compliance Training" },
-    { id: 6, day: "Friday", date: "Feb 7", hours: 8, projectCode: "PRJ-001", comments: "" },
-    { id: 7, day: "Saturday", date: "Feb 8", hours: 0, projectCode: "", comments: "" },
-    { id: 8, day: "Sunday", date: "Feb 9", hours: 0, projectCode: "", comments: "" },
-]
+// Get current week dates
+function getWeekDates(): { day: string; date: string; fullDate: string }[] {
+    const today = new Date()
+    const dayOfWeek = today.getDay()
+    const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1 // Adjust to Monday
+    const monday = new Date(today)
+    monday.setDate(today.getDate() - diff)
+
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    return days.map((day, i) => {
+        const d = new Date(monday)
+        d.setDate(monday.getDate() + i)
+        return {
+            day,
+            date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            fullDate: d.toISOString().split('T')[0]
+        }
+    })
+}
+
+// Initial state from week dates
+const weekDates = getWeekDates()
+const initialEntries = weekDates.map((d, i) => ({
+    id: i + 1,
+    day: d.day,
+    date: d.date,
+    fullDate: d.fullDate,
+    hours: 0,
+    projectCode: "",
+    comments: ""
+}))
+
+// Placeholder IDs
+const MOCK_EMPLOYEE_ID = "000000000000000000000001"
+const MOCK_TIMECODE_ID = "000000000000000000000001"
 
 export function TimeEntry() {
     const [entries, setEntries] = useState(initialEntries)
-    const [selectedWeek] = useState("Feb 3 - Feb 9, 2026")
+    const [selectedWeek] = useState(() => {
+        const dates = getWeekDates()
+        return `${dates[0].date} - ${dates[6].date}, ${new Date().getFullYear()}`
+    })
+    const [submitError, setSubmitError] = useState<string | null>(null)
+    const [submitSuccess, setSubmitSuccess] = useState(false)
+
+    const { submitTimeEntry, loading } = useTimeEntries()
 
     const totalHours = useMemo(() => entries.reduce((sum, e) => sum + (Number(e.hours) || 0), 0), [entries])
 
@@ -61,10 +93,63 @@ export function TimeEntry() {
         return allocatedProjects.find(p => p.code === code)?.role || "-"
     }
 
+    const getProjectId = (code: string): string | null => {
+        return allocatedProjects.find(p => p.code === code)?.id || null
+    }
+
     const getStatusColor = (hours: number) => {
         if (hours === 40) return "bg-green-100 text-green-600 border-green-200"
         if (hours > 40) return "bg-red-100 text-red-600 border-red-200"
         return "bg-amber-100 text-amber-600 border-amber-200"
+    }
+
+    const handleSubmit = async () => {
+        setSubmitError(null)
+        setSubmitSuccess(false)
+
+        // Filter entries that have hours > 0 and a valid project code
+        const validEntries = entries.filter(e => e.hours > 0 && e.projectCode)
+
+        if (validEntries.length === 0) {
+            setSubmitError("No time entries to submit. Add hours to at least one day.")
+            return
+        }
+
+        try {
+            // Submit each entry individually
+            for (const entry of validEntries) {
+                const projectId = getProjectId(entry.projectCode)
+
+                if (!projectId) {
+                    // Skip non-project entries (leave, training, etc.)
+                    continue
+                }
+
+                await submitTimeEntry({
+                    employeeId: MOCK_EMPLOYEE_ID,
+                    projectId,
+                    timeCodeId: MOCK_TIMECODE_ID,
+                    date: entry.fullDate,
+                    hours: entry.hours,
+                    comments: entry.comments || undefined,
+                })
+            }
+
+            setSubmitSuccess(true)
+        } catch (err) {
+            // Display backend validation error verbatim
+            if (err instanceof Error) {
+                setSubmitError(err.message)
+            } else {
+                setSubmitError("Failed to submit time entries")
+            }
+        }
+    }
+
+    const handleReset = () => {
+        setEntries(initialEntries)
+        setSubmitError(null)
+        setSubmitSuccess(false)
     }
 
     return (
@@ -75,10 +160,39 @@ export function TimeEntry() {
                     <p className="text-sm text-gray-600 mt-1">Status: <Badge variant="warning">Draft</Badge></p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline">Reset</Button>
-                    <Button className="gap-2"><Save className="w-4 h-4" /> Submit Timesheet</Button>
+                    <Button variant="outline" onClick={handleReset} disabled={loading}>Reset</Button>
+                    <Button className="gap-2" onClick={handleSubmit} disabled={loading}>
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        Submit Timesheet
+                    </Button>
                 </div>
             </div>
+
+            {/* Error Message */}
+            {submitError && (
+                <Card className="p-4 bg-red-50 border-red-200">
+                    <div className="flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
+                        <div>
+                            <h4 className="font-medium text-red-900 text-sm">Submission Failed</h4>
+                            <p className="text-sm text-red-700 mt-1">{submitError}</p>
+                        </div>
+                    </div>
+                </Card>
+            )}
+
+            {/* Success Message */}
+            {submitSuccess && (
+                <Card className="p-4 bg-green-50 border-green-200">
+                    <div className="flex items-start gap-3">
+                        <Clock className="w-5 h-5 text-green-500 mt-0.5" />
+                        <div>
+                            <h4 className="font-medium text-green-900 text-sm">Timesheet Submitted</h4>
+                            <p className="text-sm text-green-700 mt-1">Your time entries have been saved successfully.</p>
+                        </div>
+                    </div>
+                </Card>
+            )}
 
             {/* Summary Card */}
             <Card className="p-6">
