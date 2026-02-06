@@ -8,6 +8,10 @@ import { projectRouter } from './modules/projects/project.routes';
 import { allocationRouter } from './modules/allocations/allocation.routes';
 import { timeEntryRouter } from './modules/time-entries/time-entry.routes';
 
+// Import models to register schemas with Mongoose (required for populate)
+import './modules/skills/skill.model';
+import './modules/roles/role.model';
+
 const app = express();
 
 // Global Middleware

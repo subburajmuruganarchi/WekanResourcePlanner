@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Calendar, Save, Clock, Info, Loader2, AlertCircle } from "lucide-react"
 import { PageContainer } from "@/components/layout/page-container"
 import { Button } from "@/components/ui/button"
@@ -8,12 +8,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useTimeEntries } from "@/lib/use-time-entries"
+import { useEmployees } from "@/lib/use-employees"
+import { useProjects } from "@/lib/use-projects"
+import { api } from "@/lib/api-client"
 
-// Mock Data - In production, these would come from allocated projects API
-const allocatedProjects = [
-    { code: "PRJ-001", name: "E-Commerce Platform Redesign", role: "Frontend", id: "000000000000000000000001" },
-    { code: "PRJ-002", name: "Mobile App Development", role: "Frontend", id: "000000000000000000000002" },
-]
+interface TimeCodeResponse {
+    id: string
+    code: string
+    description: string
+    isBillable: boolean
+}
 
 const leaveTypes = [
     { code: "LV-PL", name: "Planned Leave" },
@@ -57,10 +61,6 @@ const initialEntries = weekDates.map((d, i) => ({
     comments: ""
 }))
 
-// Placeholder IDs
-const MOCK_EMPLOYEE_ID = "000000000000000000000001"
-const MOCK_TIMECODE_ID = "000000000000000000000001"
-
 export function TimeEntry() {
     const [entries, setEntries] = useState(initialEntries)
     const [selectedWeek] = useState(() => {
@@ -69,8 +69,40 @@ export function TimeEntry() {
     })
     const [submitError, setSubmitError] = useState<string | null>(null)
     const [submitSuccess, setSubmitSuccess] = useState(false)
+    const [timeCodeId, setTimeCodeId] = useState<string | null>(null)
 
     const { submitTimeEntry, loading } = useTimeEntries()
+    const { employees, loading: loadingEmployees } = useEmployees()
+    const { projects, loading: loadingProjects } = useProjects()
+
+    // Use first employee as current user (in production, this would come from auth context)
+    const currentEmployee = employees[0]
+
+    // Fetch first billable time code
+    useEffect(() => {
+        const fetchTimeCode = async () => {
+            try {
+                const codes = await api.get<TimeCodeResponse[]>('/time-entries/codes')
+                if (codes.length > 0) {
+                    setTimeCodeId(codes[0].id)
+                }
+            } catch {
+                // Time codes endpoint may not exist yet - use null
+                setTimeCodeId(null)
+            }
+        }
+        fetchTimeCode()
+    }, [])
+
+    // Map projects to dropdown format
+    const allocatedProjects = useMemo(() => {
+        return projects.map(p => ({
+            code: p.code,
+            name: p.name,
+            role: "Developer",
+            id: p.id
+        }))
+    }, [projects])
 
     const totalHours = useMemo(() => entries.reduce((sum, e) => sum + (Number(e.hours) || 0), 0), [entries])
 
@@ -107,6 +139,11 @@ export function TimeEntry() {
         setSubmitError(null)
         setSubmitSuccess(false)
 
+        if (!currentEmployee) {
+            setSubmitError("No employee data loaded. Please refresh and try again.")
+            return
+        }
+
         // Filter entries that have hours > 0 and a valid project code
         const validEntries = entries.filter(e => e.hours > 0 && e.projectCode)
 
@@ -125,10 +162,16 @@ export function TimeEntry() {
                     continue
                 }
 
+                // Use fetched time code ID, or skip if not available
+                if (!timeCodeId) {
+                    setSubmitError("Time code not configured. Please contact administrator.")
+                    return
+                }
+
                 await submitTimeEntry({
-                    employeeId: MOCK_EMPLOYEE_ID,
+                    employeeId: currentEmployee.id,
                     projectId,
-                    timeCodeId: MOCK_TIMECODE_ID,
+                    timeCodeId,
                     date: entry.fullDate,
                     hours: entry.hours,
                     comments: entry.comments || undefined,
@@ -152,16 +195,32 @@ export function TimeEntry() {
         setSubmitSuccess(false)
     }
 
+    const isLoading = loadingEmployees || loadingProjects
+
+    if (isLoading) {
+        return (
+            <PageContainer className="flex items-center justify-center min-h-[400px]">
+                <div className="flex items-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Loading time entry data...</span>
+                </div>
+            </PageContainer>
+        )
+    }
+
     return (
         <PageContainer className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-semibold text-gray-900">Weekly Time Entry</h1>
-                    <p className="text-sm text-gray-600 mt-1">Status: <Badge variant="warning">Draft</Badge></p>
+                    <p className="text-sm text-gray-600 mt-1">
+                        {currentEmployee && <span className="mr-2">Employee: <strong>{currentEmployee.name}</strong></span>}
+                        Status: <Badge variant="warning">Draft</Badge>
+                    </p>
                 </div>
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={handleReset} disabled={loading}>Reset</Button>
-                    <Button className="gap-2" onClick={handleSubmit} disabled={loading}>
+                    <Button className="gap-2" onClick={handleSubmit} disabled={loading || !currentEmployee}>
                         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Submit Timesheet
                     </Button>
@@ -232,11 +291,15 @@ export function TimeEntry() {
                         <div className="flex items-start gap-3">
                             <Info className="w-5 h-5 text-blue-600 mt-0.5" />
                             <div>
-                                <h4 className="font-medium text-blue-900 text-sm">Allocated Projects</h4>
+                                <h4 className="font-medium text-blue-900 text-sm">Available Projects</h4>
                                 <ul className="mt-2 space-y-1 text-sm text-blue-800">
-                                    {allocatedProjects.map(p => (
-                                        <li key={p.code}>• <strong>{p.code}</strong>: {p.name}</li>
-                                    ))}
+                                    {allocatedProjects.length === 0 ? (
+                                        <li className="text-gray-500">No projects available</li>
+                                    ) : (
+                                        allocatedProjects.map(p => (
+                                            <li key={p.code}>• <strong>{p.code}</strong>: {p.name}</li>
+                                        ))
+                                    )}
                                 </ul>
                             </div>
                         </div>

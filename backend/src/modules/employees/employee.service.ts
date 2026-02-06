@@ -31,7 +31,7 @@ interface PopulatedEmployee {
     lastName: string;
     email: string;
     title: string;
-    roles: Array<{ label: string } | Types.ObjectId>;
+    roles: Array<{ name: string } | Types.ObjectId>;
     skills: PopulatedSkill[];
     experienceYears?: number;
 }
@@ -48,7 +48,7 @@ export class EmployeeService {
 
         const employees = await Employee.find(query)
             .populate('skills.skillId', 'name')
-            .populate('roles', 'label')
+            .populate('roles', 'name')
             .lean() as unknown as PopulatedEmployee[];
 
         return employees.map(emp => this.mapToResponse(emp));
@@ -61,7 +61,7 @@ export class EmployeeService {
 
         const employee = await Employee.findById(id)
             .populate('skills.skillId', 'name')
-            .populate('roles', 'label')
+            .populate('roles', 'name')
             .lean() as unknown as PopulatedEmployee | null;
 
         if (!employee) {
@@ -74,7 +74,7 @@ export class EmployeeService {
     private mapToResponse(emp: PopulatedEmployee): EmployeeResponse {
         const primarySkill = emp.skills?.find(s => s.type === 'Primary');
         const primaryRole = Array.isArray(emp.roles) && emp.roles.length > 0
-            ? (emp.roles[0] as { label: string })?.label
+            ? (emp.roles[0] as { name: string })?.name
             : 'Employee';
 
         return {
