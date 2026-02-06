@@ -5,9 +5,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { FilterBar } from "@/components/shared/filter-bar"
-import { MoreVertical } from "lucide-react"
+import { MoreVertical, Loader2 } from "lucide-react"
+import { useEmployees } from "@/lib/use-employees"
 
-// Mock Data
+// Mock Data (Projects remain mocked for now)
 const projects = [
     { id: "1", name: "E-Commerce Platform Redesign", code: "PRJ-001", owner: "Sarah Chen", startDate: "2026-01-15", endDate: "2026-06-30", status: "Active", priority: "High", team: 8 },
     { id: "2", name: "Mobile App Development", code: "PRJ-002", owner: "Marcus Johnson", startDate: "2026-02-01", endDate: "2026-08-31", status: "Active", priority: "High", team: 12 },
@@ -15,16 +16,9 @@ const projects = [
     { id: "4", name: "Customer Portal v2", code: "PRJ-004", owner: "David Park", startDate: "2026-03-01", endDate: "2026-09-30", status: "Planning", priority: "Medium", team: 5 },
 ]
 
-const employees = [
-    { id: "1", name: "Amol Deep", role: "admin", position: "Head of Delivery", status: "Active" },
-    { id: "2", name: "Sanjay Mali", role: "employee", position: "Graphic Designer", status: "Active" },
-    { id: "3", name: "Sachin Deshpande", role: "employee", position: "Project Manager", status: "Active" },
-    { id: "4", name: "Deepak N", role: "employee", position: "Jr Associate TA", status: "Active" },
-]
-
-
 export function Projects() {
     const navigate = useNavigate()
+    const { employees, loading, error } = useEmployees()
 
     return (
         <PageContainer>
@@ -45,30 +39,41 @@ export function Projects() {
                 <TabsContent value="employee" className="space-y-4">
                     <FilterBar />
                     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Employee</TableHead>
-                                    <TableHead>Role</TableHead>
-                                    <TableHead>Position</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="w-[50px]"></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {employees.map((emp) => (
-                                    <TableRow key={emp.id} className="cursor-pointer hover:bg-gray-50">
-                                        <TableCell className="font-medium text-brand-600">{emp.name}</TableCell>
-                                        <TableCell><Badge variant="secondary" className="uppercase text-[10px]">{emp.role}</Badge></TableCell>
-                                        <TableCell>{emp.position}</TableCell>
-                                        <TableCell><span className="text-green-600 font-medium text-sm">{emp.status}</span></TableCell>
-                                        <TableCell>
-                                            <Button variant="ghost" size="icon"><MoreVertical className="w-4 h-4 text-gray-400" /></Button>
-                                        </TableCell>
+                        {loading ? (
+                            <div className="flex items-center justify-center p-8">
+                                <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
+                                <span className="ml-2 text-gray-500">Loading employees...</span>
+                            </div>
+                        ) : error ? (
+                            <div className="p-8 text-center text-red-600">
+                                <p>Error: {error}</p>
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Employee</TableHead>
+                                        <TableHead>Role</TableHead>
+                                        <TableHead>Title</TableHead>
+                                        <TableHead>Skill</TableHead>
+                                        <TableHead className="w-[50px]"></TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {employees.map((emp) => (
+                                        <TableRow key={emp.id} className="cursor-pointer hover:bg-gray-50">
+                                            <TableCell className="font-medium text-brand-600">{emp.name}</TableCell>
+                                            <TableCell><Badge variant="secondary" className="uppercase text-[10px]">{emp.role}</Badge></TableCell>
+                                            <TableCell>{emp.title}</TableCell>
+                                            <TableCell>{emp.primarySkill}</TableCell>
+                                            <TableCell>
+                                                <Button variant="ghost" size="icon"><MoreVertical className="w-4 h-4 text-gray-400" /></Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
                     </div>
                 </TabsContent>
 

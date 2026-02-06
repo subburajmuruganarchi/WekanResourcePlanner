@@ -3,9 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { errorHandler } from './common/middleware/error.middleware';
 import { env } from './config/env';
-
-// Import Routes (Placeholder)
-// import { healthRouter } from './modules/health/health.routes';
+import { employeeRouter } from './modules/employees/employee.routes';
 
 const app = express();
 
@@ -20,7 +18,7 @@ app.get('/health', (req, res) => {
 });
 
 // Register Routes
-// app.use('/api/v1/projects', projectRouter);
+app.use('/api/employees', employeeRouter);
 
 // Global Error Handler
 app.use(errorHandler);
