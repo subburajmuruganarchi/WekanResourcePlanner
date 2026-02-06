@@ -16,6 +16,12 @@ export enum ProjectStatus {
     ON_HOLD = 'OnHold',
 }
 
+export enum ProjectPriority {
+    HIGH = 'High',
+    MEDIUM = 'Medium',
+    LOW = 'Low',
+}
+
 export enum AllocationType {
     PERCENTAGE = 'Percentage',
 }

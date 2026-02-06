@@ -16,10 +16,10 @@ const projects = [
 ]
 
 const employees = [
-    { id: "1", name: "Amol Deep", role: "admin", position: "Head of Delivery", location: "Bangalore", status: "Active" },
-    { id: "2", name: "Sanjay Mali", role: "employee", position: "Graphic Designer", location: "Bangalore", status: "Active" },
-    { id: "3", name: "Sachin Deshpande", role: "employee", position: "Project Manager", location: "Pune", status: "Active" },
-    { id: "4", name: "Deepak N", role: "employee", position: "Jr Associate TA", location: "Chennai", status: "Active" },
+    { id: "1", name: "Amol Deep", role: "admin", position: "Head of Delivery", status: "Active" },
+    { id: "2", name: "Sanjay Mali", role: "employee", position: "Graphic Designer", status: "Active" },
+    { id: "3", name: "Sachin Deshpande", role: "employee", position: "Project Manager", status: "Active" },
+    { id: "4", name: "Deepak N", role: "employee", position: "Jr Associate TA", status: "Active" },
 ]
 
 
@@ -51,7 +51,6 @@ export function Projects() {
                                     <TableHead>Employee</TableHead>
                                     <TableHead>Role</TableHead>
                                     <TableHead>Position</TableHead>
-                                    <TableHead>Location</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead className="w-[50px]"></TableHead>
                                 </TableRow>
@@ -62,7 +61,6 @@ export function Projects() {
                                         <TableCell className="font-medium text-brand-600">{emp.name}</TableCell>
                                         <TableCell><Badge variant="secondary" className="uppercase text-[10px]">{emp.role}</Badge></TableCell>
                                         <TableCell>{emp.position}</TableCell>
-                                        <TableCell>{emp.location}</TableCell>
                                         <TableCell><span className="text-green-600 font-medium text-sm">{emp.status}</span></TableCell>
                                         <TableCell>
                                             <Button variant="ghost" size="icon"><MoreVertical className="w-4 h-4 text-gray-400" /></Button>

@@ -1,5 +1,5 @@
 import { Document, Schema, Types, model } from 'mongoose';
-import { ProjectStatus, SkillLevel } from '../../common/types/enums';
+import { ProjectStatus, ProjectPriority, SkillLevel } from '../../common/types/enums';
 
 export interface IProject extends Document {
     code: string;
@@ -8,6 +8,7 @@ export interface IProject extends Document {
     startDate: Date;
     endDate?: Date;
     status: ProjectStatus;
+    priority: ProjectPriority;
     managerId?: Types.ObjectId;
 }
 
@@ -33,6 +34,7 @@ const ProjectSchema = new Schema<IProject>({
     startDate: { type: Date, required: true },
     endDate: { type: Date },
     status: { type: String, enum: Object.values(ProjectStatus), default: ProjectStatus.PLANNING, index: true },
+    priority: { type: String, enum: Object.values(ProjectPriority), default: ProjectPriority.MEDIUM },
     managerId: { type: Schema.Types.ObjectId, ref: 'Employee' }
 }, { timestamps: true });
 
