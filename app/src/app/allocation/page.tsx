@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Search, UserPlus } from "lucide-react"
+import { Search, UserPlus, Loader2 } from "lucide-react"
 import { PageContainer } from "@/components/layout/page-container"
 import { Section } from "@/components/layout/section"
 import { Button } from "@/components/ui/button"
@@ -9,51 +9,34 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { RoleGuard } from "@/components/shared/role-guard"
 import { AllocationDialog } from "./components/allocation-dialog"
-
-// Mock Data
-const projects = [
-    { id: 1, name: "E-Commerce Platform Redesign", code: "PRJ-001" },
-    { id: 2, name: "Mobile App Development", code: "PRJ-002" },
-    { id: 3, name: "API Gateway Migration", code: "PRJ-003" },
-]
-
-const employees = [
-    { id: 1, name: "Alice Johnson", role: "Frontend", primarySkill: "React", skillLevel: "Expert", availability: 0, experience: 5, currentAllocations: [{ project: "PRJ-001", allocation: 100 }] },
-    { id: 2, name: "Bob Smith", role: "Frontend", primarySkill: "React", skillLevel: "Expert", availability: 0, experience: 6, currentAllocations: [{ project: "PRJ-001", allocation: 100 }] },
-    { id: 3, name: "Carol White", role: "Backend", primarySkill: "Node.js", skillLevel: "Expert", availability: 25, experience: 7, currentAllocations: [{ project: "PRJ-001", allocation: 75 }] },
-    { id: 4, name: "David Lee", role: "Designer", primarySkill: "UI/UX Design", skillLevel: "Expert", availability: 50, experience: 8, currentAllocations: [{ project: "PRJ-001", allocation: 50 }] },
-    { id: 5, name: "Emily Chen", role: "DevOps", primarySkill: "AWS", skillLevel: "Intermediate", availability: 100, experience: 3, currentAllocations: [] },
-    { id: 6, name: "Frank Wilson", role: "Backend", primarySkill: "Python", skillLevel: "Expert", availability: 100, experience: 9, currentAllocations: [] },
-]
+import { useRankedEmployees, type RankedEmployee } from "@/lib/use-ranked-employees"
+import { useProjects } from "@/lib/use-projects"
 
 export function Allocation() {
-    const [selectedProject, setSelectedProject] = useState(projects[0].id)
+    const { projects, loading: projLoading } = useProjects()
+    const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>()
     const [searchQuery, setSearchQuery] = useState("")
     const [requiredSkill, setRequiredSkill] = useState("React")
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [selectedEmployee, setSelectedEmployee] = useState<{ name: string } | null>(null)
 
-    const handleAllocate = (employee: typeof employees[0]) => {
+    const { rankedEmployees, loading: rankLoading, error: rankError } = useRankedEmployees({
+        projectId: selectedProjectId,
+        skill: requiredSkill,
+    })
+
+    const handleAllocate = (employee: RankedEmployee) => {
         setSelectedEmployee(employee)
         setIsDialogOpen(true)
     }
 
-    // Filter and rank employees
-    const rankedEmployees = employees
-        .filter((emp) =>
-            emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            emp.primarySkill.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        .sort((a, b) => {
-            const aSkillMatch = a.primarySkill === requiredSkill ? 1 : 0
-            const bSkillMatch = b.primarySkill === requiredSkill ? 1 : 0
-            if (aSkillMatch !== bSkillMatch) return bSkillMatch - aSkillMatch
+    // Filter employees by search query (client-side filtering on top of server ranking)
+    const filteredEmployees = rankedEmployees.filter((emp) =>
+        emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        emp.primarySkill.toLowerCase().includes(searchQuery.toLowerCase())
+    )
 
-            if (a.availability !== b.availability) return b.availability - a.availability
-            return b.experience - a.experience
-        })
-
-    const selectedProjectName = projects.find(p => p.id === selectedProject)?.name || "Project"
+    const selectedProjectName = projects.find(p => p.id === selectedProjectId)?.name || "Project"
 
     return (
         <PageContainer className="space-y-6">
@@ -67,19 +50,25 @@ export function Allocation() {
                 <div className="space-y-6">
                     <Section title="Select Project">
                         <div className="space-y-2">
-                            {projects.map((project) => (
-                                <div
-                                    key={project.id}
-                                    onClick={() => setSelectedProject(project.id)}
-                                    className={`p-4 border rounded-xl cursor-pointer transition-all ${selectedProject === project.id
-                                        ? "border-brand-500 bg-brand-50/50 ring-1 ring-brand-500"
-                                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                                        }`}
-                                >
-                                    <div className="font-semibold text-sm text-gray-900">{project.name}</div>
-                                    <div className="text-xs text-gray-500 font-mono mt-1">{project.code}</div>
+                            {projLoading ? (
+                                <div className="flex items-center justify-center p-4">
+                                    <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
                                 </div>
-                            ))}
+                            ) : (
+                                projects.map((project) => (
+                                    <div
+                                        key={project.id}
+                                        onClick={() => setSelectedProjectId(project.id)}
+                                        className={`p-4 border rounded-xl cursor-pointer transition-all ${selectedProjectId === project.id
+                                            ? "border-brand-500 bg-brand-50/50 ring-1 ring-brand-500"
+                                            : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                                            }`}
+                                    >
+                                        <div className="font-semibold text-sm text-gray-900">{project.name}</div>
+                                        <div className="text-xs text-gray-500 font-mono mt-1">{project.code}</div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </Section>
 
@@ -127,68 +116,79 @@ export function Allocation() {
 
                 {/* Right Column: Ranked Table */}
                 <div className="lg:col-span-2">
-                    <Section title={`Available Resources (${rankedEmployees.length})`} description="Ranked by best match">
+                    <Section title={`Available Resources (${filteredEmployees.length})`} description="Ranked by best match">
                         <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow className="bg-gray-50">
-                                        <TableHead>Employee</TableHead>
-                                        <TableHead>Skill Match</TableHead>
-                                        <TableHead>Availability</TableHead>
-                                        <TableHead>Experience</TableHead>
-                                        <TableHead className="text-right">Action</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {rankedEmployees.map((emp) => (
-                                        <TableRow key={emp.id} className="hover:bg-gray-50 group">
-                                            <TableCell>
-                                                <div>
-                                                    <div className="font-medium text-gray-900">{emp.name}</div>
-                                                    <div className="text-xs text-gray-500">{emp.role}</div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex flex-col gap-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <Badge variant={emp.primarySkill === requiredSkill ? "default" : "secondary"} className="text-[10px]">
-                                                            {emp.primarySkill}
-                                                        </Badge>
-                                                        <span className="text-xs text-gray-500">{emp.skillLevel}</span>
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-2 w-32">
-                                                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                                                        <div
-                                                            className={`h-full rounded-full ${emp.availability === 100 ? "bg-green-500" :
-                                                                emp.availability > 0 ? "bg-yellow-500" : "bg-red-500"
-                                                                }`}
-                                                            style={{ width: `${emp.availability}%` }}
-                                                        />
-                                                    </div>
-                                                    <span className="text-xs font-medium w-8">{emp.availability}%</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-sm text-gray-600">{emp.experience} yrs</TableCell>
-                                            <TableCell className="text-right">
-                                                <RoleGuard allowedRoles={["Admin", "ProjectManager"]}>
-                                                    <Button
-                                                        size="sm"
-                                                        disabled={emp.availability === 0}
-                                                        onClick={() => handleAllocate(emp)}
-                                                        className={emp.availability === 0 ? "opacity-50" : ""}
-                                                    >
-                                                        <UserPlus className="w-4 h-4 mr-1.5" />
-                                                        Allocate
-                                                    </Button>
-                                                </RoleGuard>
-                                            </TableCell>
+                            {rankLoading ? (
+                                <div className="flex items-center justify-center p-8">
+                                    <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
+                                    <span className="ml-2 text-gray-500">Loading ranked employees...</span>
+                                </div>
+                            ) : rankError ? (
+                                <div className="p-8 text-center text-red-600">
+                                    <p>Error: {rankError}</p>
+                                </div>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-gray-50">
+                                            <TableHead>Employee</TableHead>
+                                            <TableHead>Skill Match</TableHead>
+                                            <TableHead>Availability</TableHead>
+                                            <TableHead>Experience</TableHead>
+                                            <TableHead className="text-right">Action</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filteredEmployees.map((emp) => (
+                                            <TableRow key={emp.id} className="hover:bg-gray-50 group">
+                                                <TableCell>
+                                                    <div>
+                                                        <div className="font-medium text-gray-900">{emp.name}</div>
+                                                        <div className="text-xs text-gray-500">{emp.role}</div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col gap-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge variant={emp.factors.skillMatch ? "default" : "secondary"} className="text-[10px]">
+                                                                {emp.primarySkill}
+                                                            </Badge>
+                                                            <span className="text-xs text-gray-500">{emp.skillLevel}</span>
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2 w-32">
+                                                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                                            <div
+                                                                className={`h-full rounded-full ${emp.availability === 100 ? "bg-green-500" :
+                                                                    emp.availability > 0 ? "bg-yellow-500" : "bg-red-500"
+                                                                    }`}
+                                                                style={{ width: `${emp.availability}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-xs font-medium w-8">{emp.availability}%</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-sm text-gray-600">{emp.experienceYears} yrs</TableCell>
+                                                <TableCell className="text-right">
+                                                    <RoleGuard allowedRoles={["Admin", "ProjectManager"]}>
+                                                        <Button
+                                                            size="sm"
+                                                            disabled={emp.availability === 0}
+                                                            onClick={() => handleAllocate(emp)}
+                                                            className={emp.availability === 0 ? "opacity-50" : ""}
+                                                        >
+                                                            <UserPlus className="w-4 h-4 mr-1.5" />
+                                                            Allocate
+                                                        </Button>
+                                                    </RoleGuard>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
                         </div>
                     </Section>
                 </div>

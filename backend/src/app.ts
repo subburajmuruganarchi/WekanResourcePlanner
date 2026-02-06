@@ -5,6 +5,7 @@ import { errorHandler } from './common/middleware/error.middleware';
 import { env } from './config/env';
 import { employeeRouter } from './modules/employees/employee.routes';
 import { projectRouter } from './modules/projects/project.routes';
+import { allocationRouter } from './modules/allocations/allocation.routes';
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.get('/health', (req, res) => {
 // Register Routes
 app.use('/api/employees', employeeRouter);
 app.use('/api/projects', projectRouter);
+app.use('/api/allocations', allocationRouter);
 
 // Global Error Handler
 app.use(errorHandler);
