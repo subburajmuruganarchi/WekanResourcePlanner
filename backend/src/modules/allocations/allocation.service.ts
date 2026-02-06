@@ -45,6 +45,17 @@ export interface AllocationResponse {
     endDate: string;
     percentage: number;
     isActive: boolean;
+    hasAdminOverride?: boolean;
+}
+
+export interface UpdateAllocationRequest {
+    allocationId: string;
+    percentage?: number;
+    startDate?: string;
+    endDate?: string;
+    isAdminOverride: boolean;
+    overrideReason: string;
+    authorizedById: string;
 }
 
 export interface ValidationError {
@@ -180,6 +191,95 @@ export class AllocationService {
             await session.commitTransaction();
 
             return this.mapAllocationToResponse(allocation);
+        } catch (error) {
+            await session.abortTransaction();
+            throw error;
+        } finally {
+            session.endSession();
+        }
+    }
+
+    async updateAllocation(request: UpdateAllocationRequest): Promise<AllocationResponse> {
+        const session = await startSession();
+        session.startTransaction();
+
+        try {
+            // Validate allocation ID
+            if (!Types.ObjectId.isValid(request.allocationId)) {
+                throw new Error('Invalid allocation ID');
+            }
+
+            // Admin override is mandatory for updates
+            if (!request.isAdminOverride) {
+                throw new Error('Only admin users can modify allocations. Admin override required.');
+            }
+
+            // Validate override reason (required for audit)
+            if (!request.overrideReason || request.overrideReason.trim().length < 10) {
+                throw new Error('Admin override requires a reason of at least 10 characters');
+            }
+
+            // Validate authorizer ID
+            if (!request.authorizedById || !Types.ObjectId.isValid(request.authorizedById)) {
+                throw new Error('Admin override requires valid authorizer ID');
+            }
+
+            // Find existing allocation
+            const allocation = await ProjectAllocation.findById(request.allocationId).session(session);
+            if (!allocation) {
+                throw new Error('Allocation not found');
+            }
+
+            // Store original values for audit log
+            const originalPercentage = allocation.percentage;
+
+            // Apply updates
+            if (request.percentage !== undefined) {
+                if (request.percentage <= 0 || request.percentage > 100) {
+                    throw new Error('Allocation percentage must be between 1 and 100');
+                }
+                allocation.percentage = request.percentage;
+            }
+
+            if (request.startDate) {
+                const startDate = new Date(request.startDate);
+                if (isNaN(startDate.getTime())) {
+                    throw new Error('Invalid start date format');
+                }
+                allocation.startDate = startDate;
+            }
+
+            if (request.endDate) {
+                const endDate = new Date(request.endDate);
+                if (isNaN(endDate.getTime())) {
+                    throw new Error('Invalid end date format');
+                }
+                allocation.endDate = endDate;
+            }
+
+            // Validate dates
+            if (allocation.endDate <= allocation.startDate) {
+                throw new Error('End date must be after start date');
+            }
+
+            await allocation.save({ session });
+
+            // Create immutable audit log (cannot be updated or deleted)
+            await AllocationOverrideLog.create([{
+                allocationId: allocation._id,
+                projectId: allocation.projectId,
+                employeeId: allocation.employeeId,
+                requestedPercentage: request.percentage || originalPercentage,
+                reason: request.overrideReason,
+                authorizedBy: new Types.ObjectId(request.authorizedById)
+            }], { session });
+
+            await session.commitTransaction();
+
+            return {
+                ...this.mapAllocationToResponse(allocation),
+                hasAdminOverride: true
+            };
         } catch (error) {
             await session.abortTransaction();
             throw error;
