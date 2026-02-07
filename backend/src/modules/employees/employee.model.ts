@@ -37,7 +37,6 @@ const EmployeeSchema = new Schema<IEmployee>({
     experienceYears: { type: Number, default: 0 }
 }, { timestamps: true });
 
-// Ensure at least one primary skill exists (Schema Validation)
 EmployeeSchema.path('skills').validate(function (skills: IEmployeeSkill[]) {
     if (!skills) return false;
     return skills.some(s => s.type === SkillType.PRIMARY);

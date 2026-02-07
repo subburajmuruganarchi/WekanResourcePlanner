@@ -1,6 +1,7 @@
 import { TimeEntry, ITimeEntry } from './time-entry.model';
 import { ProjectAllocation } from '../allocations/allocation.model';
 import { Types, startSession } from 'mongoose';
+import { TimeEntryStatus } from '../../common/types/enums';
 
 export interface CreateTimeEntryRequest {
     employeeId: string;
@@ -121,7 +122,7 @@ export class TimeEntryService {
                 hours: request.hours,
                 comments: request.comments,
                 weekStartDate,
-                status: 'DRAFT'
+                status: TimeEntryStatus.DRAFT
             }], { session });
 
             await session.commitTransaction();
