@@ -29,9 +29,14 @@ export const errorHandler = (err: Error, req: Request, res: Response, next: Next
     // Handle Mongoose/CastError if needed specifically, otherwise fallback
 
     // Fallback for unhandled errors
-    logger.error('Unhandled Exception', { error: err.stack, url: req.originalUrl });
+    logger.error('Unhandled Exception', {
+        error: err.stack,
+        url: req.originalUrl,
+        requestId: req.headers['x-request-id']
+    });
     res.status(500).json({
         status: 'error',
         message: 'Internal Server Error',
+        requestId: req.headers['x-request-id']
     });
 };
