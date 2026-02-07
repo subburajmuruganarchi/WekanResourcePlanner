@@ -40,6 +40,20 @@ export class ProjectController {
             next(error);
         }
     }
+    async create(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            // Validate request body with Zod
+            const validatedData = CreateProjectSchema.parse(req.body);
+
+            const project = await projectService.create(validatedData as any);
+            res.status(201).json({
+                status: 'success',
+                data: project,
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 export const projectController = new ProjectController();

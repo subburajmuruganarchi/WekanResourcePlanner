@@ -15,6 +15,8 @@ export interface RankedEmployee {
         availabilityScore: number;
         experienceScore: number;
     };
+    currentAllocations: { projectId: string; projectName: string; percentage: number }[];
+    isAllocatedToProject: boolean;
 }
 
 interface UseRankedEmployeesParams {

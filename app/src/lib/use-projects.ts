@@ -7,6 +7,7 @@ interface UseProjectsResult {
     loading: boolean;
     error: string | null;
     refetch: () => void;
+    createProject: (data: Partial<Project>) => Promise<void>;
 }
 
 export function useProjects(): UseProjectsResult {
@@ -31,7 +32,16 @@ export function useProjects(): UseProjectsResult {
         fetchProjects();
     }, [fetchProjects]);
 
-    return { projects, loading, error, refetch: fetchProjects };
+    const createProject = async (data: Partial<Project>) => {
+        try {
+            await api.post('/projects', data);
+            fetchProjects();
+        } catch (err) {
+            throw err;
+        }
+    };
+
+    return { projects, loading, error, refetch: fetchProjects, createProject };
 }
 
 interface UseProjectResult {

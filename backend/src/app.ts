@@ -10,6 +10,8 @@ import { employeeRouter } from './modules/employees/employee.routes';
 import { projectRouter } from './modules/projects/project.routes';
 import { allocationRouter } from './modules/allocations/allocation.routes';
 import { timeEntryRouter } from './modules/time-entries/time-entry.routes';
+import { roleRouter } from './modules/roles/role.routes';
+import { skillRouter } from './modules/skills/skill.routes';
 
 // Import models to register schemas with Mongoose (required for populate)
 import './modules/skills/skill.model';
@@ -18,8 +20,20 @@ import './modules/roles/role.model';
 const app = express();
 
 // Global Middleware
-app.use(helmet());
-app.use(cors());
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            connectSrc: ["'self'", "http://localhost:5173", "http://localhost:3000"],
+        }
+    }
+}));
+app.use(cors({
+    origin: ['http://localhost:5173', 'http://localhost:3000'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id']
+}));
 app.use(express.json());
 
 // Request Correlation ID
@@ -64,6 +78,8 @@ app.use('/api/employees', employeeRouter);
 app.use('/api/projects', projectRouter);
 app.use('/api/allocations', allocationRouter);
 app.use('/api/time-entries', timeEntryRouter);
+app.use('/api/roles', roleRouter);
+app.use('/api/skills', skillRouter);
 
 // Global Error Handler
 app.use(errorHandler);

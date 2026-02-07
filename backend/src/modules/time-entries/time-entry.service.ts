@@ -159,6 +159,104 @@ export class TimeEntryService {
             status: entry.status
         };
     }
+
+    /**
+     * Get all time entries for an employee for a specific week
+     */
+    async getByEmployee(employeeId: string, weekStart: string): Promise<TimeEntryResponse[]> {
+        if (!Types.ObjectId.isValid(employeeId)) {
+            throw new Error('Invalid employee ID');
+        }
+
+        const weekStartDate = new Date(weekStart);
+        if (isNaN(weekStartDate.getTime())) {
+            throw new Error('Invalid week start date');
+        }
+
+        const entries = await TimeEntry.find({
+            employeeId: new Types.ObjectId(employeeId),
+            weekStartDate
+        }).sort({ date: 1 });
+
+        return entries.map(e => this.mapToResponse(e));
+    }
+
+    /**
+     * Get estimated hours for an employee for a specific week based on allocations
+     */
+    async getEstimatedHours(employeeId: string, weekStart: string): Promise<{
+        totalEstimated: number;
+        byProject: { projectId: string; projectName: string; estimatedHours: number; percentage: number }[];
+    }> {
+        if (!Types.ObjectId.isValid(employeeId)) {
+            throw new Error('Invalid employee ID');
+        }
+
+        const weekStartDate = new Date(weekStart);
+        if (isNaN(weekStartDate.getTime())) {
+            throw new Error('Invalid week start date');
+        }
+
+        const weekEndDate = new Date(weekStartDate);
+        weekEndDate.setDate(weekEndDate.getDate() + 6);
+
+        // Find all active allocations that overlap with this week
+        const allocations = await ProjectAllocation.find({
+            employeeId: new Types.ObjectId(employeeId),
+            isActive: true,
+            startDate: { $lte: weekEndDate },
+            endDate: { $gte: weekStartDate }
+        }).populate('projectId', 'name code');
+
+        const byProject: { projectId: string; projectName: string; estimatedHours: number; percentage: number }[] = [];
+        let totalEstimated = 0;
+
+        for (const alloc of allocations) {
+            // Calculate days of overlap within the week
+            const allocStart = new Date(Math.max(alloc.startDate.getTime(), weekStartDate.getTime()));
+            const allocEnd = new Date(Math.min(alloc.endDate.getTime(), weekEndDate.getTime()));
+            const daysOverlap = Math.ceil((allocEnd.getTime() - allocStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+            // Estimated hours = (percentage/100) * 40h * (daysOverlap/7)
+            const estimatedHours = (alloc.percentage / 100) * WEEKLY_HOUR_CAP * (daysOverlap / 7);
+            const project = alloc.projectId as unknown as { _id: Types.ObjectId; name: string; code: string };
+
+            byProject.push({
+                projectId: project._id.toString(),
+                projectName: project.name || project.code,
+                estimatedHours: Math.round(estimatedHours * 10) / 10,
+                percentage: alloc.percentage
+            });
+
+            totalEstimated += estimatedHours;
+        }
+
+        return {
+            totalEstimated: Math.round(totalEstimated * 10) / 10,
+            byProject
+        };
+    }
+
+    /**
+     * Delete a time entry by ID
+     */
+    async deleteEntry(entryId: string, employeeId: string): Promise<void> {
+        if (!Types.ObjectId.isValid(entryId)) {
+            throw new Error('Invalid entry ID');
+        }
+
+        const entry = await TimeEntry.findOne({
+            _id: new Types.ObjectId(entryId),
+            employeeId: new Types.ObjectId(employeeId),
+            status: TimeEntryStatus.DRAFT // Can only delete draft entries
+        });
+
+        if (!entry) {
+            throw new Error('Entry not found or cannot be deleted');
+        }
+
+        await TimeEntry.deleteOne({ _id: entry._id });
+    }
 }
 
 export const timeEntryService = new TimeEntryService();

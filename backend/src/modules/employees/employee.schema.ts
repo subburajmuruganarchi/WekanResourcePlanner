@@ -1,0 +1,24 @@
+import { z } from 'zod';
+import { EmployeeStatus, SkillType, SkillLevel } from '../../common/types/enums';
+
+export const CreateEmployeeSchema = z.object({
+    firstName: z.string().min(1, 'First name is required'),
+    lastName: z.string().min(1, 'Last name is required'),
+    email: z.string().email('Invalid email address').toLowerCase(),
+    employeeCode: z.string().min(1, 'Employee code is required').toUpperCase(),
+    status: z.nativeEnum(EmployeeStatus).default(EmployeeStatus.ACTIVE),
+    roleId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Role ID'),
+    department: z.string().optional(),
+    designation: z.string().optional(),
+    skills: z.array(z.object({
+        skillId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Skill ID'),
+        skillType: z.nativeEnum(SkillType),
+        level: z.nativeEnum(SkillLevel),
+        experienceYears: z.number().min(0).optional()
+    })).min(1, 'At least one skill is required'),
+    maxAllocationPercent: z.number().min(1).max(100).optional().default(100),
+    joiningDate: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
+    exitDate: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
+});
+
+export type CreateEmployeeDto = z.infer<typeof CreateEmployeeSchema>;

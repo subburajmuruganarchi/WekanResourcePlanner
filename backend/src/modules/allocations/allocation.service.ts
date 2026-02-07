@@ -22,6 +22,8 @@ export interface RankedEmployee {
         availabilityScore: number;
         experienceScore: number;
     };
+    currentAllocations: { projectId: string; projectName: string; percentage: number }[];
+    isAllocatedToProject: boolean;
 }
 
 export interface CreateAllocationRequest {
@@ -67,14 +69,14 @@ interface PopulatedEmployee {
     _id: Types.ObjectId;
     firstName: string;
     lastName: string;
-    title: string;
+    designation?: string;
     skills: Array<{
-        skillId: { name: string } | Types.ObjectId;
-        type: string;
+        skillId: { _id: Types.ObjectId; name: string };
+        skillType: string;
         level: string;
+        experienceYears: number;
     }>;
-    roles: Array<{ label: string } | Types.ObjectId>;
-    experienceYears?: number;
+    roleId: { _id: Types.ObjectId; name: string };
     isActive: boolean;
 }
 
@@ -305,7 +307,7 @@ export class AllocationService {
         // Get all active employees
         const employees = await Employee.find({ isActive: true })
             .populate('skills.skillId', 'name')
-            .populate('roles', 'label')
+            .populate('roleId', 'name')
             .lean() as unknown as PopulatedEmployee[];
 
         // Calculate availability for each employee
@@ -318,23 +320,37 @@ export class AllocationService {
     }
 
     private async calculateRanking(emp: PopulatedEmployee, request: RankingRequest): Promise<RankedEmployee> {
-        const primarySkill = emp.skills?.find(s => s.type === 'Primary');
-        const primaryRole = Array.isArray(emp.roles) && emp.roles.length > 0
-            ? (emp.roles[0] as { label: string })?.label
-            : 'Employee';
+        const primarySkill = emp.skills?.find(s => s.skillType === 'Primary');
+        const roleName = emp.roleId?.name || 'Employee';
 
-        const skillName = (primarySkill?.skillId as { name: string })?.name || 'N/A';
+        const skillName = primarySkill?.skillId?.name || 'N/A';
         const skillLevel = primarySkill?.level || 'Beginner';
+        const empExpYears = primarySkill?.experienceYears || 0;
 
         // Calculate availability (100 - sum of active allocation percentages)
         const allocations = await ProjectAllocation.find({
             employeeId: emp._id,
             isActive: true,
             endDate: { $gte: new Date() }
-        }).lean();
+        }).populate('projectId', 'name code').lean();
 
         const totalAllocated = allocations.reduce((sum, alloc) => sum + (alloc.percentage || 0), 0);
         const availability = Math.max(0, 100 - totalAllocated);
+
+        // Check if already allocated to the target project
+        const isAllocatedToProject = request.projectId
+            ? allocations.some(a => a.projectId && (a.projectId as any)._id?.toString() === request.projectId)
+            : false;
+
+        // Map current allocations to response format
+        const currentAllocations = allocations.map(a => {
+            const proj = a.projectId as unknown as { _id: Types.ObjectId; name: string; code: string };
+            return {
+                projectId: proj?._id?.toString() || '',
+                projectName: proj?.name || proj?.code || 'Unknown',
+                percentage: a.percentage
+            };
+        });
 
         // Calculate match factors
         const skillMatch = request.skillName
@@ -353,17 +369,19 @@ export class AllocationService {
         return {
             id: emp._id.toString(),
             name: `${emp.firstName} ${emp.lastName}`,
-            role: primaryRole || 'Employee',
+            role: roleName,
             primarySkill: skillName,
             skillLevel,
             availability,
-            experienceYears: emp.experienceYears || 0,
+            experienceYears: empExpYears,
             matchScore: Math.round(matchScore * 100) / 100,
             factors: {
                 skillMatch,
                 availabilityScore: Math.round(availabilityScore * 100) / 100,
                 experienceScore: Math.round(experienceScore * 100) / 100,
             },
+            currentAllocations,
+            isAllocatedToProject,
         };
     }
 }

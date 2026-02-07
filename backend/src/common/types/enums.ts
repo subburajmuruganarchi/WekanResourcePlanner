@@ -32,3 +32,18 @@ export enum TimeEntryStatus {
     APPROVED = 'Approved',
     REJECTED = 'Rejected',
 }
+
+export enum EmployeeStatus {
+    ACTIVE = 'Active',
+    INACTIVE = 'Inactive',
+}
+
+export enum BillingType {
+    BILLABLE = 'Billable',
+    NON_BILLABLE = 'Non-billable',
+}
+
+export enum DeliveryModel {
+    FIXED = 'Fixed',
+    TIME_AND_MATERIALS = 'T&M',
+}

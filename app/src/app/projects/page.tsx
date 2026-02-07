@@ -1,16 +1,20 @@
 import { useNavigate } from "react-router-dom"
+import { useState } from "react"
 import { PageContainer } from "@/components/layout/page-container"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { FilterBar } from "@/components/shared/filter-bar"
-import { MoreVertical, Loader2 } from "lucide-react"
+import { MoreVertical, Loader2, AlertCircle } from "lucide-react"
 import { useEmployees } from "@/lib/use-employees"
 import { useProjects } from "@/lib/use-projects"
+import { EmployeeDialog } from "./components/employee-dialog"
+import { ProjectDialog } from "./components/project-dialog"
 
 export function Projects() {
     const navigate = useNavigate()
+    const [activeTab, setActiveTab] = useState("employee")
     const { employees, loading: empLoading, error: empError } = useEmployees()
     const { projects, loading: projLoading, error: projError } = useProjects()
 
@@ -21,10 +25,10 @@ export function Projects() {
                     <h1 className="text-2xl font-semibold text-gray-900">Employees and Projects</h1>
                     <p className="text-sm text-gray-600 mt-1">View all employee's personal information, manage projects and allocation.</p>
                 </div>
-                <Button className="bg-brand-500 hover:bg-brand-600">Add Employee</Button>
+                {activeTab === "employee" ? <EmployeeDialog /> : <ProjectDialog />}
             </div>
 
-            <Tabs defaultValue="employee" className="space-y-6">
+            <Tabs defaultValue="employee" className="space-y-6" onValueChange={setActiveTab}>
                 <TabsList>
                     <TabsTrigger value="employee">Employee</TabsTrigger>
                     <TabsTrigger value="project">Project</TabsTrigger>
@@ -39,7 +43,8 @@ export function Projects() {
                                 <span className="ml-2 text-gray-500">Loading employees...</span>
                             </div>
                         ) : empError ? (
-                            <div className="p-8 text-center text-red-600">
+                            <div className="flex flex-col items-center justify-center p-8 text-red-600 gap-2">
+                                <AlertCircle className="w-8 h-8" />
                                 <p>Error: {empError}</p>
                             </div>
                         ) : (
@@ -54,12 +59,12 @@ export function Projects() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {employees.map((emp) => (
+                                    {(employees || []).map((emp) => (
                                         <TableRow key={emp.id} className="cursor-pointer hover:bg-gray-50">
                                             <TableCell className="font-medium text-brand-600">{emp.name}</TableCell>
                                             <TableCell><Badge variant="secondary" className="uppercase text-[10px]">{emp.role}</Badge></TableCell>
-                                            <TableCell>{emp.title}</TableCell>
-                                            <TableCell>{emp.primarySkill}</TableCell>
+                                            <TableCell>{emp.designation || 'N/A'}</TableCell>
+                                            <TableCell>{emp.skills?.find(s => s.skillType === 'Primary')?.name || 'N/A'}</TableCell>
                                             <TableCell>
                                                 <Button variant="ghost" size="icon"><MoreVertical className="w-4 h-4 text-gray-400" /></Button>
                                             </TableCell>
@@ -80,7 +85,8 @@ export function Projects() {
                                 <span className="ml-2 text-gray-500">Loading projects...</span>
                             </div>
                         ) : projError ? (
-                            <div className="p-8 text-center text-red-600">
+                            <div className="flex flex-col items-center justify-center p-8 text-red-600 gap-2">
+                                <AlertCircle className="w-8 h-8" />
                                 <p>Error: {projError}</p>
                             </div>
                         ) : (
@@ -98,7 +104,7 @@ export function Projects() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {projects.map((project) => (
+                                    {(projects || []).map((project) => (
                                         <TableRow key={project.id} className="cursor-pointer hover:bg-gray-50" onClick={() => navigate(`/projects/${project.id}`)}>
                                             <TableCell className="font-medium text-brand-600">{project.name}</TableCell>
                                             <TableCell className="font-mono text-xs text-gray-500">{project.code}</TableCell>

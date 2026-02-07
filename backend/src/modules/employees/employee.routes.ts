@@ -9,4 +9,7 @@ router.get('/', (req, res, next) => employeeController.list(req, res, next));
 // GET /api/employees/:id
 router.get('/:id', (req, res, next) => employeeController.getById(req, res, next));
 
+// POST /api/employees
+router.post('/', (req, res, next) => employeeController.create(req, res, next));
+
 export { router as employeeRouter };

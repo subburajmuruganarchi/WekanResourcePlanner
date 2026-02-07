@@ -1,66 +1,65 @@
 import { Document, Schema, Types, model } from 'mongoose';
-import { ProjectStatus, ProjectPriority, SkillLevel } from '../../common/types/enums';
+import { ProjectStatus, ProjectPriority, SkillLevel, BillingType, DeliveryModel } from '../../common/types/enums';
+
+export interface ISkillRequirement {
+    skillId: Types.ObjectId;
+    minSkillLevel: SkillLevel;
+    requiredHeadcount: number;
+    requiredDays: number;
+    roleId?: Types.ObjectId;
+}
+
+export interface IRoleEffort {
+    roleId: Types.ObjectId;
+    requiredHeadcount: number;
+    requiredDays: number;
+    hoursPerDay: number;
+}
 
 export interface IProject extends Document {
     code: string;
     name: string;
-    clientName: string;
-    startDate: Date;
-    endDate?: Date;
+    // clientName removed per authoritative spec
     status: ProjectStatus;
     priority: ProjectPriority;
-    managerId?: Types.ObjectId;
-}
-
-export interface IProjectSkillRequirement extends Document {
-    projectId: Types.ObjectId;
-    skillId: Types.ObjectId;
-    level: SkillLevel;
-    requiredCount: number;
+    ownerId: Types.ObjectId; // Renamed from managerId to ownerId per spec
     startDate: Date;
-    endDate: Date;
+    endDate: Date; // Now required
+    billingType?: BillingType;
+    deliveryModel?: DeliveryModel;
+    skillRequirements: ISkillRequirement[];
+    roleEfforts?: IRoleEffort[];
+    createdAt: Date;
+    updatedAt: Date;
 }
 
-export interface IProjectRoleEffort extends Document {
-    projectId: Types.ObjectId;
-    roleId: Types.ObjectId;
-    estimatedHours: number;
-}
+const SkillRequirementSchema = new Schema<ISkillRequirement>({
+    skillId: { type: Schema.Types.ObjectId, ref: 'Skill', required: true },
+    minSkillLevel: { type: String, enum: Object.values(SkillLevel), required: true },
+    requiredHeadcount: { type: Number, required: true, min: 1 },
+    requiredDays: { type: Number, required: true, min: 1 },
+    roleId: { type: Schema.Types.ObjectId, ref: 'Role' }
+});
+
+const RoleEffortSchema = new Schema<IRoleEffort>({
+    roleId: { type: Schema.Types.ObjectId, ref: 'Role', required: true },
+    requiredHeadcount: { type: Number, required: true, min: 1 },
+    requiredDays: { type: Number, required: true, min: 1 },
+    hoursPerDay: { type: Number, required: true, min: 1 }
+});
 
 const ProjectSchema = new Schema<IProject>({
-    code: { type: String, required: true, unique: true, immutable: true, index: true },
-    name: { type: String, required: true },
-    clientName: { type: String, required: true },
+    code: { type: String, required: true, unique: true, trim: true, uppercase: true, index: true },
+    name: { type: String, required: true, trim: true },
+    status: { type: String, enum: Object.values(ProjectStatus), default: ProjectStatus.ACTIVE, index: true },
+    priority: { type: String, enum: Object.values(ProjectPriority), required: true },
+    ownerId: { type: Schema.Types.ObjectId, ref: 'Employee', required: true, index: true },
     startDate: { type: Date, required: true },
-    endDate: { type: Date },
-    status: { type: String, enum: Object.values(ProjectStatus), default: ProjectStatus.PLANNING, index: true },
-    priority: { type: String, enum: Object.values(ProjectPriority), default: ProjectPriority.MEDIUM },
-    managerId: { type: Schema.Types.ObjectId, ref: 'Employee' }
+    endDate: { type: Date, required: true },
+    billingType: { type: String, enum: Object.values(BillingType) },
+    deliveryModel: { type: String, enum: Object.values(DeliveryModel) },
+    skillRequirements: [SkillRequirementSchema],
+    roleEfforts: [RoleEffortSchema]
 }, { timestamps: true });
 
-// Pre-save to auto-generate code if missing (Basic)
-ProjectSchema.pre('save', function (next) {
-    if (!this.code) {
-        this.code = 'PRJ-' + Date.now().toString(36).toUpperCase();
-    }
-    next();
-});
-
-const ProjectSkillRequirementSchema = new Schema<IProjectSkillRequirement>({
-    projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
-    skillId: { type: Schema.Types.ObjectId, ref: 'Skill', required: true },
-    level: { type: String, enum: Object.values(SkillLevel), required: true },
-    requiredCount: { type: Number, default: 1 },
-    startDate: { type: Date, required: true },
-    endDate: { type: Date, required: true }
-});
-
-const ProjectRoleEffortSchema = new Schema<IProjectRoleEffort>({
-    projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
-    roleId: { type: Schema.Types.ObjectId, ref: 'Role', required: true },
-    estimatedHours: { type: Number, required: true }
-});
-
 export const Project = model<IProject>('Project', ProjectSchema);
-export const ProjectSkillRequirement = model<IProjectSkillRequirement>('ProjectSkillRequirement', ProjectSkillRequirementSchema);
-export const ProjectRoleEffort = model<IProjectRoleEffort>('ProjectRoleEffort', ProjectRoleEffortSchema);

@@ -15,13 +15,14 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
         },
     });
 
-    const json: ApiResponse<T> = await response.json();
+    const json: ApiResponse<T> & T = await response.json();
 
-    if (!response.ok || json.status === 'error') {
+    if (!response.ok || (json.status && json.status === 'error')) {
         throw new Error(json.message || 'API request failed');
     }
 
-    return json.data as T;
+    // If json has a data field, return it, otherwise return the whole object (for non-wrapped responses)
+    return (json.data !== undefined ? json.data : json) as T;
 }
 
 export const api = {

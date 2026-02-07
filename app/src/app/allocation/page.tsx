@@ -32,8 +32,8 @@ export function Allocation() {
 
     // Filter employees by search query (client-side filtering on top of server ranking)
     const filteredEmployees = rankedEmployees.filter((emp) =>
-        emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        emp.primarySkill.toLowerCase().includes(searchQuery.toLowerCase())
+        emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        emp.primarySkill?.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
     const selectedProjectName = projects.find(p => p.id === selectedProjectId)?.name || "Project"
@@ -55,7 +55,7 @@ export function Allocation() {
                                     <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
                                 </div>
                             ) : (
-                                projects.map((project) => (
+                                (projects || []).map((project) => (
                                     <div
                                         key={project.id}
                                         onClick={() => setSelectedProjectId(project.id)}
@@ -133,13 +133,14 @@ export function Allocation() {
                                         <TableRow className="bg-gray-50">
                                             <TableHead>Employee</TableHead>
                                             <TableHead>Skill Match</TableHead>
+                                            <TableHead>Current Allocations</TableHead>
                                             <TableHead>Availability</TableHead>
                                             <TableHead>Experience</TableHead>
                                             <TableHead className="text-right">Action</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {filteredEmployees.map((emp) => (
+                                        {(filteredEmployees || []).map((emp) => (
                                             <TableRow key={emp.id} className="hover:bg-gray-50 group">
                                                 <TableCell>
                                                     <div>
@@ -150,11 +151,24 @@ export function Allocation() {
                                                 <TableCell>
                                                     <div className="flex flex-col gap-1">
                                                         <div className="flex items-center gap-2">
-                                                            <Badge variant={emp.factors.skillMatch ? "default" : "secondary"} className="text-[10px]">
+                                                            <Badge variant={emp.factors?.skillMatch ? "default" : "secondary"} className="text-[10px]">
                                                                 {emp.primarySkill}
                                                             </Badge>
                                                             <span className="text-xs text-gray-500">{emp.skillLevel}</span>
                                                         </div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                                        {emp.currentAllocations?.length > 0 ? (
+                                                            emp.currentAllocations.map((alloc, i) => (
+                                                                <Badge key={i} variant="outline" className="text-[10px] bg-gray-50">
+                                                                    {alloc.projectName} ({alloc.percentage}%)
+                                                                </Badge>
+                                                            ))
+                                                        ) : (
+                                                            <span className="text-xs text-gray-400">Not allocated</span>
+                                                        )}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
@@ -173,15 +187,19 @@ export function Allocation() {
                                                 <TableCell className="text-sm text-gray-600">{emp.experienceYears} yrs</TableCell>
                                                 <TableCell className="text-right">
                                                     <RoleGuard allowedRoles={["Admin", "ProjectManager"]}>
-                                                        <Button
-                                                            size="sm"
-                                                            disabled={emp.availability === 0}
-                                                            onClick={() => handleAllocate(emp)}
-                                                            className={emp.availability === 0 ? "opacity-50" : ""}
-                                                        >
-                                                            <UserPlus className="w-4 h-4 mr-1.5" />
-                                                            Allocate
-                                                        </Button>
+                                                        {emp.isAllocatedToProject ? (
+                                                            <Badge variant="secondary" className="text-xs">Already Allocated</Badge>
+                                                        ) : (
+                                                            <Button
+                                                                size="sm"
+                                                                disabled={emp.availability === 0}
+                                                                onClick={() => handleAllocate(emp)}
+                                                                className={emp.availability === 0 ? "opacity-50" : ""}
+                                                            >
+                                                                <UserPlus className="w-4 h-4 mr-1.5" />
+                                                                Allocate
+                                                            </Button>
+                                                        )}
                                                     </RoleGuard>
                                                 </TableCell>
                                             </TableRow>

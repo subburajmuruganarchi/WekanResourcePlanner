@@ -7,6 +7,7 @@ interface UseEmployeesResult {
     loading: boolean;
     error: string | null;
     refetch: () => void;
+    createEmployee: (data: Partial<Employee>) => Promise<void>;
 }
 
 export function useEmployees(): UseEmployeesResult {
@@ -31,7 +32,16 @@ export function useEmployees(): UseEmployeesResult {
         fetchEmployees();
     }, [fetchEmployees]);
 
-    return { employees, loading, error, refetch: fetchEmployees };
+    const createEmployee = async (data: Partial<Employee>) => {
+        try {
+            await api.post('/employees', data);
+            fetchEmployees();
+        } catch (err) {
+            throw err;
+        }
+    };
+
+    return { employees, loading, error, refetch: fetchEmployees, createEmployee };
 }
 
 interface UseEmployeeResult {

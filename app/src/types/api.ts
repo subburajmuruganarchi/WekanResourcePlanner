@@ -1,22 +1,57 @@
 // Frontend API Type Definitions
 // Aligned with backend response shapes
 
-export type ProjectStatus = 'Planning' | 'Active' | 'OnHold' | 'Completed' | 'Cancelled';
+export type Role = 'Admin' | 'ProjectManager' | 'Employee' | 'Leadership';
+
+// Enums
+export type ProjectStatus = 'Planning' | 'Active' | 'Completed' | 'OnHold';
 export type ProjectPriority = 'High' | 'Medium' | 'Low';
 export type SkillLevel = 'Beginner' | 'Intermediate' | 'Expert';
-export type Role = 'Admin' | 'ProjectManager' | 'Employee' | 'Leadership';
+export type BillingType = 'Billable' | 'Non-billable';
+export type DeliveryModel = 'Fixed' | 'T&M';
+
+// Sub-interfaces
+export interface SkillRequirement {
+    skillId: string;
+    skillName?: string;
+    minSkillLevel: SkillLevel;
+    requiredHeadcount: number;
+    requiredDays: number;
+    roleId?: string;
+    roleName?: string;
+}
+
+export interface RoleEffort {
+    roleId: string;
+    roleName?: string;
+    requiredHeadcount: number;
+    requiredDays: number;
+    hoursPerDay: number;
+}
 
 export interface Employee {
     id: string;
-    name: string;              // Populated: firstName + lastName
+    employeeCode: string;
+    name: string;
+    firstName: string;
+    lastName: string;
     email: string;
-    title: string;
-    role: string;              // Populated: Primary role label
-    primarySkill: string;      // Populated: Primary skill name
-    skillLevel: SkillLevel;
-    availability: number;      // Computed: 100 - sum(active allocations %)
-    experienceYears: number;
-    currentAllocations?: AllocationSummary[];
+    status: 'Active' | 'Inactive';
+    role: string;
+    roleId: string;
+    department?: string;
+    designation?: string;
+    skills: {
+        skillId: string;
+        name?: string;
+        skillType: 'Primary' | 'Secondary';
+        level: SkillLevel;
+        experienceYears: number;
+    }[];
+    availability: number;
+    maxAllocationPercent: number;
+    joiningDate?: string;
+    exitDate?: string;
 }
 
 export interface Project {
