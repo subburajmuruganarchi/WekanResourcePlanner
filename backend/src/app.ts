@@ -12,6 +12,8 @@ import { allocationRouter } from './modules/allocations/allocation.routes';
 import { timeEntryRouter } from './modules/time-entries/time-entry.routes';
 import { roleRouter } from './modules/roles/role.routes';
 import { skillRouter } from './modules/skills/skill.routes';
+import { okrRouter } from './modules/okrs/okr.routes';
+import { dashboardRouter } from './modules/dashboard/dashboard.routes';
 
 // Import models to register schemas with Mongoose (required for populate)
 import './modules/skills/skill.model';
@@ -29,10 +31,21 @@ app.use(helmet({
     }
 }));
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000'],
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+
+        const allowedOrigins = ['http://localhost:5173', 'http://localhost:3000'];
+        // Allow any localhost origin
+        if (allowedOrigins.indexOf(origin) !== -1 || /^http:\/\/localhost:\d+$/.test(origin)) {
+            return callback(null, true);
+        }
+
+        callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id']
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'x-user-role']
 }));
 app.use(express.json());
 
@@ -80,6 +93,8 @@ app.use('/api/allocations', allocationRouter);
 app.use('/api/time-entries', timeEntryRouter);
 app.use('/api/roles', roleRouter);
 app.use('/api/skills', skillRouter);
+app.use('/api/okrs', okrRouter);
+app.use('/api/dashboard', dashboardRouter);
 
 // Global Error Handler
 app.use(errorHandler);

@@ -1,54 +1,54 @@
+import { useState, useEffect } from 'react';
 import { Users, FolderKanban, Clock, TrendingUp } from "lucide-react"
 import { PageContainer } from "@/components/layout/page-container"
-import { Section } from "@/components/layout/section"
 import { StatCard } from "./components/stat-card"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { ResponsiveContainer, LineChart, Line, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip } from "recharts"
 
-// Mock Data
-const stats = [
-    { label: "Active Projects", value: "24", change: "+3 this month", icon: FolderKanban, color: "blue" as const },
-    { label: "Total Employees", value: "156", change: "8 available", icon: Users, color: "green" as const },
-    { label: "Avg Utilization", value: "82%", change: "+5% from last month", icon: TrendingUp, color: "purple" as const },
-    { label: "Hours This Week", value: "6,248", change: "Across all projects", icon: Clock, color: "orange" as const },
-]
+export default function Dashboard() {
+    const [stats, setStats] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-const utilizationData = [
-    { month: "Jan", utilization: 75 },
-    { month: "Feb", utilization: 78 },
-    { month: "Mar", utilization: 82 },
-    { month: "Apr", utilization: 80 },
-    { month: "May", utilization: 85 },
-    { month: "Jun", utilization: 82 },
-]
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const response = await fetch('http://localhost:3000/api/dashboard/stats');
+                const result = await response.json();
 
-const projectData = [
-    { name: "Backend", hours: 1850 },
-    { name: "Frontend", hours: 1620 },
-    { name: "DevOps", hours: 980 },
-    { name: "QA", hours: 1150 },
-    { name: "Design", hours: 650 },
-]
+                if (result.status === 'success') {
+                    const data = result.data;
+                    setStats([
+                        { label: "Active Projects", value: data.activeProjects.toString(), change: "Live from Platform", icon: FolderKanban, color: "blue" as const },
+                        { label: "Total Employees", value: data.totalEmployees.toString(), change: "Live from Platform", icon: Users, color: "green" as const },
+                        { label: "Avg Utilization", value: `${data.avgUtilization}%`, change: "Real-time average", icon: TrendingUp, color: "purple" as const },
+                        { label: "Hours This Week", value: data.hoursThisWeek.toLocaleString(), change: "Logged time entries", icon: Clock, color: "orange" as const },
+                    ]);
+                }
+            } catch (error) {
+                console.error('Failed to fetch dashboard stats:', error);
+                // Fallback to zeros if API fails
+                setStats([
+                    { label: "Active Projects", value: "0", change: "API Error", icon: FolderKanban, color: "blue" as const },
+                    { label: "Total Employees", value: "0", change: "API Error", icon: Users, color: "green" as const },
+                    { label: "Avg Utilization", value: "0%", change: "API Error", icon: TrendingUp, color: "purple" as const },
+                    { label: "Hours This Week", value: "0", change: "API Error", icon: Clock, color: "orange" as const },
+                ]);
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-const recentProjects = [
-    { name: "E-Commerce Platform Redesign", code: "PRJ-001", status: "Active", progress: 65, team: 8 },
-    { name: "Mobile App Development", code: "PRJ-002", status: "Active", progress: 45, team: 12 },
-    { name: "API Gateway Migration", code: "PRJ-003", status: "Active", progress: 85, team: 6 },
-    { name: "Customer Portal v2", code: "PRJ-004", status: "Planning", progress: 20, team: 5 },
-]
+        fetchStats();
+    }, []);
 
-export function Dashboard() {
     return (
-        <PageContainer className="pl-0 space-y-8"> {/* pl-0 because PageContainer has p-8 and main layout handles padding, verifying visual match */}
-
+        <PageContainer className="pl-0 space-y-8">
             {/* Header Section */}
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-                    <p className="text-sm text-gray-600 mt-1">Welcome back! Here's what's happening.</p>
+                    <p className="text-sm text-gray-600 mt-1">
+                        {isLoading ? 'Computing latest metrics...' : "Welcome back! Here's the live data from your platform."}
+                    </p>
                 </div>
                 <div className="flex gap-2">
                     <Button variant="outline">Download Report</Button>
@@ -58,93 +58,32 @@ export function Dashboard() {
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {stats.map((stat) => (
+                {!isLoading ? stats.map((stat) => (
                     <StatCard key={stat.label} {...stat} />
-                ))}
+                )) : (
+                    // Simple loading skeletons
+                    [1, 2, 3, 4].map(i => (
+                        <div key={i} className="h-32 bg-gray-100 animate-pulse rounded-2xl border border-gray-100"></div>
+                    ))
+                )}
             </div>
 
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Utilization Trend */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-lg">Utilization Trend</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="h-[250px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={utilizationData}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-                                    <XAxis dataKey="month" stroke="#6b7280" fontSize={12} tickLine={false} axisLine={false} />
-                                    <YAxis stroke="#6b7280" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}%`} />
-                                    <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
-                                    <Line type="monotone" dataKey="utilization" stroke="#3b82f6" strokeWidth={2} dot={{ fill: "#3b82f6", r: 4 }} activeDot={{ r: 6 }} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Hours by Role */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-lg">Hours by Role</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="h-[250px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={projectData}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-                                    <XAxis dataKey="name" stroke="#6b7280" fontSize={12} tickLine={false} axisLine={false} />
-                                    <YAxis stroke="#6b7280" fontSize={12} tickLine={false} axisLine={false} />
-                                    <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
-                                    <Bar dataKey="hours" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={40} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Recent Projects */}
-            <Section title="Recent Projects">
-                <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="bg-gray-50 hover:bg-gray-50">
-                                <TableHead>Project</TableHead>
-                                <TableHead>Code</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Progress</TableHead>
-                                <TableHead>Team Size</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {recentProjects.map((project) => (
-                                <TableRow key={project.code} className="hover:bg-gray-50 cursor-pointer">
-                                    <TableCell className="font-medium text-gray-900">{project.name}</TableCell>
-                                    <TableCell className="font-mono text-xs text-gray-500">{project.code}</TableCell>
-                                    <TableCell>
-                                        <Badge variant={project.status === "Active" ? "success" : "info"}>
-                                            {project.status}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex-1 h-2 w-24 bg-gray-100 rounded-full overflow-hidden">
-                                                <div className="h-full bg-brand-500 rounded-full" style={{ width: `${project.progress}%` }}></div>
-                                            </div>
-                                            <span className="text-xs text-gray-500">{project.progress}%</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-gray-500">{project.team} members</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+            {/* AI and Reports shortcut */}
+            <div className="mt-8 p-8 bg-blue-50/50 rounded-3xl border border-blue-100 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex-1">
+                    <h3 className="text-xl font-bold text-gray-900 border-none inline-flex items-center gap-2">
+                        <TrendingUp className="text-blue-500" />
+                        AI Analytics Ready
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-2">
+                        The new Project Management, Performance Review, and Strategic Reports bots are ready to assist.
+                        Optimize your team allocations and track real-time utilization.
+                    </p>
                 </div>
-            </Section>
-
+                <Button className="shrink-0" onClick={() => window.location.href = '/ai-analytics'}>
+                    Open AI Hub
+                </Button>
+            </div>
         </PageContainer>
     )
 }

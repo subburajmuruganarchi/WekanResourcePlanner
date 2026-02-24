@@ -1,14 +1,17 @@
 import * as React from "react"
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { AppShell } from "@/components/layout/app-shell"
-import { Dashboard } from "@/app/dashboard/page"
+import Dashboard from "@/app/dashboard/page"
 import { Projects } from "@/app/projects/page"
 import { ProjectDetail } from "@/app/projects/project-detail"
 import { Allocation } from "@/app/allocation/page"
 import { TimeEntry } from "@/app/time-entry/page"
-// import { Login } from "@/app/auth/login" // Placeholder
+import SkillsPage from "@/app/skills/page"
+import OkrsPage from "@/app/okrs/page"
+import { LoginPage } from "@/app/login/page"
+import AIAnalyticsPage from "@/app/ai-analytics/page"
 
-import { AuthProvider } from "@/lib/auth-context"
+import { AuthProvider, useAuth } from "@/lib/auth-context"
 
 function ErrorPage({ error }: { error: any }) {
   return (
@@ -46,29 +49,64 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
 }
 
+/** Redirects to /login if no user is authenticated */
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+  return <>{children}</>
+}
+
+/** Redirects to /dashboard if user is already logged in */
+function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  if (user) {
+    return <Navigate to="/dashboard" replace />
+  }
+  return <>{children}</>
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Public Routes */}
+      <Route path="/login" element={
+        <PublicOnlyRoute>
+          <LoginPage />
+        </PublicOnlyRoute>
+      } />
+
+      {/* Protected Routes (Wrapped in AppShell) */}
+      <Route element={
+        <ProtectedRoute>
+          <AppShell />
+        </ProtectedRoute>
+      }>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/projects" element={<Projects />} />
+        <Route path="/projects/:id" element={<ProjectDetail />} />
+        <Route path="/allocation" element={<Allocation />} />
+        <Route path="/time-entry" element={<TimeEntry />} />
+        <Route path="/skills" element={<SkillsPage />} />
+        <Route path="/okrs" element={<OkrsPage />} />
+        <Route path="/ai-analytics" element={<AIAnalyticsPage />} />
+        <Route path="/reports" element={<div>Reports Page</div>} />
+      </Route>
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
+  )
+}
+
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <ErrorBoundary>
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/login" element={<div>Login Page</div>} />
-
-            {/* Protected Routes (Wrapped in AppShell) */}
-            <Route element={<AppShell />}>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/projects/:id" element={<ProjectDetail />} />
-              <Route path="/allocation" element={<Allocation />} />
-              <Route path="/time-entry" element={<TimeEntry />} />
-              <Route path="/reports" element={<div>Reports Page</div>} />
-            </Route>
-
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+          <AppRoutes />
         </ErrorBoundary>
       </BrowserRouter>
     </AuthProvider>
