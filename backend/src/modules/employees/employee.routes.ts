@@ -12,4 +12,6 @@ router.get('/:id', (req, res, next) => employeeController.getById(req, res, next
 // POST /api/employees
 router.post('/', (req, res, next) => employeeController.create(req, res, next));
 
+router.patch('/:id', employeeController.update);
+
 export { router as employeeRouter };

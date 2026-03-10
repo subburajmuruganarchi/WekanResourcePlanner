@@ -8,6 +8,7 @@ export class AllocationController {
                 projectId: req.body.projectId,
                 employeeId: req.body.employeeId,
                 roleId: req.body.roleId,
+                skillId: req.body.skillId,
                 startDate: req.body.startDate,
                 endDate: req.body.endDate,
                 percentage: req.body.percentage,
@@ -42,6 +43,7 @@ export class AllocationController {
                 percentage: req.body.percentage,
                 startDate: req.body.startDate,
                 endDate: req.body.endDate,
+                skillId: req.body.skillId,
                 isAdminOverride: req.body.isAdminOverride,
                 overrideReason: req.body.overrideReason,
                 authorizedById: req.body.authorizedById,
@@ -68,11 +70,13 @@ export class AllocationController {
 
     async rankEmployees(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const { projectId, skill } = req.query;
+            const { projectId, skill, startDate, endDate } = req.query;
 
             const rankedEmployees = await allocationService.rankEmployees({
                 projectId: projectId as string,
                 skillName: skill as string | undefined,
+                startDate: startDate as string | undefined,
+                endDate: endDate as string | undefined,
             });
 
             res.json({

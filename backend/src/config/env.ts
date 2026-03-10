@@ -10,6 +10,7 @@ const envSchema = z.object({
     PORT: z.string().default('3000').transform((val) => parseInt(val, 10)),
     MONGO_URI: z.string().url(),
     LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+    JWT_SECRET: z.string().default('r360-super-secret-dev-key-12345'),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

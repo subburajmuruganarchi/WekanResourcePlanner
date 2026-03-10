@@ -25,6 +25,7 @@ interface DayEntry {
     projectCode: string
     hours: number
     comments: string
+    isDirty?: boolean
 }
 
 interface DayData {
@@ -34,9 +35,19 @@ interface DayData {
     entries: DayEntry[]
 }
 
-interface EstimateData {
-    totalEstimated: number
-    byProject: { projectId: string; projectName: string; estimatedHours: number; percentage: number }[]
+
+
+interface DailyForecastDay {
+    date: string
+    dayName: string
+    isWeekday: boolean
+    totalForecast: number
+    byProject: { projectId: string; projectName: string; percentage: number; forecastHours: number }[]
+}
+
+interface DailyForecastData {
+    weekTotal: number
+    days: DailyForecastDay[]
 }
 
 const leaveTypes = [
@@ -51,18 +62,18 @@ const otherCodes = [
 
 function getWeekDates(): { day: string; date: string; fullDate: string }[] {
     const today = new Date()
-    const dayOfWeek = today.getDay()
+    const dayOfWeek = today.getUTCDay()
     const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-    const monday = new Date(today)
-    monday.setDate(today.getDate() - diff)
+    const monday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
+    monday.setUTCDate(monday.getUTCDate() - diff)
 
     const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     return days.map((day, i) => {
         const d = new Date(monday)
-        d.setDate(monday.getDate() + i)
+        d.setUTCDate(monday.getUTCDate() + i)
         return {
             day,
-            date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
             fullDate: d.toISOString().split('T')[0]
         }
     })
@@ -81,7 +92,7 @@ export function TimeEntry() {
         }))
     )
     const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("")
-    const [estimates, setEstimates] = useState<EstimateData | null>(null)
+    const [dailyForecast, setDailyForecast] = useState<DailyForecastData | null>(null)
     const [submitError, setSubmitError] = useState<string | null>(null)
     const [submitSuccess, setSubmitSuccess] = useState(false)
     const [timeCodeId, setTimeCodeId] = useState<string | null>(null)
@@ -112,20 +123,65 @@ export function TimeEntry() {
         fetchTimeCode()
     }, [])
 
-    // Fetch estimates when employee changes
-    useEffect(() => {
-        if (!selectedEmployeeId) return
-        const fetchEstimates = async () => {
-            try {
-                const weekStart = weekDates[0].fullDate
-                const data = await api.get<EstimateData>(`/time-entries/estimates?employeeId=${selectedEmployeeId}&week=${weekStart}`)
-                setEstimates(data)
-            } catch {
-                setEstimates(null)
-            }
+    const fetchSavedEntries = useCallback(async () => {
+        if (!selectedEmployeeId || projects.length === 0) return
+        const weekStart = weekDates[0].fullDate
+
+        try {
+            const entries = await api.get<{
+                id: string; employeeId: string; projectId: string; date: string; hours: number; comments?: string
+            }[]>(`/time-entries?employeeId=${selectedEmployeeId}&week=${weekStart}`)
+
+            // Map projectId back to projectCode
+            const projectIdToCode: Record<string, string> = {}
+            projects.forEach(p => { projectIdToCode[p.id] = p.code })
+
+            setWeekData(prev => prev.map(day => {
+                const dayEntries = entries
+                    .filter(e => e.date === day.fullDate)
+                    .map(e => ({
+                        tempId: generateTempId(),
+                        projectCode: projectIdToCode[e.projectId] || '',
+                        hours: e.hours,
+                        comments: e.comments || '',
+                        isDirty: false
+                    }))
+                return { ...day, entries: dayEntries.length > 0 ? dayEntries : [] }
+            }))
+        } catch {
+            // Silently fail — entries stay as they are
         }
-        fetchEstimates()
+    }, [selectedEmployeeId, weekDates, projects])
+
+    useEffect(() => {
+        fetchSavedEntries()
+    }, [fetchSavedEntries])
+
+    const fetchDailyForecast = useCallback(async () => {
+        if (!selectedEmployeeId) return
+        const weekStart = weekDates[0].fullDate
+        try {
+            const data = await api.get<DailyForecastData>(`/time-entries/daily-forecast?employeeId=${selectedEmployeeId}&week=${weekStart}`)
+            setDailyForecast(data)
+        } catch {
+            setDailyForecast(null)
+        }
     }, [selectedEmployeeId, weekDates])
+
+    useEffect(() => {
+        fetchDailyForecast()
+    }, [fetchDailyForecast])
+
+    // Clear success/error messages after a delay
+    useEffect(() => {
+        if (submitSuccess || submitError) {
+            const timer = setTimeout(() => {
+                setSubmitSuccess(false)
+                setSubmitError(null)
+            }, 5000)
+            return () => clearTimeout(timer)
+        }
+    }, [submitSuccess, submitError])
 
     const selectedEmployee = useMemo(() =>
         employees.find(e => e.id === selectedEmployeeId),
@@ -146,10 +202,30 @@ export function TimeEntry() {
         ), [weekData]
     )
 
+    const hasUnsavedChanges = useMemo(() =>
+        weekData.some(day => day.entries.some(e => e.isDirty && (e.hours > 0 || e.projectCode !== ''))),
+        [weekData]
+    )
+
+    const handleEmployeeChange = useCallback((newId: string) => {
+        if (newId === selectedEmployeeId) return
+        if (hasUnsavedChanges) {
+            const confirmed = window.confirm(
+                'You have unsaved/not submitted time entries. Switching employees will discard them. Continue?'
+            )
+            if (!confirmed) return
+        }
+        // Reset form
+        setWeekData(weekDates.map(d => ({ ...d, entries: [] })))
+        setSubmitError(null)
+        setSubmitSuccess(false)
+        setSelectedEmployeeId(newId)
+    }, [selectedEmployeeId, hasUnsavedChanges, weekDates])
+
     const addEntry = useCallback((dayIndex: number) => {
         setWeekData(prev => prev.map((day, i) =>
             i === dayIndex
-                ? { ...day, entries: [...day.entries, { tempId: generateTempId(), projectCode: "", hours: 0, comments: "" }] }
+                ? { ...day, entries: [...day.entries, { tempId: generateTempId(), projectCode: "", hours: 0, comments: "", isDirty: true }] }
                 : day
         ))
     }, [])
@@ -165,7 +241,7 @@ export function TimeEntry() {
     const updateEntry = useCallback((dayIndex: number, tempId: string, field: keyof DayEntry, value: string | number) => {
         setWeekData(prev => prev.map((day, i) =>
             i === dayIndex
-                ? { ...day, entries: day.entries.map(e => e.tempId === tempId ? { ...e, [field]: value } : e) }
+                ? { ...day, entries: day.entries.map(e => e.tempId === tempId ? { ...e, [field]: value, isDirty: true } : e) }
                 : day
         ))
     }, [])
@@ -219,6 +295,8 @@ export function TimeEntry() {
                 })
             }
             setSubmitSuccess(true)
+            // Reload EVERYTHING from the server to ensure consistency
+            await Promise.all([fetchSavedEntries(), fetchDailyForecast()])
         } catch (err) {
             if (err instanceof Error) {
                 setSubmitError(err.message)
@@ -257,7 +335,7 @@ export function TimeEntry() {
                     <div className="flex items-center gap-4 mt-1">
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-gray-600">Employee:</span>
-                            <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
+                            <Select value={selectedEmployeeId} onValueChange={handleEmployeeChange}>
                                 <SelectTrigger className="h-8 w-[200px]">
                                     <SelectValue placeholder="Select employee" />
                                 </SelectTrigger>
@@ -332,21 +410,22 @@ export function TimeEntry() {
                     </div>
                 </Card>
 
-                {estimates && (
+                {dailyForecast && dailyForecast.weekTotal > 0 && (
                     <Card className="p-6 bg-blue-50/50 border-blue-100">
                         <div className="flex items-center gap-4">
                             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
                                 <Target className="w-5 h-5 text-blue-600" />
                             </div>
                             <div>
-                                <p className="text-xs text-blue-600 font-medium uppercase">Estimated Hours (from Allocations)</p>
+                                <p className="text-xs text-blue-600 font-medium uppercase">Forecasted Hours (from Allocations)</p>
                                 <div className="flex items-baseline gap-2">
-                                    <span className="text-2xl font-bold text-blue-700">{estimates.totalEstimated}h</span>
-                                    {estimates.byProject.length > 0 && (
-                                        <span className="text-sm text-blue-600">
-                                            ({estimates.byProject.map(p => `${p.projectName}: ${p.estimatedHours}h`).join(', ')})
-                                        </span>
-                                    )}
+                                    <span className="text-2xl font-bold text-blue-700">{dailyForecast.weekTotal}h</span>
+                                    <span className="text-sm text-blue-600">
+                                        (Logged: {totalHours}h — {totalHours >= dailyForecast.weekTotal
+                                            ? <span className="text-green-600 font-medium">On Track</span>
+                                            : <span className="text-amber-600 font-medium">{Math.round((dailyForecast.weekTotal - totalHours) * 10) / 10}h remaining</span>
+                                        })
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -367,7 +446,7 @@ export function TimeEntry() {
                                         <li className="text-gray-500">No projects available</li>
                                     ) : (
                                         allocatedProjects.map(p => (
-                                            <li key={p.code}>• <strong>{p.code}</strong>: {p.name}</li>
+                                            <li key={p.code}>• <strong>{p.name}</strong></li>
                                         ))
                                     )}
                                 </ul>
@@ -398,7 +477,28 @@ export function TimeEntry() {
                                         <span className="text-sm text-gray-500 ml-2">{day.date}</span>
                                     </div>
                                     <div className="flex items-center gap-4">
-                                        <span className="text-sm text-gray-600">Day Total: <strong>{dayTotal}h</strong></span>
+                                        {(() => {
+                                            const forecast = dailyForecast?.days?.find(d => d.date === day.fullDate)
+                                            const forecastHours = forecast?.totalForecast ?? 0
+                                            return (
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-sm text-gray-600">Actual: <strong>{dayTotal}h</strong></span>
+                                                    {forecastHours > 0 && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${dayTotal >= forecastHours
+                                                                ? 'bg-green-100 text-green-700'
+                                                                : 'bg-amber-100 text-amber-700'
+                                                                }`}>
+                                                                Forecast: {forecastHours}h
+                                                            </span>
+                                                            <span className="text-xs text-gray-400">
+                                                                ({forecast!.byProject.map(p => `${p.projectName}: ${p.forecastHours}h`).join(', ')})
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )
+                                        })()}
                                         <Button size="sm" variant="outline" className="gap-1" onClick={() => addEntry(dayIndex)}>
                                             <Plus className="w-4 h-4" /> Add Entry
                                         </Button>
@@ -420,15 +520,15 @@ export function TimeEntry() {
                                                     <SelectContent>
                                                         <SelectGroup>
                                                             <SelectLabel>Projects</SelectLabel>
-                                                            {allocatedProjects.map(p => <SelectItem key={p.code} value={p.code}>{p.code}</SelectItem>)}
+                                                            {allocatedProjects.map(p => <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>)}
                                                         </SelectGroup>
                                                         <SelectGroup>
                                                             <SelectLabel>Leaves</SelectLabel>
-                                                            {leaveTypes.map(l => <SelectItem key={l.code} value={l.code}>{l.code}</SelectItem>)}
+                                                            {leaveTypes.map(l => <SelectItem key={l.code} value={l.code}>{l.name}</SelectItem>)}
                                                         </SelectGroup>
                                                         <SelectGroup>
                                                             <SelectLabel>Other</SelectLabel>
-                                                            {otherCodes.map(o => <SelectItem key={o.code} value={o.code}>{o.code}</SelectItem>)}
+                                                            {otherCodes.map(o => <SelectItem key={o.code} value={o.code}>{o.name}</SelectItem>)}
                                                         </SelectGroup>
                                                     </SelectContent>
                                                 </Select>

@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { allocationService, CreateAllocationRequest, UpdateAllocationRequest } from './allocation.service';
 import { ProjectAllocation, AllocationOverrideLog } from './allocation.model';
-import { Project, ProjectSkillRequirement } from '../projects/project.model';
+import { Project, ISkillRequirement } from '../projects/project.model';
 import { Employee } from '../employees/employee.model';
 import { Role } from '../roles/role.model';
 import { Skill } from '../skills/skill.model';

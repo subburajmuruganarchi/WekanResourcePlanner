@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>R360 Project Logos</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 40px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #fff;
+            margin-bottom: 40px;
+            font-size: 2.5rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .project-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .project-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        }
+
+        .logo-container {
+            width: 100%;
+            height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%);
+            padding: 20px;
+        }
+
+        .logo-container img {
+            max-width: 100%;
+            max-height: 140px;
+            object-fit: contain;
+        }
+
+        .logo-placeholder {
+            width: 120px;
+            height: 120px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: white;
+            text-transform: uppercase;
+        }
+
+        .project-info {
+            padding: 20px;
+            border-top: 3px solid #e74c3c;
+        }
+
+        .project-name {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #1a1a2e;
+            margin-bottom: 8px;
+        }
+
+        .project-code {
+            font-size: 0.85rem;
+            color: #666;
+            font-family: monospace;
+            background: #f0f0f0;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-bottom: 12px;
+        }
+
+        .project-meta {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+
+        .badge.priority-high {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .badge.priority-medium {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+
+        .badge.priority-low {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .badge.status {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .project-hours {
+            margin-top: 12px;
+            font-size: 0.85rem;
+            color: #555;
+        }
+
+        .hours-bar {
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            margin-top: 6px;
+            overflow: hidden;
+        }
+
+        .hours-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #e74c3c, #f39c12);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🏢 R360 Project Logos</h1>
+    <div class="projects-grid" id="projectsGrid"></div>
+
+    <script>
+        const projects = [
+            {
+                "project_name": "AWL",
+                "project_code": "PRJ-0001",
+                "status": "Active",
+                "priority": "High",
+                "projected_total_hours": 1200,
+                "project_logo": "https://i.imgur.com/8Q4Yg6B.png"
+            },
+            {
+                "project_name": "My Coaching Place",
+                "project_code": "PRJ-0002",
+                "status": "Active",
+                "priority": "High",
+                "projected_total_hours": 900,
+                "project_logo": "https://i.imgur.com/j1aX5Zq.png"
+            },
+            {
+                "project_name": "CasaPadel",
+                "project_code": "PRJ-0003",
+                "status": "Active",
+                "priority": "Medium",
+                "projected_total_hours": 800,
+                "project_logo": "https://i.imgur.com/4tN70vK.png"
+            },
+            {
+                "project_name": "APAF",
+                "project_code": "PRJ-0004",
+                "status": "Active",
+                "priority": "Medium",
+                "projected_total_hours": 600,
+                "project_logo": "https://i.imgur.com/a1b2c3d.png"
+            },
+            {
+                "project_name": "R-360",
+                "project_code": "PRJ-0005",
+                "status": "Active",
+                "priority": "Low",
+                "projected_total_hours": 500,
+                "project_logo": "https://i.imgur.com/e4f5g6h.png"
+            },
+            {
+                "project_name": "Seven Eleven",
+                "project_code": "PRJ-0006",
+                "status": "Active",
+                "priority": "Medium",
+                "projected_total_hours": 700,
+                "project_logo": "https://i.imgur.com/i7j8k9l.png"
+            },
+            {
+                "project_name": "NovaCare",
+                "project_code": "PRJ-0007",
+                "status": "Active",
+                "priority": "High",
+                "projected_total_hours": 1000,
+                "project_logo": "https://i.imgur.com/m2n3o4p.png"
+            },
+            {
+                "project_name": "FinServe",
+                "project_code": "PRJ-0008",
+                "status": "Active",
+                "priority": "Low",
+                "projected_total_hours": 450,
+                "project_logo": "https://i.imgur.com/p5q6r7s.png"
+            },
+            {
+                "project_name": "BlueOrbit",
+                "project_code": "PRJ-0009",
+                "status": "Active",
+                "priority": "High",
+                "projected_total_hours": 1100,
+                "project_logo": "https://i.imgur.com/s8t9u0v.png"
+            },
+            {
+                "project_name": "AgriPulse",
+                "project_code": "PRJ-0010",
+                "status": "Active",
+                "priority": "Medium",
+                "projected_total_hours": 650,
+                "project_logo": "https://i.imgur.com/v1w2x3y.png"
+            }
+        ];
+
+        // Color palette for logo placeholders
+        const colors = [
+            '#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#f39c12',
+            '#1abc9c', '#e91e63', '#00bcd4', '#ff5722', '#673ab7'
+        ];
+
+        const grid = document.getElementById('projectsGrid');
+        const maxHours = Math.max(...projects.map(p => p.projected_total_hours));
+
+        projects.forEach((project, index) => {
+            const priorityClass = `priority-${project.priority.toLowerCase()}`;
+            const hoursPercent = (project.projected_total_hours / maxHours) * 100;
+            const color = colors[index % colors.length];
+            const initials = project.project_name.split(' ').map(w => w[0]).join('').substring(0, 2);
+
+            const card = document.createElement('div');
+            card.className = 'project-card';
+            card.innerHTML = `
+                <div class="logo-container">
+                    <img src="${project.project_logo}" 
+                         alt="${project.project_name} Logo"
+                         style="display: none;"
+                         onload="this.style.display='block'; this.nextElementSibling.style.display='none';"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="logo-placeholder" style="background: linear-gradient(135deg, ${color}, ${color}dd);">
+                        ${initials}
+                    </div>
+                </div>
+                <div class="project-info">
+                    <div class="project-name">${project.project_name}</div>
+                    <div class="project-code">${project.project_code}</div>
+                    <div class="project-meta">
+                        <span class="badge status">${project.status}</span>
+                        <span class="badge ${priorityClass}">${project.priority}</span>
+                    </div>
+                    <div class="project-hours">
+                        <strong>${project.projected_total_hours.toLocaleString()}</strong> projected hours
+                        <div class="hours-bar">
+                            <div class="hours-fill" style="width: ${hoursPercent}%"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+    </script>
+</body>
+
+</html>

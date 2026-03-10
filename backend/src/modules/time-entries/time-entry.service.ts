@@ -1,5 +1,10 @@
 import { TimeEntry, ITimeEntry } from './time-entry.model';
 import { ProjectAllocation } from '../allocations/allocation.model';
+import { Project } from '../projects/project.model';
+import { Employee } from '../employees/employee.model';
+import { Role } from '../roles/role.model';
+import { notificationService } from '../notifications/notification.service';
+import { NotificationType } from '../notifications/notification.model';
 import { Types, startSession } from 'mongoose';
 import { TimeEntryStatus } from '../../common/types/enums';
 
@@ -10,6 +15,8 @@ export interface CreateTimeEntryRequest {
     date: string;
     hours: number;
     comments?: string;
+    overrideReason?: string;
+    requestingUserId?: string;
 }
 
 export interface TimeEntryResponse {
@@ -22,6 +29,11 @@ export interface TimeEntryResponse {
     comments?: string;
     weekStartDate: string;
     status: string;
+    approvedBy?: string;
+    approvedAt?: string;
+    rejectedBy?: string;
+    rejectedAt?: string;
+    rejectionComment?: string;
 }
 
 // Weekly hour cap constant (40 hours standard, can be overridden)
@@ -55,16 +67,41 @@ export class TimeEntryService {
                 throw new Error('Hours must be between 0.01 and 24');
             }
 
+            // 1. Check if user is Admin
+            let userIsAdmin = false;
+            if (request.requestingUserId) {
+                userIsAdmin = await this.isAdmin(request.requestingUserId);
+            }
+
+            // Check if an existing entry for this employee+project+date is non-DRAFT (locked)
+            const existingEntry = await TimeEntry.findOne({
+                employeeId: new Types.ObjectId(request.employeeId),
+                projectId: new Types.ObjectId(request.projectId),
+                date: new Date(request.date)
+            }).session(session);
+
+            if (existingEntry && existingEntry.status !== TimeEntryStatus.DRAFT && !userIsAdmin) {
+                if (existingEntry.status === TimeEntryStatus.PM_APPROVED) {
+                    throw new Error(
+                        'This time entry has been approved by the Project Manager and is now immutable. It cannot be modified.'
+                    );
+                }
+                throw new Error(
+                    `Cannot edit this time entry — it is currently "${existingEntry.status}". ` +
+                    'Only DRAFT entries can be modified.'
+                );
+            }
+
             // Calculate week start date (Monday)
             const weekStartDate = this.getWeekStartDate(entryDate);
 
             // Validate employee is allocated to this project
             const allocation = await ProjectAllocation.findOne({
-                employeeId: new Types.ObjectId(request.employeeId),
-                projectId: new Types.ObjectId(request.projectId),
-                isActive: true,
-                startDate: { $lte: entryDate },
-                endDate: { $gte: entryDate }
+                employee_id: new Types.ObjectId(request.employeeId),
+                project_id: new Types.ObjectId(request.projectId),
+                is_active: true,
+                start_date: { $lte: entryDate },
+                end_date: { $gte: entryDate }
             }).session(session);
 
             if (!allocation) {
@@ -113,19 +150,40 @@ export class TimeEntryService {
                 );
             }
 
-            // Create the time entry
-            const [timeEntry] = await TimeEntry.create([{
-                employeeId: new Types.ObjectId(request.employeeId),
-                projectId: new Types.ObjectId(request.projectId),
+            // Fetch project to get PM ID for denormalization
+            const project = await Project.findById(request.projectId).session(session);
+            if (!project) throw new Error('Project not found');
+
+            // Upsert the time entry (update if exists for same employee + project + date)
+            const updateData: any = {
                 timeCodeId: new Types.ObjectId(request.timeCodeId),
-                date: entryDate,
                 hours: request.hours,
                 comments: request.comments,
                 weekStartDate,
+                projectManagerUserId: project.project_manager_id,
                 status: TimeEntryStatus.DRAFT
-            }], { session });
+            };
+
+            if (userIsAdmin && existingEntry && existingEntry.status === TimeEntryStatus.PM_APPROVED) {
+                updateData.status = TimeEntryStatus.PM_APPROVED;
+                updateData.overriddenBy = new Types.ObjectId(request.requestingUserId);
+                updateData.overriddenAt = new Date();
+                updateData.overrideReason = request.overrideReason || 'Admin Override';
+            }
+
+            const timeEntry = await TimeEntry.findOneAndUpdate(
+                {
+                    employeeId: new Types.ObjectId(request.employeeId),
+                    projectId: new Types.ObjectId(request.projectId),
+                    date: entryDate
+                },
+                { $set: updateData },
+                { upsert: true, new: true, session }
+            );
 
             await session.commitTransaction();
+
+            if (!timeEntry) throw new Error('Failed to save time entry');
 
             return this.mapToResponse(timeEntry);
         } catch (error) {
@@ -137,12 +195,11 @@ export class TimeEntryService {
     }
 
     private getWeekStartDate(date: Date): Date {
-        const d = new Date(date);
-        const day = d.getDay();
+        const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+        const day = d.getUTCDay();
         // Adjust to Monday (day 1). If Sunday (0), go back 6 days
         const diff = day === 0 ? 6 : day - 1;
-        d.setDate(d.getDate() - diff);
-        d.setHours(0, 0, 0, 0);
+        d.setUTCDate(d.getUTCDate() - diff);
         return d;
     }
 
@@ -156,7 +213,12 @@ export class TimeEntryService {
             hours: entry.hours,
             comments: entry.comments,
             weekStartDate: entry.weekStartDate.toISOString().split('T')[0],
-            status: entry.status
+            status: entry.status,
+            approvedBy: entry.approvedBy?.toString(),
+            approvedAt: entry.approvedAt?.toISOString(),
+            rejectedBy: entry.rejectedBy?.toString(),
+            rejectedAt: entry.rejectedAt?.toISOString(),
+            rejectionComment: entry.rejectionComment,
         };
     }
 
@@ -168,14 +230,20 @@ export class TimeEntryService {
             throw new Error('Invalid employee ID');
         }
 
-        const weekStartDate = new Date(weekStart);
+        const weekStartDate = new Date(weekStart + 'T00:00:00.000Z');
         if (isNaN(weekStartDate.getTime())) {
             throw new Error('Invalid week start date');
         }
 
+        // Use a date range to handle timezone variations in stored data
+        const dayBefore = new Date(weekStartDate);
+        dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+        const dayAfter = new Date(weekStartDate);
+        dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+
         const entries = await TimeEntry.find({
             employeeId: new Types.ObjectId(employeeId),
-            weekStartDate
+            weekStartDate: { $gte: dayBefore, $lte: dayAfter }
         }).sort({ date: 1 });
 
         return entries.map(e => this.mapToResponse(e));
@@ -202,30 +270,35 @@ export class TimeEntryService {
 
         // Find all active allocations that overlap with this week
         const allocations = await ProjectAllocation.find({
-            employeeId: new Types.ObjectId(employeeId),
-            isActive: true,
-            startDate: { $lte: weekEndDate },
-            endDate: { $gte: weekStartDate }
-        }).populate('projectId', 'name code');
+            employee_id: new Types.ObjectId(employeeId),
+            is_active: true,
+            start_date: { $lte: weekEndDate },
+            end_date: { $gte: weekStartDate }
+        }).populate('project_id', 'project_name project_code');
 
         const byProject: { projectId: string; projectName: string; estimatedHours: number; percentage: number }[] = [];
         let totalEstimated = 0;
 
         for (const alloc of allocations) {
-            // Calculate days of overlap within the week
-            const allocStart = new Date(Math.max(alloc.startDate.getTime(), weekStartDate.getTime()));
-            const allocEnd = new Date(Math.min(alloc.endDate.getTime(), weekEndDate.getTime()));
-            const daysOverlap = Math.ceil((allocEnd.getTime() - allocStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            // Count weekday overlap only
+            let weekdayCount = 0;
+            for (let d = new Date(weekStartDate); d <= weekEndDate; d.setDate(d.getDate() + 1)) {
+                const dow = d.getDay();
+                if (dow >= 1 && dow <= 5) { // Mon-Fri
+                    if (d >= alloc.start_date && d <= alloc.end_date) {
+                        weekdayCount++;
+                    }
+                }
+            }
 
-            // Estimated hours = (percentage/100) * 40h * (daysOverlap/7)
-            const estimatedHours = (alloc.percentage / 100) * WEEKLY_HOUR_CAP * (daysOverlap / 7);
-            const project = alloc.projectId as unknown as { _id: Types.ObjectId; name: string; code: string };
+            const estimatedHours = (alloc.allocation_percent / 100) * 8 * weekdayCount;
+            const project = alloc.project_id as unknown as { _id: Types.ObjectId; project_name: string; project_code: string };
 
             byProject.push({
                 projectId: project._id.toString(),
-                projectName: project.name || project.code,
+                projectName: project.project_name || project.project_code,
                 estimatedHours: Math.round(estimatedHours * 10) / 10,
-                percentage: alloc.percentage
+                percentage: alloc.allocation_percent
             });
 
             totalEstimated += estimatedHours;
@@ -234,6 +307,99 @@ export class TimeEntryService {
         return {
             totalEstimated: Math.round(totalEstimated * 10) / 10,
             byProject
+        };
+    }
+
+    /**
+     * Get daily forecast hours for an employee for a specific week based on allocations.
+     * Only weekdays (Mon-Fri) get forecast hours. Each day = 8h * allocation%.
+     */
+    async getDailyForecast(employeeId: string, weekStart: string): Promise<{
+        weekTotal: number;
+        days: {
+            date: string;
+            dayName: string;
+            isWeekday: boolean;
+            totalForecast: number;
+            byProject: { projectId: string; projectName: string; percentage: number; forecastHours: number }[];
+        }[];
+    }> {
+        if (!Types.ObjectId.isValid(employeeId)) {
+            throw new Error('Invalid employee ID');
+        }
+
+        const weekStartDate = new Date(weekStart);
+        if (isNaN(weekStartDate.getTime())) {
+            throw new Error('Invalid week start date');
+        }
+
+        const weekEndDate = new Date(weekStartDate);
+        weekEndDate.setDate(weekEndDate.getDate() + 6);
+
+        // Find all active allocations that overlap with this week
+        const allocations = await ProjectAllocation.find({
+            employee_id: new Types.ObjectId(employeeId),
+            is_active: true,
+            start_date: { $lte: weekEndDate },
+            end_date: { $gte: weekStartDate }
+        }).populate('project_id', 'project_name project_code');
+
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const HOURS_PER_DAY = 8;
+
+        const days: {
+            date: string;
+            dayName: string;
+            isWeekday: boolean;
+            totalForecast: number;
+            byProject: { projectId: string; projectName: string; percentage: number; forecastHours: number }[];
+        }[] = [];
+
+        let weekTotal = 0;
+
+        for (let i = 0; i < 7; i++) {
+            const currentDate = new Date(weekStartDate);
+            currentDate.setDate(weekStartDate.getDate() + i);
+            const dow = currentDate.getDay();
+            const isWeekday = dow >= 1 && dow <= 5;
+
+            const byProject: { projectId: string; projectName: string; percentage: number; forecastHours: number }[] = [];
+            let totalForecast = 0;
+
+            if (isWeekday) {
+                for (const alloc of allocations) {
+                    // Check if allocation covers this specific day
+                    if (currentDate >= alloc.start_date && currentDate <= alloc.end_date) {
+                        const forecastHours = Math.round(((alloc.allocation_percent / 100) * HOURS_PER_DAY) * 10) / 10;
+                        const project = alloc.project_id as unknown as { _id: Types.ObjectId; project_name: string; project_code: string };
+
+                        byProject.push({
+                            projectId: project._id.toString(),
+                            projectName: project.project_name || project.project_code,
+                            percentage: alloc.allocation_percent,
+                            forecastHours
+                        });
+
+                        totalForecast += forecastHours;
+                    }
+                }
+            }
+
+            totalForecast = Math.round(totalForecast * 10) / 10;
+            weekTotal += totalForecast;
+
+            days.push({
+                date: currentDate.toISOString().split('T')[0],
+                dayName: dayNames[dow],
+                isWeekday,
+                totalForecast,
+                byProject
+            });
+        }
+
+        return {
+            weekTotal: Math.round(weekTotal * 10) / 10,
+            days
         };
     }
 
@@ -248,14 +414,462 @@ export class TimeEntryService {
         const entry = await TimeEntry.findOne({
             _id: new Types.ObjectId(entryId),
             employeeId: new Types.ObjectId(employeeId),
-            status: TimeEntryStatus.DRAFT // Can only delete draft entries
         });
 
         if (!entry) {
-            throw new Error('Entry not found or cannot be deleted');
+            throw new Error('Entry not found');
+        }
+
+        if (entry.status === TimeEntryStatus.PM_APPROVED) {
+            throw new Error('Cannot delete an approved time entry. Approved entries are immutable.');
+        }
+
+        if (entry.status !== TimeEntryStatus.DRAFT) {
+            throw new Error(`Cannot delete this entry — it is currently "${entry.status}". Only DRAFT entries can be deleted.`);
         }
 
         await TimeEntry.deleteOne({ _id: entry._id });
+    }
+
+    /**
+     * Submit all DRAFT entries for an employee for a specific week.
+     * Validates daily (24h) and weekly (40h) caps before transitioning DRAFT → SUBMITTED.
+     * @param adminOverride - If true, bypasses the 40h weekly cap (for admin use only).
+     */
+    async submitWeeklyEntries(
+        employeeId: string,
+        weekStart: string,
+        adminOverride: boolean = false
+    ): Promise<{ submitted: number; totalWeeklyHours: number; warnings: string[] }> {
+        if (!Types.ObjectId.isValid(employeeId)) {
+            throw new Error('Invalid employee ID');
+        }
+
+        const weekStartDate = new Date(weekStart + 'T00:00:00.000Z');
+        if (isNaN(weekStartDate.getTime())) {
+            throw new Error('Invalid week start date');
+        }
+
+        // Fetch ALL entries for this employee & week (DRAFT and any already-submitted)
+        const allEntries = await TimeEntry.find({
+            employeeId: new Types.ObjectId(employeeId),
+            weekStartDate
+        });
+
+        const draftEntries = allEntries.filter(e => e.status === TimeEntryStatus.DRAFT);
+
+        if (draftEntries.length === 0) {
+            throw new Error('No DRAFT entries found for this week to submit.');
+        }
+
+        // ---- Pre-submission Validation ----
+        const warnings: string[] = [];
+
+        // 1. Daily hours check (no single day > 24h)
+        const hoursByDay = new Map<string, number>();
+        for (const entry of allEntries) {
+            const dayKey = entry.date.toISOString().split('T')[0];
+            hoursByDay.set(dayKey, (hoursByDay.get(dayKey) || 0) + entry.hours);
+        }
+
+        for (const [day, hours] of hoursByDay) {
+            if (hours > 24) {
+                throw new Error(
+                    `Daily hour limit exceeded on ${day}: ${hours}h logged (max 24h). ` +
+                    'Please correct entries before submitting.'
+                );
+            }
+        }
+
+        // 2. Weekly hours check (no more than 40h unless admin override)
+        const totalWeeklyHours = allEntries.reduce((sum, e) => sum + e.hours, 0);
+
+        if (totalWeeklyHours > WEEKLY_HOUR_CAP) {
+            if (!adminOverride) {
+                throw new Error(
+                    `Weekly hour cap exceeded: ${totalWeeklyHours}h logged (max ${WEEKLY_HOUR_CAP}h). ` +
+                    'Reduce hours or request an admin override.'
+                );
+            }
+            // Admin override — allow but add a warning
+            warnings.push(
+                `Admin override used: ${totalWeeklyHours}h exceeds the ${WEEKLY_HOUR_CAP}h weekly cap.`
+            );
+        }
+
+        // ---- All validations passed — transition DRAFT → SUBMITTED ----
+        const result = await TimeEntry.updateMany(
+            {
+                employeeId: new Types.ObjectId(employeeId),
+                weekStartDate,
+                status: TimeEntryStatus.DRAFT
+            },
+            { $set: { status: TimeEntryStatus.SUBMITTED } }
+        );
+
+        // ---- Notifications: Notify Project Managers ----
+        try {
+            const employee = await Employee.findById(employeeId);
+            const employeeName = employee ? `${employee.first_name} ${employee.last_name}` : 'An employee';
+            
+            // Find all unique project IDs from the submitted entries
+            const projectIds = [...new Set(draftEntries.map(e => e.projectId.toString()))];
+            
+            // For each project, notify its PM
+            for (const projId of projectIds) {
+                const project = await Project.findById(projId);
+                const pmId = project?.project_manager_id?.toString();
+                if (project && pmId) {
+                    await notificationService.createNotification(
+                        pmId,
+                        'Timesheet Submitted',
+                        `${employeeName} has submitted a timesheet for the week of ${weekStart} on project ${project.project_code}.`,
+                        NotificationType.INFO,
+                        { employeeId, projectId: projId, weekStart }
+                    );
+                }
+            }
+        } catch (err) {
+            console.error('Failed to send submission notifications:', err);
+        }
+
+        return {
+            submitted: result.modifiedCount,
+            totalWeeklyHours: Math.round(totalWeeklyHours * 10) / 10,
+            warnings
+        };
+    }
+
+    /**
+     * Approve time entries. Only the Project Manager of the project can approve.
+     * Security: PM cannot approve their own entries.
+     */
+    async approveEntries(entryIds: string[], pmUserId: string, options?: { overrideReason?: string }): Promise<{ approved: number }> {
+        if (!Types.ObjectId.isValid(pmUserId)) {
+            throw new Error('Invalid PM user ID');
+        }
+
+        const userIsAdmin = await this.isAdmin(pmUserId);
+
+        const entries = await TimeEntry.find({
+            _id: { $in: entryIds.map(id => new Types.ObjectId(id)) },
+            status: TimeEntryStatus.SUBMITTED
+        });
+
+        if (entries.length === 0) {
+            throw new Error('No SUBMITTED entries found for the given IDs.');
+        }
+
+        // Security: Employees cannot approve their own timesheets (unrestricted for Admins)
+        if (!userIsAdmin) {
+            const selfEntries = entries.filter(e => e.employeeId.toString() === pmUserId);
+            if (selfEntries.length > 0) {
+                throw new Error(
+                    'Security violation: You cannot approve your own timesheet entries. ' +
+                    'Another manager must approve them.'
+                );
+            }
+        }
+
+        // Validate PM authorization for each entry's project (unrestricted for Admins)
+        if (!userIsAdmin) {
+            const projectIds = [...new Set(entries.map(e => e.projectId.toString()))];
+            for (const projId of projectIds) {
+                const project = await Project.findById(projId);
+                if (!project) throw new Error(`Project ${projId} not found.`);
+                if (project.project_manager_id?.toString() !== pmUserId) {
+                    throw new Error(
+                        `User is not the Project Manager for project "${project.project_name}". Only the assigned PM can approve entries.`
+                    );
+                }
+            }
+        }
+
+        const now = new Date();
+        const updatePayload: any = {
+            status: TimeEntryStatus.PM_APPROVED,
+            approvedBy: new Types.ObjectId(pmUserId),
+            approvedAt: now,
+        };
+
+        if (userIsAdmin) {
+            updatePayload.overriddenBy = new Types.ObjectId(pmUserId);
+            updatePayload.overriddenAt = now;
+            updatePayload.overrideReason = options?.overrideReason || 'Admin Override';
+        }
+
+        await TimeEntry.updateMany(
+            {
+                _id: { $in: entryIds.map(id => new Types.ObjectId(id)) },
+                status: TimeEntryStatus.SUBMITTED
+            },
+            {
+                $set: updatePayload,
+                $unset: {
+                    rejectedBy: 1,
+                    rejectedAt: 1,
+                    rejectionComment: 1
+                }
+            }
+        );
+
+        // ---- Notifications: Notify Employees ----
+        try {
+            const pm = await Employee.findById(pmUserId);
+            const pmName = pm ? `${pm.first_name} ${pm.last_name}` : 'Project Manager';
+
+            // Group by employee to avoid spamming
+            const entriesByEmployee = new Map<string, number>();
+            for (const entry of entries) {
+                const empId = entry.employeeId.toString();
+                entriesByEmployee.set(empId, (entriesByEmployee.get(empId) || 0) + 1);
+            }
+
+            for (const [empId, count] of entriesByEmployee.entries()) {
+                await notificationService.createNotification(
+                    empId,
+                    'Timesheet Approved',
+                    `${pmName} has approved ${count} of your timesheet entries.`,
+                    NotificationType.SUCCESS,
+                    { pmUserId, count }
+                );
+            }
+        } catch (err) {
+            console.error('Failed to send approval notifications:', err);
+        }
+
+        return { approved: entries.length };
+    }
+
+    /**
+     * Reject time entries. Only the Project Manager of the project can reject.
+     * Security: PM cannot reject their own entries.
+     */
+    async rejectEntries(entryIds: string[], pmUserId: string, rejectionComment?: string, options?: { overrideReason?: string }): Promise<{ rejected: number }> {
+        if (!Types.ObjectId.isValid(pmUserId)) {
+            throw new Error('Invalid PM user ID');
+        }
+
+        if (rejectionComment && rejectionComment.length > 500) {
+            throw new Error('Rejection comment cannot exceed 500 characters.');
+        }
+
+        const userIsAdmin = await this.isAdmin(pmUserId);
+
+        const entries = await TimeEntry.find({
+            _id: { $in: entryIds.map(id => new Types.ObjectId(id)) },
+            status: TimeEntryStatus.SUBMITTED
+        });
+
+        if (entries.length === 0) {
+            throw new Error('No SUBMITTED entries found for the given IDs.');
+        }
+
+        // Security: Employees cannot reject their own timesheets (unrestricted for Admins)
+        if (!userIsAdmin) {
+            const selfEntries = entries.filter(e => e.employeeId.toString() === pmUserId);
+            if (selfEntries.length > 0) {
+                throw new Error(
+                    'Security violation: You cannot reject your own timesheet entries.'
+                );
+            }
+        }
+
+        // Validate PM authorization (unrestricted for Admins)
+        if (!userIsAdmin) {
+            const projectIds = [...new Set(entries.map(e => e.projectId.toString()))];
+            for (const projId of projectIds) {
+                const project = await Project.findById(projId);
+                if (!project) throw new Error(`Project ${projId} not found.`);
+                if (project.project_manager_id?.toString() !== pmUserId) {
+                    throw new Error(
+                        `User is not the Project Manager for project "${project.project_name}". Only the assigned PM can reject entries.`
+                    );
+                }
+            }
+        }
+
+        const now = new Date();
+        const updatePayload: any = {
+            status: TimeEntryStatus.PM_REJECTED,
+            rejectedBy: new Types.ObjectId(pmUserId),
+            rejectedAt: now,
+            rejectionComment: rejectionComment || undefined
+        };
+
+        if (userIsAdmin) {
+            updatePayload.overriddenBy = new Types.ObjectId(pmUserId);
+            updatePayload.overriddenAt = now;
+            updatePayload.overrideReason = options?.overrideReason || rejectionComment || 'Admin Override';
+        }
+
+        await TimeEntry.updateMany(
+            {
+                _id: { $in: entryIds.map(id => new Types.ObjectId(id)) },
+                status: TimeEntryStatus.SUBMITTED
+            },
+            {
+                $set: updatePayload,
+                $unset: {
+                    approvedBy: 1,
+                    approvedAt: 1
+                }
+            }
+        );
+
+        // ---- Notifications: Notify Employees ----
+        try {
+            const pm = await Employee.findById(pmUserId);
+            const pmName = pm ? `${pm.first_name} ${pm.last_name}` : 'Project Manager';
+
+            // Group by employee to avoid spamming
+            const entriesByEmployee = new Map<string, number>();
+            for (const entry of entries) {
+                const empId = entry.employeeId.toString();
+                entriesByEmployee.set(empId, (entriesByEmployee.get(empId) || 0) + 1);
+            }
+
+            for (const [empId, count] of entriesByEmployee.entries()) {
+                await notificationService.createNotification(
+                    empId,
+                    'Timesheet Rejected',
+                    `${pmName} has rejected ${count} of your timesheet entries.` +
+                    (rejectionComment ? `\nReason: "${rejectionComment}"` : ''),
+                    NotificationType.ERROR,
+                    { pmUserId, rejectionComment, count }
+                );
+            }
+        } catch (err) {
+            console.error('Failed to send rejection notifications:', err);
+        }
+
+        return { rejected: entries.length };
+    }
+
+    /**
+     * Get all SUBMITTED entries for projects managed by a specific PM.
+     * Returns rich data with employee name, project name, and time code for the dashboard.
+     */
+    async getPendingApprovalForPM(pmUserId: string): Promise<any[]> {
+        if (!Types.ObjectId.isValid(pmUserId)) {
+            throw new Error('Invalid PM user ID');
+        }
+
+        const entries = await TimeEntry.find({
+            projectManagerUserId: new Types.ObjectId(pmUserId),
+            status: TimeEntryStatus.SUBMITTED
+        })
+            .populate('projectId', 'project_name project_code')
+            .populate('employeeId', 'first_name last_name email')
+            .populate('timeCodeId', 'code description isBillable')
+            .sort({ date: 1 })
+            .lean();
+
+        return entries.map((e: any) => {
+            const emp = e.employeeId;
+            const tc = e.timeCodeId;
+            const proj = e.projectId;
+
+            return {
+                id: e._id.toString(),
+                employeeId: emp?._id?.toString() || e.employeeId?.toString(),
+                employeeName: emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown',
+                employeeEmail: emp?.email || '',
+                projectId: e.projectId?.toString(),
+                projectName: proj?.name || 'Unknown',
+                projectCode: proj?.code || '',
+                timeCodeId: tc?._id?.toString() || e.timeCodeId?.toString(),
+                timeCode: tc?.code || '',
+                timeCodeDescription: tc?.description || '',
+                isBillable: tc?.isBillable ?? false,
+                date: e.date ? new Date(e.date).toISOString().split('T')[0] : '',
+                hours: e.hours,
+                comments: e.comments || '',
+                weekStartDate: e.weekStartDate ? new Date(e.weekStartDate).toISOString().split('T')[0] : '',
+                status: e.status,
+            };
+        });
+    }
+
+    /**
+     * Get time entries for a specific project with optional filters.
+     * Used by the Project Detail "Timesheet Approvals" tab.
+     */
+    async getEntriesByProject(
+        projectId: string,
+        filters?: { week?: string; employeeId?: string; status?: string }
+    ): Promise<any[]> {
+        if (!Types.ObjectId.isValid(projectId)) {
+            throw new Error('Invalid project ID');
+        }
+
+        const query: any = { projectId: new Types.ObjectId(projectId) };
+
+        if (filters?.week) {
+            const weekStartDate = new Date(filters.week + 'T00:00:00.000Z');
+            if (!isNaN(weekStartDate.getTime())) {
+                query.weekStartDate = weekStartDate;
+            }
+        }
+
+        if (filters?.employeeId && Types.ObjectId.isValid(filters.employeeId)) {
+            query.employeeId = new Types.ObjectId(filters.employeeId);
+        }
+
+        if (filters?.status) {
+            query.status = filters.status;
+        }
+
+        const project = await Project.findById(projectId).lean();
+
+        const entries = await TimeEntry.find(query)
+            .populate('employeeId', 'first_name last_name email')
+            .populate('timeCodeId', 'code description isBillable')
+            .sort({ date: 1 })
+            .lean();
+
+        return entries.map((e: any) => {
+            const emp = e.employeeId;
+            const tc = e.timeCodeId;
+
+            return {
+                id: e._id.toString(),
+                employeeId: emp?._id?.toString() || e.employeeId?.toString(),
+                employeeName: emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown',
+                employeeEmail: emp?.email || '',
+                projectId: e.projectId?.toString(),
+                projectName: project?.project_name || 'Unknown',
+                projectCode: project?.project_code || '',
+                timeCodeId: tc?._id?.toString() || e.timeCodeId?.toString(),
+                timeCode: tc?.code || '',
+                timeCodeDescription: tc?.description || '',
+                isBillable: tc?.isBillable ?? false,
+                date: e.date ? new Date(e.date).toISOString().split('T')[0] : '',
+                hours: e.hours,
+                comments: e.comments || '',
+                weekStartDate: e.weekStartDate ? new Date(e.weekStartDate).toISOString().split('T')[0] : '',
+                status: e.status,
+                approvedBy: e.approvedBy?.toString(),
+                approvedAt: e.approvedAt ? new Date(e.approvedAt).toISOString() : undefined,
+                rejectedBy: e.rejectedBy?.toString(),
+                rejectedAt: e.rejectedAt ? new Date(e.rejectedAt).toISOString() : undefined,
+                rejectionComment: e.rejectionComment,
+            };
+        });
+    }
+
+    /**
+     * Checks if a user has the 'Admin' role.
+     */
+    async isAdmin(userId: string): Promise<boolean> {
+        if (!Types.ObjectId.isValid(userId)) return false;
+        
+        const employee = await Employee.findById(userId).populate('role_id').lean();
+        if (!employee || !employee.role_id) return false;
+        
+        // Typescript casting as populate returns either ObjectId or populated IRole
+        const role = employee.role_id as any;
+        return role.role_name === 'Admin';
     }
 }
 

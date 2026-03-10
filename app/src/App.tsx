@@ -6,6 +6,7 @@ import { Projects } from "@/app/projects/page"
 import { ProjectDetail } from "@/app/projects/project-detail"
 import { Allocation } from "@/app/allocation/page"
 import { TimeEntry } from "@/app/time-entry/page"
+import { PmApprovalsPage } from "@/app/pm-approvals/page"
 import SkillsPage from "@/app/skills/page"
 import OkrsPage from "@/app/okrs/page"
 import { LoginPage } from "@/app/login/page"
@@ -89,6 +90,7 @@ function AppRoutes() {
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/allocation" element={<Allocation />} />
         <Route path="/time-entry" element={<TimeEntry />} />
+        <Route path="/pm-approvals" element={<PmApprovalsPage />} />
         <Route path="/skills" element={<SkillsPage />} />
         <Route path="/okrs" element={<OkrsPage />} />
         <Route path="/ai-analytics" element={<AIAnalyticsPage />} />

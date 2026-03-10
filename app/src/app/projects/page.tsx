@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { FilterBar } from "@/components/shared/filter-bar"
-import { MoreVertical, Loader2, AlertCircle } from "lucide-react"
+import { MoreVertical, Loader2, AlertCircle, Edit } from "lucide-react"
 import { useEmployees } from "@/lib/use-employees"
 import { useProjects } from "@/lib/use-projects"
 import { EmployeeDialog } from "./components/employee-dialog"
@@ -18,6 +18,31 @@ export function Projects() {
     const { employees, loading: empLoading, error: empError } = useEmployees()
     const { projects, loading: projLoading, error: projError } = useProjects()
 
+    const [selectedProject, setSelectedProject] = useState<any | undefined>(undefined)
+    const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
+    const [selectedEmployee, setSelectedEmployee] = useState<any | undefined>(undefined)
+    const [isEmployeeDialogOpen, setIsEmployeeDialogOpen] = useState(false)
+
+    const handleEditEmployee = (emp: any) => {
+        setSelectedEmployee(emp)
+        setIsEmployeeDialogOpen(true)
+    }
+
+    const handleCreateEmployee = () => {
+        setSelectedEmployee(undefined)
+        setIsEmployeeDialogOpen(true)
+    }
+
+    const handleEditProject = (proj: any) => {
+        setSelectedProject(proj)
+        setIsProjectDialogOpen(true)
+    }
+
+    const handleCreateProject = () => {
+        setSelectedProject(undefined)
+        setIsProjectDialogOpen(true)
+    }
+
     return (
         <PageContainer>
             <div className="flex justify-between items-center mb-6">
@@ -25,8 +50,24 @@ export function Projects() {
                     <h1 className="text-2xl font-semibold text-gray-900">Employees and Projects</h1>
                     <p className="text-sm text-gray-600 mt-1">View all employee's personal information, manage projects and allocation.</p>
                 </div>
-                {activeTab === "employee" ? <EmployeeDialog /> : <ProjectDialog />}
+                {activeTab === "employee" ? (
+                    <Button onClick={handleCreateEmployee} className="bg-brand-500 hover:bg-brand-600">Add Employee</Button>
+                ) : (
+                    <Button onClick={handleCreateProject} className="bg-brand-500 hover:bg-brand-600">Add Project</Button>
+                )}
             </div>
+
+            <ProjectDialog
+                project={selectedProject}
+                open={isProjectDialogOpen}
+                onOpenChange={setIsProjectDialogOpen}
+            />
+
+            <EmployeeDialog
+                employee={selectedEmployee}
+                open={isEmployeeDialogOpen}
+                onOpenChange={setIsEmployeeDialogOpen}
+            />
 
             <Tabs defaultValue="employee" className="space-y-6" onValueChange={setActiveTab}>
                 <TabsList>
@@ -62,11 +103,13 @@ export function Projects() {
                                     {(employees || []).map((emp) => (
                                         <TableRow key={emp.id} className="cursor-pointer hover:bg-gray-50">
                                             <TableCell className="font-medium text-brand-600">{emp.name}</TableCell>
-                                            <TableCell><Badge variant="secondary" className="uppercase text-[10px]">{emp.role}</Badge></TableCell>
-                                            <TableCell>{emp.designation || 'N/A'}</TableCell>
-                                            <TableCell>{emp.skills?.find(s => s.skillType === 'Primary')?.name || 'N/A'}</TableCell>
+                                            <TableCell><Badge variant="secondary" className="uppercase text-[10px]">{emp.role || emp.department || 'N/A'}</Badge></TableCell>
+                                            <TableCell>{emp.position || 'N/A'}</TableCell>
+                                            <TableCell>{emp.skills?.find(s => s.isPrimary)?.name || emp.skills?.[0]?.name || 'N/A'}</TableCell>
                                             <TableCell>
-                                                <Button variant="ghost" size="icon"><MoreVertical className="w-4 h-4 text-gray-400" /></Button>
+                                                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleEditEmployee(emp); }}>
+                                                    <Edit className="w-4 h-4 text-gray-400 hover:text-brand-600" />
+                                                </Button>
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -123,7 +166,9 @@ export function Projects() {
                                             </TableCell>
                                             <TableCell>{project.teamSize ?? 0}</TableCell>
                                             <TableCell>
-                                                <Button variant="ghost" size="icon"><MoreVertical className="w-4 h-4 text-gray-400" /></Button>
+                                                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleEditProject(project); }}>
+                                                    <Edit className="w-4 h-4 text-gray-400 hover:text-brand-600" />
+                                                </Button>
                                             </TableCell>
                                         </TableRow>
                                     ))}

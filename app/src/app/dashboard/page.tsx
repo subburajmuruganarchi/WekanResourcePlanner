@@ -21,6 +21,9 @@ export default function Dashboard() {
                         { label: "Total Employees", value: data.totalEmployees.toString(), change: "Live from Platform", icon: Users, color: "green" as const },
                         { label: "Avg Utilization", value: `${data.avgUtilization}%`, change: "Real-time average", icon: TrendingUp, color: "purple" as const },
                         { label: "Hours This Week", value: data.hoursThisWeek.toLocaleString(), change: "Logged time entries", icon: Clock, color: "orange" as const },
+                        { label: "Pending Approvals", value: data.pendingApprovals.toLocaleString(), change: "Submitted entries", icon: Clock, color: "orange" as const },
+                        { label: "Approved Hours", value: data.approvedHours.toLocaleString(), change: "Total lifetime", icon: FolderKanban, color: "green" as const },
+                        { label: "Rejected Hours", value: data.rejectedHours.toLocaleString(), change: "Total lifetime", icon: TrendingUp, color: "red" as const },
                     ]);
                 }
             } catch (error) {
@@ -31,6 +34,9 @@ export default function Dashboard() {
                     { label: "Total Employees", value: "0", change: "API Error", icon: Users, color: "green" as const },
                     { label: "Avg Utilization", value: "0%", change: "API Error", icon: TrendingUp, color: "purple" as const },
                     { label: "Hours This Week", value: "0", change: "API Error", icon: Clock, color: "orange" as const },
+                    { label: "Pending Approvals", value: "0", change: "API Error", icon: Clock, color: "orange" as const },
+                    { label: "Approved Hours", value: "0", change: "API Error", icon: FolderKanban, color: "green" as const },
+                    { label: "Rejected Hours", value: "0", change: "API Error", icon: TrendingUp, color: "red" as const },
                 ]);
             } finally {
                 setIsLoading(false);

@@ -1,68 +1,43 @@
 import { Document, Schema, Types, model } from 'mongoose';
-import { SkillType, SkillLevel, EmployeeStatus } from '../../common/types/enums';
 
-export interface IEmployeeSkill {
-    skillId: Types.ObjectId;
-    skillType: SkillType;
-    level: SkillLevel;
-    experienceYears?: number;
-}
-
+// Matches ACTUAL resource-360 database structure
 export interface IEmployee extends Document {
-    firstName: string;
-    lastName: string;
+    first_name: string;
+    last_name: string;
     email: string;
-    employeeCode: string;
-    status: EmployeeStatus;
-    roleId: Types.ObjectId;
+    employee_code?: string;  // Optional - not all records have this
+    status: string;
+    role_id?: Types.ObjectId;  // Optional - not all records have this
     department?: string;
-    designation?: string;
-    skills: IEmployeeSkill[];
-    maxAllocationPercent: number;
-    joiningDate?: Date;
-    exitDate?: Date;
-    isActive: boolean; // Computed or legacy, keeping for compatibility
+    position?: string;  // DB uses 'position' not 'designation'
+    password?: string; // Hashed password
+    max_allocation_percent?: number;
+    join_date?: Date;  // DB uses 'join_date' not 'joining_date'
+    exit_date?: Date;
+    is_active?: boolean;
+    profile_image?: string;  // DB uses 'profile_image' not 'avatar_url'
+    created_at?: Date;
+    updated_at?: Date;
 }
-
-const EmployeeSkillSchema = new Schema<IEmployeeSkill>({
-    skillId: { type: Schema.Types.ObjectId, ref: 'Skill', required: true },
-    skillType: { type: String, enum: Object.values(SkillType), required: true },
-    level: { type: String, enum: Object.values(SkillLevel), required: true },
-    experienceYears: { type: Number, default: 0 }
-}, { _id: false });
 
 const EmployeeSchema = new Schema<IEmployee>({
-    firstName: { type: String, required: true, trim: true },
-    lastName: { type: String, required: true, trim: true },
+    first_name: { type: String, required: true, trim: true },
+    last_name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, index: true, lowercase: true, trim: true },
-    employeeCode: { type: String, required: true, unique: true, index: true, uppercase: true, trim: true },
-    status: { type: String, enum: Object.values(EmployeeStatus), default: EmployeeStatus.ACTIVE, required: true },
-    roleId: { type: Schema.Types.ObjectId, ref: 'Role', required: true },
+    employee_code: { type: String, unique: true, sparse: true, index: true, uppercase: true, trim: true },
+    status: { type: String, default: 'Active' },
+    role_id: { type: Schema.Types.ObjectId, ref: 'Role' },
     department: { type: String, trim: true },
-    designation: { type: String, trim: true },
-    skills: { type: [EmployeeSkillSchema], required: true },
-    maxAllocationPercent: { type: Number, default: 100, min: 1, max: 100 },
-    joiningDate: { type: Date },
-    exitDate: { type: Date },
-    isActive: { type: Boolean, default: true }
-}, { timestamps: true });
-
-// Authoritative Validation: At least one Primary skill
-EmployeeSchema.path('skills').validate(function (skills: IEmployeeSkill[]) {
-    if (!skills || skills.length === 0) return false;
-    return skills.some(s => s.skillType === SkillType.PRIMARY);
-}, 'Employee must have at least one Primary skill.');
-
-// Ensure no duplicate skillIds in the same employee
-EmployeeSchema.pre('validate', function (next) {
-    if (this.skills && this.skills.length > 0) {
-        const skillIds = this.skills.map(s => s.skillId.toString());
-        const uniqueSkillIds = new Set(skillIds);
-        if (skillIds.length !== uniqueSkillIds.size) {
-            this.invalidate('skills', 'Duplicate skills are not allowed.');
-        }
-    }
-    next();
+    position: { type: String, trim: true },
+    password: { type: String, select: false },
+    max_allocation_percent: { type: Number, default: 100, min: 1, max: 100 },
+    join_date: { type: Date },
+    exit_date: { type: Date },
+    is_active: { type: Boolean, default: true },
+    profile_image: { type: String, trim: true }
+}, {
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+    collection: 'employees'
 });
 
 export const Employee = model<IEmployee>('Employee', EmployeeSchema);

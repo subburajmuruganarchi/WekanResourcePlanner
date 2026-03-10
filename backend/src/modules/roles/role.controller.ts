@@ -4,13 +4,18 @@ import { Role } from './role.model';
 export class RoleController {
     async list(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const roles = await Role.find({ isActive: true }).lean();
+            const roles = await Role.find({
+                $or: [
+                    { is_active: true },
+                    { status: 'Active' }
+                ]
+            }).lean();
             res.json({
                 status: 'success',
-                data: roles.map(r => ({
+                data: roles.map((r: any) => ({
                     id: r._id.toString(),
-                    name: r.name,
-                    isActive: r.isActive
+                    name: r.role_name,
+                    isActive: r.is_active
                 }))
             });
         } catch (error) {

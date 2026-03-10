@@ -15,6 +15,7 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
+import bcrypt from 'bcryptjs';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -79,11 +80,16 @@ async function seed() {
 
     // 4. Create Employees
     console.log('\n--- Creating Employees ---');
+    const defaultPassword = 'password123';
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(defaultPassword, salt);
+
     const [employee1, employee2] = await Employee.create([
         {
             firstName: 'Alice',
             lastName: 'Smith',
             email: 'alice.smith@r360.dev',
+            password: hashedPassword,
             title: 'Senior Frontend Developer',
             roles: [frontendRole._id],
             skills: [
@@ -98,6 +104,7 @@ async function seed() {
             firstName: 'Bob',
             lastName: 'Johnson',
             email: 'bob.johnson@r360.dev',
+            password: hashedPassword,
             title: 'Backend Developer',
             roles: [backendRole._id],
             skills: [

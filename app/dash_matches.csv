@@ -1,0 +1,2 @@
+"Path","LineNumber","Line"
+"C:\r360\app\src\app\projects\project-detail.tsx","127","                                    <div><p className=""text-xs text-gray-500"">Client</p><p className=""font-medium"">{project.clientName || '-'}</p></div>"

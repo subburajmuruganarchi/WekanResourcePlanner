@@ -3,11 +3,32 @@ import { app } from './app';
 import { env } from './config/env';
 import { logger } from './common/logger';
 
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 3000;
+
+const connectWithRetry = async (retries: number = MAX_RETRIES): Promise<void> => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            logger.info(`MongoDB connection attempt ${attempt}/${retries}...`);
+            await mongoose.connect(env.MONGO_URI);
+            logger.info('Connected to MongoDB');
+            return;
+        } catch (error) {
+            logger.error(`MongoDB connection attempt ${attempt} failed:`, error);
+            if (attempt < retries) {
+                const delay = RETRY_DELAY_MS * attempt;
+                logger.info(`Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+    throw new Error(`Failed to connect to MongoDB after ${retries} attempts`);
+};
+
 const startServer = async () => {
     try {
-        // Connect to MongoDB
-        await mongoose.connect(env.MONGO_URI);
-        logger.info('Connected to MongoDB');
+        // Connect to MongoDB with retry
+        await connectWithRetry();
 
         // Start Server
         const server = app.listen(env.PORT, () => {
@@ -36,3 +57,4 @@ const startServer = async () => {
 };
 
 startServer();
+

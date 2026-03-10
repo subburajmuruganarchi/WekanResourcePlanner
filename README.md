@@ -48,3 +48,19 @@ npm test
 - **Logging**: JSON structured logs in Production.
 - **Correlation**: All requests include `x-request-id` header.
 - **Graceful Shutdown**: Handles SIGTERM/SIGINT to close DB connections safely.
+
+## MCP-Ready Schema Fields
+
+The following fields support MCP (Model Context Protocol) read-only explainability:
+
+| Collection | Field | Type | Purpose |
+|------------|-------|------|---------|
+| `employees.skills` | `confidenceWeight` | number | Computed: skillType + level + experience |
+| `projects` | `businessGoal` | string | Why this project exists |
+| `projects` | `staffingStrategy` | enum | BestFit / FastFill / CostAware |
+| `project_allocations` | `allocationReason` | string | Why employee was selected |
+| `project_allocations` | `createdByRole` | enum | System / Manager / Admin |
+| `time_entries` | `normalizedHours` | virtual | hours / 8 (workday ratio) |
+
+> **Note**: MCP accesses data via read-only service APIs only. No direct DB writes.
+

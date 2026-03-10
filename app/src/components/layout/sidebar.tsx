@@ -1,11 +1,16 @@
-import { NavLink } from "react-router-dom"
+import { NavLink, useNavigate } from "react-router-dom"
 import { useAuth } from "@/lib/auth-context"
 import {
     LayoutDashboard,
     FolderKanban,
     Users,
     Clock,
+    Target,
     FileBarChart,
+    List,
+    LogOut,
+    Sparkles,
+    ClipboardCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -14,28 +19,44 @@ const navItems = [
     { label: "Employees & Projects", icon: FolderKanban, path: "/projects" },
     { label: "Resource Allocation", icon: Users, path: "/allocation" },
     { label: "Time Entry", icon: Clock, path: "/time-entry" },
+    { label: "PM Approvals", icon: ClipboardCheck, path: "/pm-approvals" },
+    { label: "OKRs", icon: Target, path: "/okrs" },
+    { label: "AI Analytics", icon: Sparkles, path: "/ai-analytics" },
     { label: "Reports", icon: FileBarChart, path: "/reports" },
+    { label: "Skill Master", icon: List, path: "/skills" },
 ]
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
 
 export function Sidebar({ className, ...props }: SidebarProps) {
-    const { user, switchRole } = useAuth()
+    const { user, logout } = useAuth()
+    const navigate = useNavigate()
 
     // Define role permissions for nav items
     const allowedRoles: Record<string, string[]> = {
-        "/dashboard": ["Admin", "ProjectManager", "Employee", "Leadership"],
-        "/projects": ["Admin", "ProjectManager", "Employee", "Leadership"],
-        "/allocation": ["Admin", "ProjectManager", "Leadership"],
-        "/time-entry": ["Admin", "ProjectManager", "Employee"],
-        "/reports": ["Admin", "ProjectManager", "Leadership"]
+        "/dashboard": ["*"],
+        "/projects": ["*"],
+        "/allocation": ["Admin", "Project Manager", "Leadership"],
+        "/time-entry": ["*"],
+        "/pm-approvals": ["*"],
+        "/okrs": ["*"],
+        "/reports": ["Admin", "Project Manager", "Leadership"],
+        "/ai-analytics": ["Admin", "Project Manager"],
+        "/skills": ["Admin", "Project Manager"]
     }
 
     const filteredItems = navItems.filter(item => {
         if (!user) return false
         const roles = allowedRoles[item.path]
-        return roles ? roles.includes(user.role) : true
+        if (!roles) return true
+        if (roles.includes("*")) return true
+        return roles.includes(user.role)
     })
+
+    const handleSignOut = () => {
+        logout()
+        navigate("/login", { replace: true })
+    }
 
     return (
         <aside className={cn("w-64 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0", className)} {...props}>
@@ -68,29 +89,27 @@ export function Sidebar({ className, ...props }: SidebarProps) {
                 ))}
             </nav>
 
-            {/* Role Switcher for Demo */}
+        {/* Bottom section */}
             <div className="p-4 border-t border-gray-200">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Role (Demo)</p>
-                <select
-                    className="w-full text-xs p-2 border rounded bg-gray-50 mb-4 cursor-pointer"
-                    value={user?.role}
-                    onChange={(e) => switchRole(e.target.value as any)}
-                >
-                    <option value="Admin">Admin</option>
-                    <option value="ProjectManager">Project Manager</option>
-                    <option value="Employee">Employee</option>
-                    <option value="Leadership">Leadership</option>
-                </select>
-
-                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                {/* User info */}
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg mb-3">
                     <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-xs font-medium">
-                        {user?.name.split(" ").map(n => n[0]).join("")}
+                        {user?.name?.split(" ").map(n => n[0]).join("")}
                     </div>
-                    <div className="overflow-hidden">
+                    <div className="overflow-hidden flex-1">
                         <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
                         <p className="text-xs text-gray-500 truncate">{user?.role}</p>
                     </div>
                 </div>
+
+                {/* Sign Out */}
+                <button
+                    onClick={handleSignOut}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
+                >
+                    <LogOut className="w-4 h-4" />
+                    Sign Out
+                </button>
             </div>
         </aside>
     )

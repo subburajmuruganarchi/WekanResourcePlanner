@@ -1,22 +1,58 @@
 // Frontend API Type Definitions
-// Aligned with backend response shapes
+// Aligned with resource-360 database structure (snake_case in DB, camelCase in API response)
 
-export type Role = 'Admin' | 'ProjectManager' | 'Employee' | 'Leadership';
+export type RoleType = 'Admin' | 'ProjectManager' | 'Employee' | 'Leadership';
 
-// Enums
+export type EmployeeStatus = 'Active' | 'Inactive' | 'On Probation' | 'On Notice Period' | 'Terminated';
+
+export type EmployeeRole =
+    | 'Architect'
+    | 'Mobile Architect'
+    | 'Associate Architect'
+    | 'SDE III (Full Stack)'
+    | 'SDE (Full Stack)'
+    | 'SDE II (Full Stack)'
+    | 'SDE (Backend)'
+    | 'SDE II (Backend)'
+    | 'SDE II (Frontend)'
+    | 'SDE III (Mobile)'
+    | 'SDE II (Mobile)'
+    | 'QA Engineer'
+    | 'DBA';
+
+export type EmployeeDepartment =
+    | 'Engineering'
+    | 'Human Resources'
+    | 'Product Management'
+    | 'Quality Assurance'
+    | 'Design'
+    | 'DevOps / Infrastructure'
+    | 'Data & Analytics'
+    | 'Sales'
+    | 'Marketing'
+    | 'Customer Support'
+    | 'Finance'
+    | 'Operations'
+    | 'Administration';
+
 export type ProjectStatus = 'Planning' | 'Active' | 'Completed' | 'OnHold';
 export type ProjectPriority = 'High' | 'Medium' | 'Low';
 export type SkillLevel = 'Beginner' | 'Intermediate' | 'Expert';
 export type BillingType = 'Billable' | 'Non-billable';
 export type DeliveryModel = 'Fixed' | 'T&M';
+export type StaffingStrategy = 'BestFit' | 'FastFill' | 'CostAware';
 
 // Sub-interfaces
 export interface SkillRequirement {
     skillId: string;
     skillName?: string;
-    minSkillLevel: SkillLevel;
-    requiredHeadcount: number;
-    requiredDays: number;
+    minSkillLevel?: SkillLevel;
+    originalHeadcount: number;
+    remainingHeadcount?: number;
+    fulfilledPercent?: number;
+    requiredDays?: number;
+    startDate: string;
+    endDate: string;
     roleId?: string;
     roleName?: string;
 }
@@ -24,57 +60,71 @@ export interface SkillRequirement {
 export interface RoleEffort {
     roleId: string;
     roleName?: string;
-    requiredHeadcount: number;
-    requiredDays: number;
+    originalHeadcount: number;
+    remainingHeadcount?: number;
+    fulfilledPercent?: number;
+    requiredDays?: number;
+    startDate: string;
+    endDate: string;
     hoursPerDay: number;
+}
+
+export interface EmployeeSkill {
+    name: string;
+    skillLevel: string;
+    yearsOfExperience: number;
+    isPrimary: boolean;
 }
 
 export interface Employee {
     id: string;
-    employeeCode: string;
+    employeeCode?: string;
     name: string;
-    firstName: string;
-    lastName: string;
     email: string;
-    status: 'Active' | 'Inactive';
-    role: string;
-    roleId: string;
-    department?: string;
-    designation?: string;
-    skills: {
-        skillId: string;
-        name?: string;
-        skillType: 'Primary' | 'Secondary';
-        level: SkillLevel;
-        experienceYears: number;
-    }[];
+    status: EmployeeStatus;
+    role?: EmployeeRole;
+    roleId?: string;
+    department?: EmployeeDepartment;
+    position?: string;
+    skills: EmployeeSkill[];
     availability: number;
     maxAllocationPercent: number;
-    joiningDate?: string;
-    exitDate?: string;
+    profileImage?: string;
+    joinDate?: string;
 }
 
 export interface Project {
     id: string;
     code: string;
     name: string;
-    clientName: string;
-    owner: string;             // Populated: manager name
-    startDate: string;         // ISO date string
+    owner: string;
+    ownerId?: string;
+    managerId: string;
+    managerName: string;
+    startDate: string;
     endDate?: string;
     status: ProjectStatus;
     priority: ProjectPriority;
-    teamSize?: number;         // Computed: count of active allocations
+    billingType?: string;
+    deliveryModel?: string;
+    projectLogo?: string;
+    clientName?: string;
+    projectedTotalHours?: number;
+    businessGoal?: string;
+    staffingStrategy?: StaffingStrategy;
+    teamSize?: number;
+    skillRequirements?: SkillRequirement[];
+    roleEfforts?: RoleEffort[];
 }
 
 export interface TimeEntry {
     id: string;
-    date: string;              // ISO date "YYYY-MM-DD"
+    date: string;
     projectId: string;
-    projectCode: string;       // Populated
+    projectCode: string;
     hours: number;
     comments?: string;
-    role?: string;             // Derived from allocation
+    role?: string;
 }
 
 export interface AllocationSummary {
@@ -91,4 +141,40 @@ export interface AllocatedProject {
 export interface TimeCode {
     code: string;
     name: string;
+}
+
+export interface CreateProjectRequest {
+    name: string;
+    code: string;
+    ownerId: string;
+    managerId: string;
+    startDate: string;
+    endDate?: string;
+    status: ProjectStatus;
+    priority: ProjectPriority;
+    billingType?: string;
+    deliveryModel?: string;
+    businessGoal?: string;
+    staffingStrategy?: StaffingStrategy;
+    skillRequirements: SkillRequirement[];
+    roleEfforts: RoleEffort[];
+}
+
+export interface CreateEmployeeRequest {
+    firstName: string;
+    lastName: string;
+    email: string;
+    employeeCode: string;
+    status: EmployeeStatus;
+    roleId: string;
+    department?: EmployeeDepartment;
+    designation?: EmployeeRole;
+    maxAllocationPercent: number;
+    joiningDate?: string;
+    skills: {
+        skillId: string;
+        skillType: 'Primary' | 'Secondary';
+        level: SkillLevel;
+        experienceYears: number;
+    }[];
 }

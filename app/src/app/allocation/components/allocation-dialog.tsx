@@ -1,9 +1,11 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Percent, Loader2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { api } from "@/lib/api-client"
+import type { SkillRequirement } from "@/types/api"
 
 interface AllocationDialogProps {
     open: boolean
@@ -12,6 +14,13 @@ interface AllocationDialogProps {
     employeeName: string
     projectId: string
     projectName: string
+    skillRequirements?: SkillRequirement[] // project skill requirements for dropdown
+    // Edit mode props
+    allocationId?: string
+    initialPercentage?: number
+    initialStartDate?: string
+    initialEndDate?: string
+    initialSkillId?: string
     onSuccess?: () => void
 }
 
@@ -19,6 +28,7 @@ interface AllocationRequest {
     projectId: string
     employeeId: string
     roleId: string
+    skillId?: string
     startDate: string
     endDate: string
     percentage: number
@@ -34,38 +44,69 @@ export function AllocationDialog({
     employeeName,
     projectId,
     projectName,
+    skillRequirements = [],
+    allocationId,
+    initialPercentage,
+    initialStartDate,
+    initialEndDate,
+    initialSkillId,
     onSuccess
 }: AllocationDialogProps) {
-    const [percentage, setPercentage] = useState("50")
-    const [startDate, setStartDate] = useState("")
-    const [endDate, setEndDate] = useState("")
+    const isEditMode = !!allocationId
+
+    const [percentage, setPercentage] = useState(initialPercentage?.toString() || "50")
+    const [startDate, setStartDate] = useState(initialStartDate || "")
+    const [endDate, setEndDate] = useState(initialEndDate || "")
+    const [selectedSkillId, setSelectedSkillId] = useState(initialSkillId || "")
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    // Placeholder role ID - in real implementation, this would come from the form or context
+    // Placeholder role ID
     const roleId = "000000000000000000000001"
+
+    // Reset form when dialog opens/closes or initial values change
+    useEffect(() => {
+        if (open) {
+            setPercentage(initialPercentage?.toString() || "50")
+            setStartDate(initialStartDate || "")
+            setEndDate(initialEndDate || "")
+            setSelectedSkillId(initialSkillId || "")
+            setError(null)
+        }
+    }, [open, initialPercentage, initialStartDate, initialEndDate, initialSkillId])
 
     const handleSubmit = async () => {
         setLoading(true)
         setError(null)
 
         try {
-            const request: AllocationRequest = {
-                projectId,
-                employeeId,
-                roleId,
-                startDate,
-                endDate,
-                percentage: parseInt(percentage, 10),
-            }
+            if (isEditMode) {
+                // Update existing allocation
+                await api.put(`/allocations/${allocationId}`, {
+                    percentage: parseInt(percentage, 10),
+                    startDate,
+                    endDate,
+                    skillId: selectedSkillId || undefined,
+                })
+            } else {
+                // Create new allocation
+                const request: AllocationRequest = {
+                    projectId,
+                    employeeId,
+                    roleId,
+                    skillId: selectedSkillId || undefined,
+                    startDate,
+                    endDate,
+                    percentage: parseInt(percentage, 10),
+                }
 
-            await api.post('/allocations', request)
+                await api.post('/allocations', request)
+            }
 
             // Success - close dialog and notify parent
             onOpenChange(false)
             onSuccess?.()
         } catch (err) {
-            // Display backend validation errors verbatim
             if (err instanceof Error) {
                 setError(err.message)
             } else {
@@ -85,9 +126,13 @@ export function AllocationDialog({
         <Dialog open={open} onOpenChange={handleClose}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <DialogTitle>Allocate Resource</DialogTitle>
+                    <DialogTitle>{isEditMode ? 'Edit Allocation' : 'Allocate Resource'}</DialogTitle>
                     <DialogDescription>
-                        Allocate <strong>{employeeName}</strong> to <strong>{projectName}</strong>.
+                        {isEditMode ? (
+                            <>Update allocation for <strong>{employeeName}</strong> on <strong>{projectName}</strong>.</>
+                        ) : (
+                            <>Allocate <strong>{employeeName}</strong> to <strong>{projectName}</strong>.</>
+                        )}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -99,6 +144,32 @@ export function AllocationDialog({
                 )}
 
                 <div className="grid gap-4 py-4">
+                    {/* Skill Selection */}
+                    {skillRequirements.length > 0 && (
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <label className="text-right text-sm font-medium text-gray-700">Skill</label>
+                            <div className="col-span-3">
+                                <Select value={selectedSkillId} onValueChange={setSelectedSkillId}>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Select skill requirement..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {skillRequirements.map((req) => (
+                                            <SelectItem key={req.skillId} value={req.skillId}>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-medium">{req.skillName || 'Skill'}</span>
+                                                    <span className="text-xs text-gray-400">
+                                                        ({req.minSkillLevel}+, {req.originalHeadcount} needed)
+                                                    </span>
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-4 items-center gap-4">
                         <label className="text-right text-sm font-medium text-gray-700">Percentage</label>
                         <div className="col-span-3 relative">
@@ -145,7 +216,7 @@ export function AllocationDialog({
                         disabled={loading || !startDate || !endDate}
                     >
                         {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                        Confirm Allocation
+                        {isEditMode ? 'Update Allocation' : 'Confirm Allocation'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

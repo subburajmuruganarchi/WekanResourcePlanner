@@ -28,5 +28,20 @@ export function useSkills() {
         fetchSkills();
     }, [fetchSkills]);
 
-    return { skills, loading, refetch: fetchSkills };
+    const createSkill = async (data: Partial<Skill>) => {
+        await api.post('/skills', data);
+        fetchSkills();
+    };
+
+    const updateSkill = async (id: string, data: Partial<Skill>) => {
+        await api.patch(`/skills/${id}`, data);
+        fetchSkills();
+    };
+
+    const deleteSkill = async (id: string) => {
+        await api.delete(`/skills/${id}`);
+        fetchSkills();
+    };
+
+    return { skills, loading, refetch: fetchSkills, createSkill, updateSkill, deleteSkill };
 }

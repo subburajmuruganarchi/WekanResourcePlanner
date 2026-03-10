@@ -24,15 +24,26 @@ import { useEmployees } from "@/lib/use-employees"
 import { useSkills } from "@/lib/use-skills"
 import { useRoles } from "@/lib/use-roles"
 import { Loader2, Plus, Trash2, AlertCircle } from "lucide-react"
-import type { CreateProjectRequest, SkillRequirement, RoleEffort, SkillLevel, ProjectStatus, ProjectPriority, BillingType, DeliveryModel } from "@/types/api"
+import type { CreateProjectRequest, SkillRequirement, RoleEffort, SkillLevel, ProjectStatus, BillingType, DeliveryModel, Project } from "@/types/api"
 
-export function ProjectDialog() {
-    const [open, setOpen] = useState(false)
+interface ProjectDialogProps {
+    project?: Project;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+}
+
+export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: ProjectDialogProps) {
+    const [internalOpen, setInternalOpen] = useState(false)
+    const open = controlledOpen !== undefined ? controlledOpen : internalOpen
+    const setOpen = onOpenChange || setInternalOpen
+
     const [loading, setLoading] = useState(false)
-    const { createProject } = useProjects()
+    const { createProject, updateProject } = useProjects()
     const { employees } = useEmployees()
     const { skills } = useSkills()
     const { roles } = useRoles()
+
+    const isEdit = !!project
 
     // Form State
     const [formData, setFormData] = useState<Partial<CreateProjectRequest>>({
@@ -43,6 +54,36 @@ export function ProjectDialog() {
         skillRequirements: [],
         roleEfforts: []
     })
+
+    useEffect(() => {
+        if (project && open) {
+            setFormData({
+                name: project.name,
+                code: project.code,
+                ownerId: project.ownerId || '',
+                managerId: project.managerId || '',
+                status: project.status as ProjectStatus,
+                startDate: project.startDate ? new Date(project.startDate).toISOString().split('T')[0] : '',
+                endDate: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : '',
+                priority: project.priority,
+                billingType: project.billingType as BillingType,
+                deliveryModel: project.deliveryModel as DeliveryModel,
+                skillRequirements: project.skillRequirements || [],
+                roleEfforts: project.roleEfforts || []
+            })
+        } else if (!project && open) {
+            // Reset for create mode
+            setFormData({
+                status: 'Active',
+                priority: 'Medium',
+                billingType: 'Billable',
+                deliveryModel: 'T&M',
+                skillRequirements: [],
+                roleEfforts: []
+            })
+        }
+    }, [project, open])
+
 
     const [error, setError] = useState<string | null>(null)
 
@@ -56,7 +97,13 @@ export function ProjectDialog() {
             ...prev,
             skillRequirements: [
                 ...(prev.skillRequirements || []),
-                { skillId: '', minSkillLevel: 'Intermediate', requiredHeadcount: 1, requiredDays: 10 }
+                {
+                    skillId: '',
+                    minSkillLevel: 'Intermediate',
+                    originalHeadcount: 1,
+                    startDate: prev.startDate || '',
+                    endDate: prev.endDate || ''
+                }
             ]
         }))
     }
@@ -82,7 +129,13 @@ export function ProjectDialog() {
             ...prev,
             roleEfforts: [
                 ...(prev.roleEfforts || []),
-                { roleId: '', requiredHeadcount: 1, requiredDays: 10, hoursPerDay: 8 }
+                {
+                    roleId: '',
+                    originalHeadcount: 1,
+                    startDate: prev.startDate || '',
+                    endDate: prev.endDate || '',
+                    hoursPerDay: 8
+                }
             ]
         }))
     }
@@ -110,8 +163,8 @@ export function ProjectDialog() {
 
         try {
             // Basic Frontend Validation
-            if (!formData.name || !formData.code || !formData.ownerId || !formData.startDate || !formData.endDate) {
-                throw new Error("Please fill in all required fields in the General tab.")
+            if (!formData.name || !formData.code || !formData.ownerId || !formData.managerId || !formData.startDate || !formData.endDate) {
+                throw new Error("Please fill in all required fields in the General tab (including Project Manager).")
             }
             if (!formData.skillRequirements || formData.skillRequirements.length === 0) {
                 throw new Error("At least one skill requirement is needed.")
@@ -120,18 +173,25 @@ export function ProjectDialog() {
                 throw new Error("Please select a skill for all skill requirements.")
             }
 
-            await createProject(formData as CreateProjectRequest)
+            if (isEdit && project) {
+                await updateProject(project.id, formData as CreateProjectRequest)
+            } else {
+                await createProject(formData as CreateProjectRequest)
+            }
+
             setOpen(false)
-            setFormData({
-                status: 'Active',
-                priority: 'Medium',
-                billingType: 'Billable',
-                deliveryModel: 'T&M',
-                skillRequirements: [],
-                roleEfforts: []
-            })
+            if (!isEdit) {
+                setFormData({
+                    status: 'Active',
+                    priority: 'Medium',
+                    billingType: 'Billable',
+                    deliveryModel: 'T&M',
+                    skillRequirements: [],
+                    roleEfforts: []
+                })
+            }
         } catch (err: any) {
-            setError(err.message || "Failed to create project")
+            setError(err.message || "Failed to save project")
         } finally {
             setLoading(false)
         }
@@ -139,15 +199,17 @@ export function ProjectDialog() {
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button className="bg-brand-500 hover:bg-brand-600">Add Project</Button>
-            </DialogTrigger>
+            {controlledOpen === undefined && (
+                <DialogTrigger asChild>
+                    <Button className="bg-brand-500 hover:bg-brand-600">Add Project</Button>
+                </DialogTrigger>
+            )}
             <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
-                        <DialogTitle>Add New Project</DialogTitle>
+                        <DialogTitle>{isEdit ? 'Edit Project' : 'Add New Project'}</DialogTitle>
                         <DialogDescription>
-                            Create a new project with resource requirements.
+                            {isEdit ? 'Update project details and resource requirements.' : 'Create a new project with resource requirements.'}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -191,6 +253,20 @@ export function ProjectDialog() {
                                         onValueChange={v => updateField('ownerId', v)}
                                     >
                                         <SelectTrigger><SelectValue placeholder="Select Owner" /></SelectTrigger>
+                                        <SelectContent>
+                                            {(employees || []).map(emp => (
+                                                <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Project Manager *</Label>
+                                    <Select
+                                        value={formData.managerId}
+                                        onValueChange={v => updateField('managerId', v)}
+                                    >
+                                        <SelectTrigger><SelectValue placeholder="Select Project Manager" /></SelectTrigger>
                                         <SelectContent>
                                             {(employees || []).map(emp => (
                                                 <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
@@ -260,17 +336,18 @@ export function ProjectDialog() {
 
                         {/* SKILLS TAB */}
                         <TabsContent value="skills" className="space-y-4 py-4">
-                            <div className="flex justify-between items-center">
+                            <div className="space-y-1">
                                 <h3 className="text-sm font-medium">Required Skills</h3>
-                                <Button type="button" variant="outline" size="sm" onClick={addSkill}>
-                                    <Plus className="w-4 h-4 mr-2" /> Add Skill
-                                </Button>
+                                <p className="text-[10px] text-gray-500">Project window: {formData.startDate} to {formData.endDate}</p>
                             </div>
+                            <Button type="button" variant="outline" size="sm" onClick={addSkill}>
+                                <Plus className="w-4 h-4 mr-2" /> Add Skill
+                            </Button>
 
                             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                                 {formData.skillRequirements?.map((skill, index) => (
                                     <div key={index} className="grid grid-cols-12 gap-2 items-end border p-3 rounded-lg bg-gray-50">
-                                        <div className="col-span-4 space-y-1">
+                                        <div className="col-span-3 space-y-1">
                                             <Label className="text-xs">Skill</Label>
                                             <Select
                                                 value={skill.skillId}
@@ -284,7 +361,7 @@ export function ProjectDialog() {
                                                 </SelectContent>
                                             </Select>
                                         </div>
-                                        <div className="col-span-3 space-y-1">
+                                        <div className="col-span-2 space-y-1">
                                             <Label className="text-xs">Min Level</Label>
                                             <Select
                                                 value={skill.minSkillLevel}
@@ -299,23 +376,25 @@ export function ProjectDialog() {
                                             </Select>
                                         </div>
                                         <div className="col-span-2 space-y-1">
-                                            <Label className="text-xs">Count</Label>
+                                            <Label className="text-xs">Start Date</Label>
                                             <Input
-                                                type="number"
-                                                className="h-8"
-                                                min={1}
-                                                value={skill.requiredHeadcount}
-                                                onChange={e => updateSkill(index, 'requiredHeadcount', parseInt(e.target.value))}
+                                                type="date"
+                                                className="h-8 text-[11px] px-2"
+                                                value={skill.startDate}
+                                                min={formData.startDate}
+                                                max={formData.endDate}
+                                                onChange={e => updateSkill(index, 'startDate', e.target.value)}
                                             />
                                         </div>
                                         <div className="col-span-2 space-y-1">
-                                            <Label className="text-xs">Days</Label>
+                                            <Label className="text-xs">End Date</Label>
                                             <Input
-                                                type="number"
-                                                className="h-8"
-                                                min={1}
-                                                value={skill.requiredDays}
-                                                onChange={e => updateSkill(index, 'requiredDays', parseInt(e.target.value))}
+                                                type="date"
+                                                className="h-8 text-[11px] px-2"
+                                                value={skill.endDate}
+                                                min={skill.startDate || formData.startDate}
+                                                max={formData.endDate}
+                                                onChange={e => updateSkill(index, 'endDate', e.target.value)}
                                             />
                                         </div>
                                         <div className="col-span-1 flex justify-end pb-1">
@@ -336,7 +415,10 @@ export function ProjectDialog() {
                         {/* ROLES TAB */}
                         <TabsContent value="roles" className="space-y-4 py-4">
                             <div className="flex justify-between items-center">
-                                <h3 className="text-sm font-medium">Role Efforts (Optional)</h3>
+                                <div className="space-y-1">
+                                    <h3 className="text-sm font-medium">Role Efforts (Optional)</h3>
+                                    <p className="text-[10px] text-gray-500">Project window: {formData.startDate} to {formData.endDate}</p>
+                                </div>
                                 <Button type="button" variant="outline" size="sm" onClick={addRoleEffort}>
                                     <Plus className="w-4 h-4 mr-2" /> Add Role
                                 </Button>
@@ -365,18 +447,30 @@ export function ProjectDialog() {
                                                 type="number"
                                                 className="h-8"
                                                 min={1}
-                                                value={effort.requiredHeadcount}
-                                                onChange={e => updateRoleEffort(index, 'requiredHeadcount', parseInt(e.target.value))}
+                                                value={effort.originalHeadcount}
+                                                onChange={e => updateRoleEffort(index, 'originalHeadcount', parseInt(e.target.value))}
                                             />
                                         </div>
-                                        <div className="col-span-3 space-y-1">
-                                            <Label className="text-xs">Days</Label>
+                                        <div className="col-span-2 space-y-1">
+                                            <Label className="text-xs">Start Date</Label>
                                             <Input
-                                                type="number"
-                                                className="h-8"
-                                                min={1}
-                                                value={effort.requiredDays}
-                                                onChange={e => updateRoleEffort(index, 'requiredDays', parseInt(e.target.value))}
+                                                type="date"
+                                                className="h-8 text-[11px] px-2"
+                                                value={effort.startDate}
+                                                min={formData.startDate}
+                                                max={formData.endDate}
+                                                onChange={e => updateRoleEffort(index, 'startDate', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="col-span-2 space-y-1">
+                                            <Label className="text-xs">End Date</Label>
+                                            <Input
+                                                type="date"
+                                                className="h-8 text-[11px] px-2"
+                                                value={effort.endDate}
+                                                min={effort.startDate || formData.startDate}
+                                                max={formData.endDate}
+                                                onChange={e => updateRoleEffort(index, 'endDate', e.target.value)}
                                             />
                                         </div>
                                         <div className="col-span-2 space-y-1">
@@ -409,7 +503,7 @@ export function ProjectDialog() {
                         <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
                         <Button type="submit" disabled={loading}>
                             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Create Project
+                            {isEdit ? 'Update Project' : 'Create Project'}
                         </Button>
                     </DialogFooter>
                 </form>

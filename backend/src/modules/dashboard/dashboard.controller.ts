@@ -3,6 +3,7 @@ import { Project } from '../projects/project.model';
 import { Employee } from '../employees/employee.model';
 import { ProjectAllocation } from '../allocations/allocation.model';
 import { TimeEntry } from '../time-entries/time-entry.model';
+import { TimeEntryStatus } from '../../common/types/enums';
 
 export class DashboardController {
     async getStats(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -36,6 +37,17 @@ export class DashboardController {
             });
             const totalHoursThisWeek = weeklyTimeEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
 
+            // 5. Pending Approvals Count
+            const pendingApprovalsCount = await TimeEntry.countDocuments({ status: TimeEntryStatus.SUBMITTED });
+
+            // 6. Approved Hours (All time)
+            const approvedEntries = await TimeEntry.find({ status: TimeEntryStatus.PM_APPROVED });
+            const totalApprovedHours = approvedEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
+
+            // 7. Rejected Hours (All time)
+            const rejectedEntries = await TimeEntry.find({ status: TimeEntryStatus.PM_REJECTED });
+            const totalRejectedHours = rejectedEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
+
             res.json({
                 status: 'success',
                 data: {
@@ -43,6 +55,9 @@ export class DashboardController {
                     totalEmployees: totalEmployeesCount,
                     avgUtilization: avgUtilization,
                     hoursThisWeek: totalHoursThisWeek,
+                    pendingApprovals: pendingApprovalsCount,
+                    approvedHours: totalApprovedHours,
+                    rejectedHours: totalRejectedHours,
                 }
             });
         } catch (error) {

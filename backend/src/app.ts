@@ -10,10 +10,12 @@ import { employeeRouter } from './modules/employees/employee.routes';
 import { projectRouter } from './modules/projects/project.routes';
 import { allocationRouter } from './modules/allocations/allocation.routes';
 import { timeEntryRouter } from './modules/time-entries/time-entry.routes';
+import { notificationRouter } from './modules/notifications/notification.routes';
 import { roleRouter } from './modules/roles/role.routes';
 import { skillRouter } from './modules/skills/skill.routes';
 import { okrRouter } from './modules/okrs/okr.routes';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes';
+import { authRouter } from './modules/auth/auth.routes';
 
 // Import models to register schemas with Mongoose (required for populate)
 import './modules/skills/skill.model';
@@ -91,10 +93,12 @@ app.use('/api/employees', employeeRouter);
 app.use('/api/projects', projectRouter);
 app.use('/api/allocations', allocationRouter);
 app.use('/api/time-entries', timeEntryRouter);
+app.use('/api/notifications', notificationRouter);
 app.use('/api/roles', roleRouter);
 app.use('/api/skills', skillRouter);
 app.use('/api/okrs', okrRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/auth', authRouter);
 
 // Global Error Handler
 app.use(errorHandler);

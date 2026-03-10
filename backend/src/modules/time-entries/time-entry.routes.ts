@@ -20,6 +20,9 @@ router.get('/codes', async (req, res, next) => {
     }
 });
 
+// GET /api/time-entries/daily-forecast - Get daily forecast hours from allocations
+router.get('/daily-forecast', (req, res, next) => timeEntryController.getDailyForecast(req, res, next));
+
 // GET /api/time-entries/estimates - Get estimated hours from allocations
 router.get('/estimates', (req, res, next) => timeEntryController.getEstimates(req, res, next));
 
@@ -31,5 +34,20 @@ router.post('/', (req, res, next) => timeEntryController.create(req, res, next))
 
 // DELETE /api/time-entries/:id - Delete a time entry
 router.delete('/:id', (req, res, next) => timeEntryController.delete(req, res, next));
+
+// POST /api/time-entries/submit - Employee submits weekly entries (DRAFT → SUBMITTED)
+router.post('/submit', (req, res, next) => timeEntryController.submit(req, res, next));
+
+// POST /api/time-entries/approve - PM approves entries (SUBMITTED → PM_APPROVED)
+router.post('/approve', (req, res, next) => timeEntryController.approve(req, res, next));
+
+// POST /api/time-entries/reject - PM rejects entries (SUBMITTED → PM_REJECTED)
+router.post('/reject', (req, res, next) => timeEntryController.reject(req, res, next));
+
+// GET /api/time-entries/pending-approval - Get SUBMITTED entries for PM's projects
+router.get('/pending-approval', (req, res, next) => timeEntryController.pendingApproval(req, res, next));
+
+// GET /api/time-entries/by-project/:projectId - Get entries for a specific project with filters
+router.get('/by-project/:projectId', (req, res, next) => timeEntryController.byProject(req, res, next));
 
 export { router as timeEntryRouter };

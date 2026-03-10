@@ -1,15 +1,16 @@
 import { z } from 'zod';
-import { EmployeeStatus, SkillType, SkillLevel } from '../../common/types/enums';
+import { EmployeeStatus, SkillType, SkillLevel, EmployeeRole, EmployeeDepartment } from '../../common/types/enums';
 
 export const CreateEmployeeSchema = z.object({
     firstName: z.string().min(1, 'First name is required'),
     lastName: z.string().min(1, 'Last name is required'),
     email: z.string().email('Invalid email address').toLowerCase(),
+    password: z.string().min(6, 'Password must be at least 6 characters').optional(),
     employeeCode: z.string().min(1, 'Employee code is required').toUpperCase(),
     status: z.nativeEnum(EmployeeStatus).default(EmployeeStatus.ACTIVE),
     roleId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Role ID'),
-    department: z.string().optional(),
-    designation: z.string().optional(),
+    department: z.nativeEnum(EmployeeDepartment).optional(),
+    designation: z.nativeEnum(EmployeeRole).optional(),
     skills: z.array(z.object({
         skillId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Skill ID'),
         skillType: z.nativeEnum(SkillType),

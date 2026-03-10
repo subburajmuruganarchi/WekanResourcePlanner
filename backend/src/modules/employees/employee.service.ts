@@ -1,8 +1,8 @@
-import { Employee, IEmployee, IEmployeeSkill } from './employee.model';
+import { Employee, IEmployee } from './employee.model';
+import { EmployeeSkill, IEmployeeSkill } from './employee-skill.model';
 import { Skill } from '../skills/skill.model';
 import { Role } from '../roles/role.model';
 import { Types } from 'mongoose';
-import { SkillType } from '../../common/types/enums';
 import { AppError } from '../../common/errors/app-error';
 
 export interface EmployeeListParams {
@@ -13,42 +13,48 @@ export interface EmployeeListParams {
 
 export interface EmployeeResponse {
     id: string;
-    employeeCode: string;
+    employeeCode?: string;
     name: string;
     email: string;
     status: string;
-    role: string;
+    role?: string;
+    roleId?: string;
     department?: string;
-    designation?: string;
+    position?: string;
     skills: {
         name: string;
-        skillType: string;
-        level: string;
-        experienceYears: number;
+        skillLevel: string;
+        yearsOfExperience: number;
+        isPrimary: boolean;
     }[];
     availability: number;
     maxAllocationPercent: number;
-}
-
-interface PopulatedSkill {
-    skillId: { name: string } | Types.ObjectId;
-    skillType: SkillType;
-    level: string;
-    experienceYears: number;
+    profileImage?: string;
+    joinDate?: string;
 }
 
 interface PopulatedEmployee {
     _id: Types.ObjectId;
-    firstName: string;
-    lastName: string;
+    first_name: string;
+    last_name: string;
     email: string;
-    employeeCode: string;
+    employee_code?: string;
     status: string;
-    roleId: { name: string } | Types.ObjectId;
+    role_id?: { _id: Types.ObjectId; name: string } | Types.ObjectId;
     department?: string;
-    designation?: string;
-    skills: PopulatedSkill[];
-    maxAllocationPercent: number;
+    position?: string;
+    max_allocation_percent?: number;
+    profile_image?: string;
+    join_date?: Date;
+}
+
+interface PopulatedEmployeeSkill {
+    _id: Types.ObjectId;
+    employee_id: Types.ObjectId;
+    skill_id: { _id: Types.ObjectId; name: string } | Types.ObjectId;
+    skill_level: string;
+    experience_years: number;
+    is_primary: boolean;
 }
 
 export class EmployeeService {
@@ -56,15 +62,34 @@ export class EmployeeService {
         const query: Record<string, unknown> = {};
 
         if (typeof params.isActive === 'boolean') {
-            query.isActive = params.isActive;
+            if (params.isActive) {
+                query.$or = [{ is_active: true }, { status: 'Active' }];
+            } else {
+                query.$or = [{ is_active: false }, { status: { $ne: 'Active' } }];
+            }
         }
 
         const employees = await Employee.find(query)
-            .populate('skills.skillId', 'name')
-            .populate('roleId', 'name')
+            .populate('role_id', 'role_name')
             .lean() as unknown as PopulatedEmployee[];
 
-        return employees.map(emp => this.mapToResponse(emp));
+        // Get skills for all employees in one query
+        const employeeIds = employees.map(e => e._id);
+        const allSkills = await EmployeeSkill.find({ employee_id: { $in: employeeIds } })
+            .populate('skill_id', 'name')
+            .lean() as unknown as PopulatedEmployeeSkill[];
+
+        // Group skills by employee
+        const skillsByEmployee = new Map<string, PopulatedEmployeeSkill[]>();
+        allSkills.forEach(skill => {
+            const empId = skill.employee_id.toString();
+            if (!skillsByEmployee.has(empId)) {
+                skillsByEmployee.set(empId, []);
+            }
+            skillsByEmployee.get(empId)!.push(skill);
+        });
+
+        return employees.map(emp => this.mapToResponse(emp, skillsByEmployee.get(emp._id.toString()) || []));
     }
 
     async findById(id: string): Promise<EmployeeResponse | null> {
@@ -73,42 +98,60 @@ export class EmployeeService {
         }
 
         const employee = await Employee.findById(id)
-            .populate('skills.skillId', 'name')
-            .populate('roleId', 'name')
+            .populate('role_id', 'role_name')
             .lean() as unknown as PopulatedEmployee | null;
 
         if (!employee) {
             return null;
         }
 
-        return this.mapToResponse(employee);
+        // Get skills for this employee
+        const skills = await EmployeeSkill.find({ employee_id: id })
+            .populate('skill_id', 'name')
+            .lean() as unknown as PopulatedEmployeeSkill[];
+
+        return this.mapToResponse(employee, skills);
     }
 
-    async create(data: Partial<IEmployee>): Promise<EmployeeResponse> {
-        // 1. Mandatory Validation: At least one Primary skill
-        if (!data.skills || !data.skills.some(s => s.skillType === SkillType.PRIMARY)) {
-            throw new AppError('At least one Primary skill is required.', 400);
+    async update(id: string, data: any): Promise<EmployeeResponse> {
+        if (!Types.ObjectId.isValid(id)) {
+            throw new AppError('Invalid employee ID', 400);
         }
 
-        // 2. Mandatory Validation: No duplicate skills
-        const skillIds = data.skills.map(s => s.skillId.toString());
-        if (new Set(skillIds).size !== skillIds.length) {
-            throw new AppError('Duplicate skill entries are not allowed.', 400);
+        // 1. Update basic info
+        const employee = await Employee.findByIdAndUpdate(id, data, { new: true });
+        if (!employee) {
+            throw new AppError('Employee not found', 404);
         }
 
-        // 3. Verify Role existence
-        if (data.roleId) {
-            const roleExists = await Role.exists({ _id: data.roleId });
-            if (!roleExists) {
-                throw new AppError('Specified Role does not exist.', 400);
+        // 2. Update skills if provided
+        if (data.skills && Array.isArray(data.skills)) {
+            // Simplistic approach: delete all and re-create
+            // This is safer for synchronization when the entire skill set is sent from frontend
+            await EmployeeSkill.deleteMany({ employee_id: id });
+
+            const skillInserts = data.skills.map((s: any) => ({
+                employee_id: id,
+                skill_id: s.skillId,
+                skill_level: s.level || s.skillLevel,
+                experience_years: s.experienceYears || s.yearsOfExperience,
+                is_primary: s.skillType === 'Primary' || s.isPrimary
+            }));
+
+            if (skillInserts.length > 0) {
+                await EmployeeSkill.insertMany(skillInserts);
             }
         }
 
-        // 4. Verify all Skill IDs existence
-        for (const skillReq of data.skills) {
-            const skillExists = await Skill.exists({ _id: skillReq.skillId });
-            if (!skillExists) {
-                throw new AppError(`Skill ID ${skillReq.skillId} does not exist.`, 400);
+        return this.findById(id) as Promise<EmployeeResponse>;
+    }
+
+    async create(data: Partial<IEmployee>): Promise<EmployeeResponse> {
+        // Verify Role existence if provided
+        if (data.role_id) {
+            const roleExists = await Role.exists({ _id: data.role_id });
+            if (!roleExists) {
+                throw new AppError('Specified Role does not exist.', 400);
             }
         }
 
@@ -116,31 +159,41 @@ export class EmployeeService {
         await employee.save();
 
         const populated = await Employee.findById(employee._id)
-            .populate('skills.skillId', 'name')
-            .populate('roleId', 'name')
+            .populate('role_id', 'role_name')
             .lean() as unknown as PopulatedEmployee;
 
-        return this.mapToResponse(populated);
+        return this.mapToResponse(populated, []);
     }
 
-    private mapToResponse(emp: PopulatedEmployee): EmployeeResponse {
+    private mapToResponse(emp: PopulatedEmployee, skills: PopulatedEmployeeSkill[]): EmployeeResponse {
+        const role = emp.role_id as { _id: Types.ObjectId; role_name: string } | undefined;
+
+        // Format join_date safely
+        const formatDate = (date: Date | undefined): string | undefined => {
+            if (!date) return undefined;
+            return date.toISOString().split('T')[0];
+        };
+
         return {
             id: emp._id.toString(),
-            employeeCode: emp.employeeCode,
-            name: `${emp.firstName} ${emp.lastName}`,
+            employeeCode: emp.employee_code,
+            name: `${emp.first_name} ${emp.last_name}`,
             email: emp.email,
-            status: emp.status,
-            role: (emp.roleId as { name: string })?.name || 'Unassigned',
+            status: emp.status || 'Active',
+            role: role?.role_name,
+            roleId: role?._id?.toString(),
             department: emp.department,
-            designation: emp.designation,
-            skills: emp.skills.map(s => ({
-                name: (s.skillId as { name: string })?.name || 'Unknown',
-                skillType: s.skillType,
-                level: s.level,
-                experienceYears: s.experienceYears || 0
+            position: emp.position,
+            skills: skills.map(s => ({
+                name: (s.skill_id as { name: string })?.name || 'Unknown',
+                skillLevel: s.skill_level,
+                yearsOfExperience: s.experience_years || 0,
+                isPrimary: s.is_primary || false
             })),
             availability: 100, // TODO: Compute from allocations
-            maxAllocationPercent: emp.maxAllocationPercent || 100
+            maxAllocationPercent: emp.max_allocation_percent || 100,
+            profileImage: emp.profile_image,
+            joinDate: formatDate(emp.join_date)
         };
     }
 }

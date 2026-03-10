@@ -6,6 +6,7 @@ export interface RankedEmployee {
     name: string;
     role: string;
     primarySkill: string;
+    matchingSkills?: { name: string; level: string }[];
     skillLevel: string;
     availability: number;
     experienceYears: number;
@@ -15,13 +16,23 @@ export interface RankedEmployee {
         availabilityScore: number;
         experienceScore: number;
     };
-    currentAllocations: { projectId: string; projectName: string; percentage: number }[];
+    currentAllocations: {
+        id: string;
+        projectId: string;
+        projectName: string;
+        percentage: number;
+        startDate: string;
+        endDate: string;
+        skillId?: string;
+    }[];
     isAllocatedToProject: boolean;
 }
 
 interface UseRankedEmployeesParams {
     projectId?: string;
     skill?: string;
+    startDate?: string;
+    endDate?: string;
 }
 
 interface UseRankedEmployeesResult {
@@ -33,28 +44,32 @@ interface UseRankedEmployeesResult {
 
 export function useRankedEmployees(params: UseRankedEmployeesParams = {}): UseRankedEmployeesResult {
     const [rankedEmployees, setRankedEmployees] = useState<RankedEmployee[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const fetchRankedEmployees = useCallback(async () => {
+        if (!params.projectId) {
+            setRankedEmployees([]);
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
             const queryParams = new URLSearchParams();
-            if (params.projectId) queryParams.append('projectId', params.projectId);
+            queryParams.append('projectId', params.projectId);
             if (params.skill) queryParams.append('skill', params.skill);
+            if (params.startDate) queryParams.append('startDate', params.startDate);
+            if (params.endDate) queryParams.append('endDate', params.endDate);
 
-            const queryString = queryParams.toString();
-            const endpoint = queryString ? `/allocations/rank?${queryString}` : '/allocations/rank';
-
-            const data = await api.get<RankedEmployee[]>(endpoint);
+            const data = await api.get<RankedEmployee[]>(`/allocations/rank?${queryParams.toString()}`);
             setRankedEmployees(data);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to fetch ranked employees');
         } finally {
             setLoading(false);
         }
-    }, [params.projectId, params.skill]);
+    }, [params.projectId, params.skill, params.startDate, params.endDate]);
 
     useEffect(() => {
         fetchRankedEmployees();
