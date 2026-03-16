@@ -40,7 +40,7 @@ export function Sidebar({ className, ...props }: SidebarProps) {
         "/time-entry": ["*"],
         "/pm-approvals": ["*"],
         "/okrs": ["*"],
-        "/reports": ["Admin", "Project Manager", "Leadership"],
+        "/reports": ["*"],
         "/ai-analytics": ["Admin", "Project Manager"],
         "/skills": ["Admin", "Project Manager"]
     }
