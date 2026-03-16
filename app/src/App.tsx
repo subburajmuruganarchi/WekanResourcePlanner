@@ -11,6 +11,7 @@ import SkillsPage from "@/app/skills/page"
 import OkrsPage from "@/app/okrs/page"
 import { LoginPage } from "@/app/login/page"
 import AIAnalyticsPage from "@/app/ai-analytics/page"
+import ReportsPage from "@/app/reports/page"
 
 import { AuthProvider, useAuth } from "@/lib/auth-context"
 
@@ -94,7 +95,7 @@ function AppRoutes() {
         <Route path="/skills" element={<SkillsPage />} />
         <Route path="/okrs" element={<OkrsPage />} />
         <Route path="/ai-analytics" element={<AIAnalyticsPage />} />
-        <Route path="/reports" element={<div>Reports Page</div>} />
+        <Route path="/reports" element={<ReportsPage />} />
       </Route>
 
       {/* Fallback */}

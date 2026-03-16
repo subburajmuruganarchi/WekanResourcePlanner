@@ -16,6 +16,7 @@ import { skillRouter } from './modules/skills/skill.routes';
 import { okrRouter } from './modules/okrs/okr.routes';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes';
 import { authRouter } from './modules/auth/auth.routes';
+import reportsRouter from './modules/reports/reports.routes';
 
 // Import models to register schemas with Mongoose (required for populate)
 import './modules/skills/skill.model';
@@ -99,6 +100,7 @@ app.use('/api/skills', skillRouter);
 app.use('/api/okrs', okrRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/reports', reportsRouter);
 
 // Global Error Handler
 app.use(errorHandler);
