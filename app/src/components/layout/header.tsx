@@ -1,4 +1,4 @@
-import { Bell, Search, CheckCircle2, AlertCircle, Info, Check, Trash2 } from "lucide-react"
+import { Bell, Search, CheckCircle2, AlertCircle, Info, Check } from "lucide-react"
 import { useNotifications } from "@/lib/use-notifications"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"

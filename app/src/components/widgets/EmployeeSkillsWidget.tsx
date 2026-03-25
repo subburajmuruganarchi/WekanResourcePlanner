@@ -247,10 +247,10 @@ function SingleEmployeeView({ employee, skills, isDark, cardBg, border: borderCo
     );
 }
 
-function AllEmployeesView({ employees, isDark, cardBg, border: borderColor, textPrimary, textSecondary, textMuted }: {
+function AllEmployeesView({ employees, isDark, cardBg, border: borderColor, textPrimary, textSecondary }: {
     employees: (EmployeeData & { skills: Skill[]; totalSkills: number })[];
     isDark: boolean; cardBg: string; border: string;
-    textPrimary: string; textSecondary: string; textMuted: string;
+    textPrimary: string; textSecondary: string;
 }) {
     const totalSkills = employees.reduce((sum, e) => sum + e.totalSkills, 0);
     const avgSkills = employees.length > 0 ? (totalSkills / employees.length).toFixed(1) : '0';
@@ -395,7 +395,7 @@ export default function EmployeeSkillsWidget({ data, isDark = false }: { data: W
                 <AllEmployeesView
                     employees={(data as AllEmployeesResult).employees}
                     isDark={isDark} cardBg={cardBg} border={border}
-                    textPrimary={textPrimary} textSecondary={textSecondary} textMuted={textMuted}
+                    textPrimary={textPrimary} textSecondary={textSecondary}
                 />
             ) : (
                 (data as SingleResult).employee && (

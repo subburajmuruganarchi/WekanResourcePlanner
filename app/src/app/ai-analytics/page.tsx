@@ -7,7 +7,6 @@ import BotSelector, { BOTS } from '@/components/chat/BotSelector';
 import { Sparkles, ShieldAlert, X, Info } from 'lucide-react';
 
 import AvailabilityWidget from '@/components/widgets/AvailabilityWidget';
-import ProjectStackWidget from '@/components/widgets/ProjectStackWidget';
 import StaffingWidget from '@/components/widgets/StaffingWidget';
 import AllocationsWidget from '@/components/widgets/AllocationsWidget';
 import AppraisalWidget from '@/components/widgets/AppraisalWidget';
