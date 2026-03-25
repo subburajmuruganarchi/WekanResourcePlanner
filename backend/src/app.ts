@@ -26,6 +26,11 @@ import './modules/roles/role.model';
 
 const app = express();
 
+// Trust reverse proxy (Vercel/Render/Railway) for rate limiting & IP detection
+app.set('trust proxy', 1);
+// Disable tech stack leakage
+app.disable('x-powered-by');
+
 // Determine allowed origins dynamically
 const allowedOrigins = ['http://localhost:5173', 'http://localhost:3000'];
 if (env.FRONTEND_URL) {
@@ -95,17 +100,21 @@ app.use((req, res, next) => {
     next();
 });
 
-// Health Check
+// Liveness Probe (Is Node running?)
 app.get('/health', (req, res) => {
-    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-    const status = dbStatus === 'connected' ? 'ok' : 'error';
-    const code = dbStatus === 'connected' ? 200 : 503;
-
-    res.status(code).json({
-        status,
+    res.status(200).json({
+        status: 'ok',
         timestamp: new Date(),
-        env: env.NODE_ENV,
-        db: dbStatus
+        env: env.NODE_ENV
+    });
+});
+
+// Readiness Probe (Is DB connected and ready for traffic?)
+app.get('/ready', (req, res) => {
+    const isDbConnected = mongoose.connection.readyState === 1;
+    res.status(isDbConnected ? 200 : 503).json({
+        status: isDbConnected ? 'ready' : 'unavailable',
+        db: isDbConnected ? 'connected' : 'disconnected'
     });
 });
 
