@@ -8,10 +8,11 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 const envSchema = z.object({
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     PORT: z.string().default('3000').transform((val) => parseInt(val, 10)),
-    MONGO_URI: z.string().url(),
+    MONGO_URI: z.string().url().or(z.string().url().transform(val => process.env.DATABASE_URL || val)).default(process.env.DATABASE_URL || ''),
     LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
     JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
     GOOGLE_CLIENT_ID: z.string().optional(),
+    FRONTEND_URL: z.string().url().optional(),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

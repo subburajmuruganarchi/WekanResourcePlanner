@@ -26,12 +26,18 @@ import './modules/roles/role.model';
 
 const app = express();
 
+// Determine allowed origins dynamically
+const allowedOrigins = ['http://localhost:5173', 'http://localhost:3000'];
+if (env.FRONTEND_URL) {
+    allowedOrigins.push(env.FRONTEND_URL);
+}
+
 // Global Middleware
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            connectSrc: ["'self'", "http://localhost:5173", "http://localhost:3000"],
+            connectSrc: ["'self'", ...allowedOrigins],
         }
     }
 }));
@@ -40,8 +46,7 @@ app.use(cors({
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
 
-        const allowedOrigins = ['http://localhost:5173', 'http://localhost:3000'];
-        // Allow any localhost origin
+        // Allow any exact match or generic localhost
         if (allowedOrigins.indexOf(origin) !== -1 || /^http:\/\/localhost:\d+$/.test(origin)) {
             return callback(null, true);
         }
