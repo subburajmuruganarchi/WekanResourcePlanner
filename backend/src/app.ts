@@ -2,6 +2,8 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import mongoSanitize from 'express-mongo-sanitize';
 import { v4 as uuidv4 } from 'uuid';
 import { errorHandler } from './common/middleware/error.middleware';
 import { env } from './config/env';
@@ -52,6 +54,19 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Sanitize request data against NoSQL injection
+app.use(mongoSanitize());
+
+// Global rate limiter: 100 requests per 15 minutes per IP
+const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { status: 'error', message: 'Too many requests, please try again later.' }
+});
+app.use(globalLimiter);
+
 // Request Correlation ID
 app.use((req, res, next) => {
     const requestId = (req.headers['x-request-id'] as string) || uuidv4();
@@ -99,7 +114,15 @@ app.use('/api/roles', roleRouter);
 app.use('/api/skills', skillRouter);
 app.use('/api/okrs', okrRouter);
 app.use('/api/dashboard', dashboardRouter);
-app.use('/api/auth', authRouter);
+// Auth routes with stricter rate limiting (10 attempts per 15 min)
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { status: 'error', message: 'Too many login attempts, please try again later.' }
+});
+app.use('/api/auth', authLimiter, authRouter);
 app.use('/api/reports', reportsRouter);
 
 // Global Error Handler

@@ -2,6 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import { Skill } from './skill.model';
 import { AppError } from '../../common/errors/app-error';
 
+// Escape special regex characters to prevent ReDoS / injection
+function escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export class SkillController {
     async list(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
@@ -31,7 +36,7 @@ export class SkillController {
 
             // Duplicate validation (case-insensitive)
             const existing = await Skill.findOne({
-                name: { $regex: new RegExp(`^${name}$`, 'i') }
+                name: { $regex: new RegExp(`^${escapeRegex(name)}$`, 'i') }
             });
 
             if (existing) {
@@ -70,7 +75,7 @@ export class SkillController {
             if (name) {
                 const existing = await Skill.findOne({
                     _id: { $ne: id },
-                    name: { $regex: new RegExp(`^${name}$`, 'i') }
+                    name: { $regex: new RegExp(`^${escapeRegex(name)}$`, 'i') }
                 });
 
                 if (existing) {

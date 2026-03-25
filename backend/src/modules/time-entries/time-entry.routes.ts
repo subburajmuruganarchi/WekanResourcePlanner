@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { TimeCode } from './time-code.model';
 import { timeEntryController } from './time-entry.controller';
+import { requireRole } from '../../common/middleware/role.middleware';
 
 const router = Router();
+
+// Apply check for all time entry routes
+router.use(requireRole());
 
 // GET /api/time-entries/codes - Get all time codes
 router.get('/codes', async (req, res, next) => {
@@ -39,15 +43,15 @@ router.delete('/:id', (req, res, next) => timeEntryController.delete(req, res, n
 router.post('/submit', (req, res, next) => timeEntryController.submit(req, res, next));
 
 // POST /api/time-entries/approve - PM approves entries (SUBMITTED → PM_APPROVED)
-router.post('/approve', (req, res, next) => timeEntryController.approve(req, res, next));
+router.post('/approve', requireRole('Admin', 'Project Manager'), (req, res, next) => timeEntryController.approve(req, res, next));
 
 // POST /api/time-entries/reject - PM rejects entries (SUBMITTED → PM_REJECTED)
-router.post('/reject', (req, res, next) => timeEntryController.reject(req, res, next));
+router.post('/reject', requireRole('Admin', 'Project Manager'), (req, res, next) => timeEntryController.reject(req, res, next));
 
 // GET /api/time-entries/pending-approval - Get SUBMITTED entries for PM's projects
-router.get('/pending-approval', (req, res, next) => timeEntryController.pendingApproval(req, res, next));
+router.get('/pending-approval', requireRole('Admin', 'Project Manager'), (req, res, next) => timeEntryController.pendingApproval(req, res, next));
 
 // GET /api/time-entries/by-project/:projectId - Get entries for a specific project with filters
-router.get('/by-project/:projectId', (req, res, next) => timeEntryController.byProject(req, res, next));
+router.get('/by-project/:projectId', requireRole('Admin', 'Project Manager'), (req, res, next) => timeEntryController.byProject(req, res, next));
 
 export { router as timeEntryRouter };

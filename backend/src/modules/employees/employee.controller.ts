@@ -1,7 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { employeeService } from './employee.service';
-import { CreateEmployeeSchema } from './employee.schema';
+import { CreateEmployeeSchema, UpdateEmployeeSchema } from './employee.schema';
+import { UpdateEmployeeRoleSchema } from './update-role.schema';
 import { AppError } from '../../common/errors/app-error';
+import { Employee } from './employee.model';
+import { Role } from '../roles/role.model';
+import { Types } from 'mongoose';
 
 export class EmployeeController {
     async list(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -59,11 +63,98 @@ export class EmployeeController {
     async update(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const { id } = req.params;
-            const employee = await employeeService.update(id, req.body);
+            // Validate request body against update schema to prevent arbitrary field injection
+            const validatedData = UpdateEmployeeSchema.parse(req.body);
+            const employee = await employeeService.update(id, validatedData);
 
             res.json({
                 status: 'success',
                 data: employee,
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async updateRole(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { id } = req.params;
+            const { role_id, is_active } = UpdateEmployeeRoleSchema.parse(req.body);
+
+            if (!Types.ObjectId.isValid(id)) {
+                throw new AppError('Invalid employee ID', 400);
+            }
+
+            // Validate role exists
+            if (!Types.ObjectId.isValid(role_id)) {
+                throw new AppError('Invalid role ID', 400);
+            }
+            const roleExists = await Role.findById(role_id);
+            if (!roleExists) {
+                throw new AppError('Role not found', 404);
+            }
+
+            const updateData: any = { role_id };
+            if (typeof is_active === 'boolean') {
+                updateData.is_active = is_active;
+                updateData.status = is_active ? 'Active' : 'Inactive';
+            }
+
+            const employee = await Employee.findByIdAndUpdate(
+                id,
+                updateData,
+                { new: true }
+            ).populate('role_id', 'role_name');
+
+            if (!employee) {
+                throw new AppError('Employee not found', 404);
+            }
+
+            res.json({
+                status: 'success',
+                data: {
+                    id: employee._id,
+                    email: employee.email,
+                    role: (employee.role_id as any)?.role_name,
+                    is_active: employee.is_active,
+                }
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+    async updateAccess(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { id } = req.params;
+            const { is_active } = req.body;
+
+            if (typeof is_active !== 'boolean') {
+                throw new AppError('is_active must be a boolean', 400);
+            }
+
+            if (!Types.ObjectId.isValid(id)) {
+                throw new AppError('Invalid employee ID', 400);
+            }
+
+            const employee = await Employee.findByIdAndUpdate(
+                id,
+                { is_active, status: is_active ? 'Active' : 'Inactive' },
+                { new: true }
+            ).populate('role_id', 'role_name');
+
+            if (!employee) {
+                throw new AppError('Employee not found', 404);
+            }
+
+            res.json({
+                status: 'success',
+                data: {
+                    id: employee._id,
+                    email: employee.email,
+                    role: (employee.role_id as any)?.role_name,
+                    is_active: employee.is_active,
+                    status: employee.status,
+                }
             });
         } catch (error) {
             next(error);

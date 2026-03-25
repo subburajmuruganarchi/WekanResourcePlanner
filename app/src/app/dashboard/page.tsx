@@ -3,6 +3,7 @@ import { Users, FolderKanban, Clock, TrendingUp } from "lucide-react"
 import { PageContainer } from "@/components/layout/page-container"
 import { StatCard } from "./components/stat-card"
 import { Button } from "@/components/ui/button"
+import { api } from "@/lib/api"
 
 export default function Dashboard() {
     const [stats, setStats] = useState<any[]>([]);
@@ -11,8 +12,8 @@ export default function Dashboard() {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const response = await fetch('http://localhost:3000/api/dashboard/stats');
-                const result = await response.json();
+                const response = await api.get('/dashboard/stats');
+                const result = response.data;
 
                 if (result.status === 'success') {
                     const data = result.data;

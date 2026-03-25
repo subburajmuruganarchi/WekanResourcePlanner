@@ -1,7 +1,11 @@
 import express from 'express';
 import { notificationController } from './notification.controller';
+import { requireRole } from '../../common/middleware/role.middleware';
 
 const router = express.Router();
+
+// All notification routes require authentication
+router.use(requireRole());
 
 // GET /api/notifications/:userId - Get recent notifications
 router.get('/:userId', (req, res, next) => notificationController.getNotifications(req, res, next));

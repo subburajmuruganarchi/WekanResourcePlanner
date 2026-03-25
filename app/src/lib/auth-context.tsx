@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { api } from "./api"
 
-export type Role = "Admin" | "ProjectManager" | "Employee" | "Leadership" | "User" | "Frontend Developer" | "Backend Developer" | "Full Stack Engineer" | string
+export type Role = "Admin" | "ProjectManager" | "Employee" | "Project Manager" | "User" | "Frontend Developer" | "Backend Developer" | "Full Stack Engineer" | string
 
 export interface User {
     id: string
@@ -14,6 +14,7 @@ export interface User {
 interface AuthContextType {
     user: User | null
     login: (email: string, passwordString: string) => Promise<void>
+    googleLogin: (idToken: string) => Promise<void>
     logout: () => void
     isLoading: boolean
 }
@@ -77,12 +78,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }
 
+    const googleLogin = async (idToken: string) => {
+        setIsLoading(true)
+        try {
+            const response = await api.post('/auth/google-login', { idToken })
+            
+            if (response.data?.status === 'success') {
+                const { token, user: userData } = response.data.data
+                localStorage.setItem(TOKEN_KEY, token)
+                
+                const mappedUser: User = {
+                    id: userData.id,
+                    name: `${userData.firstName} ${userData.lastName}`.trim(),
+                    email: userData.email,
+                    role: userData.role as Role,
+                }
+                
+                setUser(mappedUser)
+            } else {
+                throw new Error(response.data?.message || 'Google login failed')
+            }
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     const logout = () => {
         setUser(null)
     }
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+        <AuthContext.Provider value={{ user, login, googleLogin, logout, isLoading }}>
             {children}
         </AuthContext.Provider>
     )

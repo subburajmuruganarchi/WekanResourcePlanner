@@ -7,13 +7,30 @@ interface ApiResponse<T> {
 }
 
 async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    const token = localStorage.getItem('r360_auth_token');
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(options?.headers as Record<string, string> || {}),
+    };
+
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options?.headers,
-        },
+        headers,
     });
+
+    // Handle 401 Unauthorized globally for fetch API as well
+    if (response.status === 401) {
+        localStorage.removeItem('r360_auth_token');
+        localStorage.removeItem('r360_auth_user');
+        if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+        }
+        throw new Error('Unauthorized');
+    }
 
     const json: ApiResponse<T> & T = await response.json();
 

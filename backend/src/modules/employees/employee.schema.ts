@@ -22,4 +22,8 @@ export const CreateEmployeeSchema = z.object({
     exitDate: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
 });
 
+// Update schema: all fields optional, prevents arbitrary field injection
+export const UpdateEmployeeSchema = CreateEmployeeSchema.partial();
+
 export type CreateEmployeeDto = z.infer<typeof CreateEmployeeSchema>;
+export type UpdateEmployeeDto = z.infer<typeof UpdateEmployeeSchema>;

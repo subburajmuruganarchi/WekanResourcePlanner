@@ -10,6 +10,8 @@ import { AppError } from '../../common/errors/app-error';
 
 export interface ProjectListParams {
     status?: string;
+    managerId?: string;
+    ownerId?: string;
 }
 
 export interface ProjectResponse {
@@ -98,6 +100,16 @@ export class ProjectService {
 
         if (params.status) {
             query.status = params.status;
+        }
+
+        if (params.managerId || params.ownerId) {
+            const orConditions: any[] = [];
+            if (params.managerId) orConditions.push({ project_manager_id: params.managerId });
+            if (params.ownerId) orConditions.push({ project_owner_id: params.ownerId });
+            
+            if (orConditions.length > 0) {
+                query.$or = orConditions;
+            }
         }
 
         const projects = await Project.find(query)

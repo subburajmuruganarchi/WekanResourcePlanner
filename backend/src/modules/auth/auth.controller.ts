@@ -25,4 +25,26 @@ export class AuthController {
             next(error);
         }
     }
+
+    async googleLogin(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { idToken } = req.body;
+
+            if (!idToken) {
+                return res.status(400).json({
+                    status: 'error',
+                    message: 'ID Token is required for Google login'
+                });
+            }
+
+            const result = await authService.googleLogin(idToken);
+
+            res.status(200).json({
+                status: 'success',
+                data: result
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
 }

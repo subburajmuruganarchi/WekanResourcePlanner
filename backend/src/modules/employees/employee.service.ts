@@ -155,6 +155,12 @@ export class EmployeeService {
             }
         }
 
+        // Hash password before saving
+        if (data.password) {
+            const bcrypt = await import('bcryptjs');
+            data.password = await bcrypt.hash(data.password, 12);
+        }
+
         const employee = new Employee(data);
         await employee.save();
 

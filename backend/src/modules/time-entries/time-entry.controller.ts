@@ -45,8 +45,22 @@ export class TimeEntryController {
                 return;
             }
 
+            const user = (req as any).user;
+            const targetEmployeeId = employeeId as string;
+
+            // RBAC: Employees can ONLY see their own entries
+            if (user && !['Admin', 'Project Manager'].includes(user.role)) {
+                if (targetEmployeeId !== user.id) {
+                    res.status(403).json({
+                        status: 'error',
+                        message: 'Access denied. You can only view your own time entries.'
+                    });
+                    return;
+                }
+            }
+
             const entries = await timeEntryService.getByEmployee(
-                employeeId as string,
+                targetEmployeeId,
                 week as string
             );
 

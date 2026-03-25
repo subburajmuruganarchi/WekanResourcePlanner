@@ -6,7 +6,7 @@ export class OkrController {
 
     /**
      * GET /api/okrs?period=Q1-2026
-     * List all OKRs (Admin/Leadership: all, PM: team, Employee: own)
+     * List all OKRs (Admin: all, PM: team, Employee: own)
      */
     async list(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
@@ -39,6 +39,19 @@ export class OkrController {
         try {
             const { employeeId } = req.params;
             const { period } = req.query;
+            const user = (req as any).user;
+
+            // RBAC: Employees can ONLY see their own OKRs
+            if (user && !['Admin', 'Project Manager'].includes(user.role)) {
+                if (employeeId !== user.id) {
+                    res.status(403).json({
+                        status: 'error',
+                        message: 'Access denied. You can only view your own OKRs.'
+                    });
+                    return;
+                }
+            }
+
             const result = await okrService.findByEmployee(employeeId, period as string | undefined);
             res.json({ status: 'success', data: result });
         } catch (error) {

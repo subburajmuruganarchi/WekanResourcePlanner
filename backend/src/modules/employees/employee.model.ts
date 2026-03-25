@@ -16,6 +16,7 @@ export interface IEmployee extends Document {
     exit_date?: Date;
     is_active?: boolean;
     profile_image?: string;  // DB uses 'profile_image' not 'avatar_url'
+    google_id?: string;      // For linking Google accounts
     created_at?: Date;
     updated_at?: Date;
 }
@@ -34,7 +35,8 @@ const EmployeeSchema = new Schema<IEmployee>({
     join_date: { type: Date },
     exit_date: { type: Date },
     is_active: { type: Boolean, default: true },
-    profile_image: { type: String, trim: true }
+    profile_image: { type: String, trim: true },
+    google_id: { type: String, unique: true, sparse: true, index: true }
 }, {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
     collection: 'employees'

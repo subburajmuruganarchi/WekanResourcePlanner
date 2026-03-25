@@ -24,9 +24,16 @@ export class ProjectController {
 
     async list(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const params = {
+            const user = (req as any).user;
+            const params: any = {
                 status: req.query.status as string | undefined,
             };
+
+            // RBAC: If PM, only show projects they own/manage
+            if (user && user.role === 'Project Manager') {
+                params.managerId = user.id;
+                params.ownerId = user.id;
+            }
 
             const projects = await projectService.findAll(params);
 

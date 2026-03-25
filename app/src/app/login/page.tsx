@@ -3,9 +3,10 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/lib/auth-context"
+import { GoogleLogin } from "@react-oauth/google"
 
 export function LoginPage() {
-    const { login, isLoading } = useAuth()
+    const { login, googleLogin, isLoading } = useAuth()
     const navigate = useNavigate()
     
     const [email, setEmail] = useState("")
@@ -21,6 +22,16 @@ export function LoginPage() {
             navigate("/dashboard", { replace: true })
         } catch (err: any) {
             setError(err.message || "Failed to log in. Please check your credentials.")
+        }
+    }
+
+    const handleGoogleSuccess = async (credentialResponse: any) => {
+        setError(null)
+        try {
+            await googleLogin(credentialResponse.credential)
+            navigate("/dashboard", { replace: true })
+        } catch (err: any) {
+            setError(err.message || "Google login failed.")
         }
     }
 
@@ -93,6 +104,22 @@ export function LoginPage() {
                             {isLoading ? 'Signing in...' : 'Sign In'}
                         </button>
                     </form>
+
+                    <div className="mt-6 flex items-center gap-4">
+                        <div className="h-px bg-white/10 flex-1" />
+                        <span className="text-gray-500 text-xs font-medium uppercase tracking-wider">Or continue with</span>
+                        <div className="h-px bg-white/10 flex-1" />
+                    </div>
+
+                    <div className="mt-6 flex justify-center">
+                        <GoogleLogin
+                            onSuccess={handleGoogleSuccess}
+                            onError={() => setError("Google Login Failed")}
+                            theme="filled_black"
+                            shape="pill"
+                            width="280px"
+                        />
+                    </div>
                 </div>
 
                 {/* Footer */}
@@ -100,7 +127,7 @@ export function LoginPage() {
                     Need help logging in? Contact your IT administrator.
                 </p>
                 <p className="text-center text-gray-600 text-xs mt-2">
-                    Default User: aarav.sharma@company.com / password123
+                    Default User: aarav.sharma@wekancode.com / password123
                 </p>
             </div>
         </div>

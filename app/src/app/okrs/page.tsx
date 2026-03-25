@@ -65,7 +65,7 @@ export default function OkrsPage() {
     const canCreate = user?.role === "Admin" || user?.role === "ProjectManager"
     const canEdit = canCreate
     const canDelete = user?.role === "Admin"
-    const canUpdateProgress = user?.role !== "Leadership"
+    const canUpdateProgress = true // All roles can update their own OKR progress
     const isEmployeeView = user?.role === "Employee"
 
     const { employees } = useEmployees()
@@ -134,7 +134,7 @@ export default function OkrsPage() {
                 description="Objectives & Key Results"
                 action={
                     <div className="flex items-center gap-3">
-                        {/* Employee selector (Admin/PM/Leadership) */}
+                        {/* Employee selector (Admin/PM) */}
                         {!isEmployeeView && (
                             <select
                                 className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"

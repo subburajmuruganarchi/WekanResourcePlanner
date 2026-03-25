@@ -12,8 +12,12 @@ import OkrsPage from "@/app/okrs/page"
 import { LoginPage } from "@/app/login/page"
 import AIAnalyticsPage from "@/app/ai-analytics/page"
 import ReportsPage from "@/app/reports/page"
+import UserControlPage from "@/app/user-control/page"
 
 import { AuthProvider, useAuth } from "@/lib/auth-context"
+import { GoogleOAuthProvider } from "@react-oauth/google"
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID_HERE"
 
 function ErrorPage({ error }: { error: any }) {
   return (
@@ -96,6 +100,7 @@ function AppRoutes() {
         <Route path="/okrs" element={<OkrsPage />} />
         <Route path="/ai-analytics" element={<AIAnalyticsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/user-control" element={<UserControlPage />} />
       </Route>
 
       {/* Fallback */}
@@ -106,13 +111,15 @@ function AppRoutes() {
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <ErrorBoundary>
-          <AppRoutes />
-        </ErrorBoundary>
-      </BrowserRouter>
-    </AuthProvider>
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <AuthProvider>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <AppRoutes />
+          </ErrorBoundary>
+        </BrowserRouter>
+      </AuthProvider>
+    </GoogleOAuthProvider>
   )
 }
 

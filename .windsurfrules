@@ -1,0 +1,25 @@
+# R360 Codebase Memory System Rules
+## CRITICAL INSTRUCTIONS FOR ALL AI AGENTS (Cursor, Copilot, Antigravity, Windsurf)
+
+**DO NOT READ RAW FILES TO SEARCH FOR CODE OR DEPENDENCIES.**
+You must use our specialized `r360-memory` system to conserve token limits and guarantee accuracy.
+
+Whenever the human asks you to find a function, trace a call path, find dependencies, or locate where something is defined in the R360 project, you MUST execute the following terminal command instead of using your built-in file searching tools:
+
+```bash
+npx ts-node c:\r360\codebase-memory\src\cli.ts query "<your search intent here>"
+```
+
+### Examples
+- The human asks: "Where is the appraisal workflow triggered?"
+  **Your Action**: Run `npx ts-node c:\r360\codebase-memory\src\cli.ts query "Where is the appraisal workflow triggered?"`
+- The human asks: "What functions depend on verifyToken?"
+  **Your Action**: Run `npx ts-node c:\r360\codebase-memory\src\cli.ts query "What functions depend on verifyToken?"`
+
+### Why?
+This CLI deterministically queries a local SQLite AST graph built by Tree-Sitter and returns EXACTLY the 100-200 lines of JSON context you need, bypassing thousands of lines of noisy file reads.
+
+### Next Steps
+1. Execute the command.
+2. Read the standard output (STDOUT).
+3. Use the JSON data provided by the engine to formulate your answer and proceed with your modifications.

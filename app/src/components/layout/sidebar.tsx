@@ -11,6 +11,7 @@ import {
     LogOut,
     Sparkles,
     ClipboardCheck,
+    Shield,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -24,6 +25,7 @@ const navItems = [
     { label: "AI Analytics", icon: Sparkles, path: "/ai-analytics" },
     { label: "Reports", icon: FileBarChart, path: "/reports" },
     { label: "Skill Master", icon: List, path: "/skills" },
+    { label: "User Control", icon: Shield, path: "/user-control" },
 ]
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
@@ -34,19 +36,24 @@ export function Sidebar({ className, ...props }: SidebarProps) {
 
     // Define role permissions for nav items
     const allowedRoles: Record<string, string[]> = {
-        "/dashboard": ["*"],
-        "/projects": ["*"],
-        "/allocation": ["Admin", "Project Manager", "Leadership"],
+        "/dashboard": ["Admin", "Project Manager"],
+        "/projects": ["Admin", "Project Manager"],
+        "/allocation": ["Admin"],
         "/time-entry": ["*"],
-        "/pm-approvals": ["*"],
+        "/pm-approvals": ["Admin", "Project Manager"],
         "/okrs": ["*"],
-        "/reports": ["*"],
+        "/reports": ["Admin", "Project Manager"],
         "/ai-analytics": ["Admin", "Project Manager"],
-        "/skills": ["Admin", "Project Manager"]
+        "/skills": ["Admin"],
+        "/user-control": ["Admin"],
     }
 
     const filteredItems = navItems.filter(item => {
         if (!user) return false
+        
+        // Admins see everything
+        if (user.role === "Admin") return true
+
         const roles = allowedRoles[item.path]
         if (!roles) return true
         if (roles.includes("*")) return true
