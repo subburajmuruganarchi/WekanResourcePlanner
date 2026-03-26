@@ -34,7 +34,8 @@ app.disable('x-powered-by');
 // Determine allowed origins dynamically
 const allowedOrigins = ['http://localhost:5173', 'http://localhost:3000'];
 if (env.FRONTEND_URL) {
-    allowedOrigins.push(env.FRONTEND_URL);
+    const cleanUrl = env.FRONTEND_URL.replace(/\/$/, '');
+    allowedOrigins.push(cleanUrl);
 }
 
 // Global Middleware
