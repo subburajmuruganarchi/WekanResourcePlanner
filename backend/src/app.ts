@@ -32,7 +32,11 @@ app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
 // Determine allowed origins dynamically
-const allowedOrigins = ['http://localhost:5173', 'http://localhost:3000'];
+const allowedOrigins = [
+    'http://localhost:5173', 
+    'http://localhost:3000',
+    'https://r360wekan.netlify.app'
+];
 if (env.FRONTEND_URL) {
     const cleanUrl = env.FRONTEND_URL.replace(/\/$/, '');
     allowedOrigins.push(cleanUrl);
