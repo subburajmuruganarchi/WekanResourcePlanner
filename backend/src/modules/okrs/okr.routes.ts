@@ -14,13 +14,13 @@ router.get('/periods', requireRole(), okrController.listPeriods);
 router.get('/employee/:employeeId', requireRole(), okrController.getByEmployee);
 
 // POST /api/okrs — create OKR (Admin/PM only)
-router.post('/', requireRole('Admin', 'ProjectManager'), okrController.create);
+router.post('/', requireRole('Admin', 'Project Manager'), okrController.create);
 
 // PUT /api/okrs/:id — update OKR (Admin/PM only)
-router.put('/:id', requireRole('Admin', 'ProjectManager'), okrController.update);
+router.put('/:id', requireRole('Admin', 'Project Manager'), okrController.update);
 
 // PATCH /api/okrs/:id/progress — update key result progress (Admin/PM/Employee)
-router.patch('/:id/progress', requireRole('Admin', 'ProjectManager', 'Employee'), okrController.updateProgress);
+router.patch('/:id/progress', requireRole('Admin', 'Project Manager', 'Employee'), okrController.updateProgress);
 
 // DELETE /api/okrs/:id — delete OKR (Admin only)
 router.delete('/:id', requireRole('Admin'), okrController.delete);

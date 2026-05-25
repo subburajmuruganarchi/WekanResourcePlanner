@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { projectService } from './project.service';
 import { CreateProjectSchema } from './project.schema';
+import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
 
 export class ProjectController {
     /**
@@ -24,15 +25,18 @@ export class ProjectController {
 
     async list(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const user = (req as any).user;
+            const user = req.user;
             const params: any = {
                 status: req.query.status as string | undefined,
             };
 
             // RBAC: If PM, only show projects they own/manage
             if (user && user.role === 'Project Manager') {
-                params.managerId = user.id;
-                params.ownerId = user.id;
+                const employeeId = getAuthEmployeeId(user);
+                if (employeeId) {
+                    params.managerId = employeeId;
+                    params.ownerId = employeeId;
+                }
             }
 
             const projects = await projectService.findAll(params);

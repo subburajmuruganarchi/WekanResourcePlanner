@@ -2,12 +2,13 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import mongoSanitize from 'express-mongo-sanitize';
-import { v4 as uuidv4 } from 'uuid';
 import { errorHandler } from './common/middleware/error.middleware';
 import { env } from './config/env';
-import { logger } from './common/logger';
+import { structuredLogger } from './common/logger';
+import { requestIdMiddleware } from './common/middleware/request-id';
+import { logContextFromRequest } from './common/logger/request-context';
+import { createRateLimiter, skipHealthProbes } from './common/middleware/rate-limit';
 import { employeeRouter } from './modules/employees/employee.routes';
 import { projectRouter } from './modules/projects/project.routes';
 import { allocationRouter } from './modules/allocations/allocation.routes';
@@ -19,111 +20,113 @@ import { okrRouter } from './modules/okrs/okr.routes';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes';
 import { authRouter } from './modules/auth/auth.routes';
 import reportsRouter from './modules/reports/reports.routes';
+import { aiRouter } from './modules/ai/ai.routes';
+import { searchRouter } from './modules/search/search.routes';
+import { systemRouter } from './modules/system/system.routes';
 
-// Import models to register schemas with Mongoose (required for populate)
 import './modules/skills/skill.model';
 import './modules/roles/role.model';
 
 const app = express();
 
-// Trust reverse proxy (Vercel/Render/Railway) for rate limiting & IP detection
 app.set('trust proxy', 1);
-// Disable tech stack leakage
 app.disable('x-powered-by');
 
-// Determine allowed origins dynamically
-const allowedOrigins = [
-    'http://localhost:5173', 
-    'http://localhost:3000',
-    'https://r360wekan.netlify.app'
-];
-if (env.FRONTEND_URL) {
-    const cleanUrl = env.FRONTEND_URL.replace(/\/$/, '');
-    allowedOrigins.push(cleanUrl);
-}
+const frontendOrigin = env.FRONTEND_URL.replace(/\/$/, '');
 
-// Global Middleware
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            connectSrc: ["'self'", ...allowedOrigins],
-        }
-    }
-}));
-app.use(cors({
-    origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
+const allowedOrigins =
+    env.NODE_ENV === 'production'
+        ? [frontendOrigin]
+        : [
+              'http://localhost:5173',
+              'http://localhost:3000',
+              'http://127.0.0.1:5173',
+              frontendOrigin,
+          ];
 
-        // Allow any exact match or generic localhost
-        if (allowedOrigins.indexOf(origin) !== -1 || /^http:\/\/localhost:\d+$/.test(origin)) {
-            return callback(null, true);
-        }
+app.use(
+    helmet({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                connectSrc: ["'self'", ...allowedOrigins],
+            },
+        },
+        frameguard: { action: 'deny' },
+        noSniff: true,
+    })
+);
 
-        callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'x-user-role']
-}));
+app.use(
+    cors({
+        origin: (origin, callback) => {
+            if (!origin) {
+                return callback(null, true);
+            }
+            if (allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+            if (env.NODE_ENV !== 'production' && /^http:\/\/localhost:\d+$/.test(origin)) {
+                return callback(null, true);
+            }
+            callback(new Error('Not allowed by CORS'));
+        },
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'x-user-role'],
+    })
+);
+
 app.use(express.json());
-
-// Sanitize request data against NoSQL injection
 app.use(mongoSanitize());
 
-// Global rate limiter: 100 requests per 15 minutes per IP
-const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { status: 'error', message: 'Too many requests, please try again later.' }
-});
-app.use(globalLimiter);
+app.use(requestIdMiddleware);
 
-// Request Correlation ID
-app.use((req, res, next) => {
-    const requestId = (req.headers['x-request-id'] as string) || uuidv4();
-    req.headers['x-request-id'] = requestId;
-    // make it available in response
-    res.setHeader('x-request-id', requestId);
-    next();
-});
-
-// Request Logger (Minimal)
 app.use((req, res, next) => {
     const start = Date.now();
     res.on('finish', () => {
-        const duration = Date.now() - start;
-        logger.info(`${req.method} ${req.originalUrl}`, {
-            requestId: req.headers['x-request-id'],
+        structuredLogger.info(`${req.method} ${req.originalUrl}`, {
+            ...logContextFromRequest(req, 'http'),
             statusCode: res.statusCode,
-            duration: `${duration}ms`
+            durationMs: Date.now() - start,
         });
     });
     next();
 });
 
-// Liveness Probe (Is Node running?)
 app.get('/health', (req, res) => {
     res.status(200).json({
         status: 'ok',
         timestamp: new Date(),
-        env: env.NODE_ENV
+        env: env.NODE_ENV,
     });
 });
 
-// Readiness Probe (Is DB connected and ready for traffic?)
 app.get('/ready', (req, res) => {
     const isDbConnected = mongoose.connection.readyState === 1;
     res.status(isDbConnected ? 200 : 503).json({
         status: isDbConnected ? 'ready' : 'unavailable',
-        db: isDbConnected ? 'connected' : 'disconnected'
+        db: isDbConnected ? 'connected' : 'disconnected',
     });
 });
 
-// Register Routes
+const globalLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    skip: skipHealthProbes,
+});
+app.use(globalLimiter);
+
+const authLimiter = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 10,
+});
+
+const reportsLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 15,
+});
+
 app.use('/api/employees', employeeRouter);
 app.use('/api/projects', projectRouter);
 app.use('/api/allocations', allocationRouter);
@@ -133,18 +136,12 @@ app.use('/api/roles', roleRouter);
 app.use('/api/skills', skillRouter);
 app.use('/api/okrs', okrRouter);
 app.use('/api/dashboard', dashboardRouter);
-// Auth routes with stricter rate limiting (10 attempts per 15 min)
-const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 10,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { status: 'error', message: 'Too many login attempts, please try again later.' }
-});
 app.use('/api/auth', authLimiter, authRouter);
-app.use('/api/reports', reportsRouter);
+app.use('/api/reports', reportsLimiter, reportsRouter);
+app.use('/api/ai', aiRouter);
+app.use('/api/search', searchRouter);
+app.use('/api/system', systemRouter);
 
-// Global Error Handler
 app.use(errorHandler);
 
 export { app };

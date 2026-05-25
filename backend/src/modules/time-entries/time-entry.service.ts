@@ -4,6 +4,7 @@ import { Project } from '../projects/project.model';
 import { Employee } from '../employees/employee.model';
 import { Role } from '../roles/role.model';
 import { notificationService } from '../notifications/notification.service';
+import { structuredLogger } from '../../common/logger';
 import { NotificationType } from '../notifications/notification.model';
 import { Types, startSession } from 'mongoose';
 import { TimeEntryStatus } from '../../common/types/enums';
@@ -530,7 +531,11 @@ export class TimeEntryService {
                 }
             }
         } catch (err) {
-            console.error('Failed to send submission notifications:', err);
+            structuredLogger.error('Failed to send submission notifications', {
+                module: 'time-entries',
+                employeeId,
+                error: err instanceof Error ? err.message : String(err),
+            });
         }
 
         return {
@@ -635,7 +640,11 @@ export class TimeEntryService {
                 );
             }
         } catch (err) {
-            console.error('Failed to send approval notifications:', err);
+            structuredLogger.error('Failed to send approval notifications', {
+                module: 'time-entries',
+                pmUserId,
+                error: err instanceof Error ? err.message : String(err),
+            });
         }
 
         return { approved: entries.length };
@@ -740,7 +749,11 @@ export class TimeEntryService {
                 );
             }
         } catch (err) {
-            console.error('Failed to send rejection notifications:', err);
+            structuredLogger.error('Failed to send rejection notifications', {
+                module: 'time-entries',
+                pmUserId,
+                error: err instanceof Error ? err.message : String(err),
+            });
         }
 
         return { rejected: entries.length };
@@ -776,8 +789,8 @@ export class TimeEntryService {
                 employeeName: emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown',
                 employeeEmail: emp?.email || '',
                 projectId: e.projectId?.toString(),
-                projectName: proj?.name || 'Unknown',
-                projectCode: proj?.code || '',
+                projectName: proj?.project_name || 'Unknown',
+                projectCode: proj?.project_code || '',
                 timeCodeId: tc?._id?.toString() || e.timeCodeId?.toString(),
                 timeCode: tc?.code || '',
                 timeCodeDescription: tc?.description || '',

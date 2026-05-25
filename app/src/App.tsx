@@ -10,11 +10,14 @@ import { PmApprovalsPage } from "@/app/pm-approvals/page"
 import SkillsPage from "@/app/skills/page"
 import OkrsPage from "@/app/okrs/page"
 import { LoginPage } from "@/app/login/page"
-import AIAnalyticsPage from "@/app/ai-analytics/page"
+import InsightsCenterPage from "@/app/insights/page"
 import ReportsPage from "@/app/reports/page"
 import UserControlPage from "@/app/user-control/page"
+import SystemHealthPage from "@/app/system-health/page"
 
 import { AuthProvider, useAuth } from "@/lib/auth-context"
+import { getHomeRoute } from "@/lib/home-route"
+import { RoleRoute } from "@/components/shared/role-route"
 import { GoogleOAuthProvider } from "@react-oauth/google"
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID_HERE"
@@ -64,13 +67,18 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-/** Redirects to /dashboard if user is already logged in */
+/** Redirects to role home if user is already logged in */
 function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   if (user) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={getHomeRoute(user.role)} replace />
   }
   return <>{children}</>
+}
+
+function HomeRedirect() {
+  const { user } = useAuth()
+  return <Navigate to={getHomeRoute(user?.role)} replace />
 }
 
 function AppRoutes() {
@@ -86,10 +94,12 @@ function AppRoutes() {
       {/* Protected Routes (Wrapped in AppShell) */}
       <Route element={
         <ProtectedRoute>
-          <AppShell />
+          <RoleRoute>
+            <AppShell />
+          </RoleRoute>
         </ProtectedRoute>
       }>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<HomeRedirect />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/:id" element={<ProjectDetail />} />
@@ -98,13 +108,15 @@ function AppRoutes() {
         <Route path="/pm-approvals" element={<PmApprovalsPage />} />
         <Route path="/skills" element={<SkillsPage />} />
         <Route path="/okrs" element={<OkrsPage />} />
-        <Route path="/ai-analytics" element={<AIAnalyticsPage />} />
+        <Route path="/insights" element={<InsightsCenterPage />} />
+        <Route path="/ai-analytics" element={<Navigate to="/insights" replace />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/user-control" element={<UserControlPage />} />
+        <Route path="/system-health" element={<SystemHealthPage />} />
       </Route>
 
       {/* Fallback */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<HomeRedirect />} />
     </Routes>
   )
 }

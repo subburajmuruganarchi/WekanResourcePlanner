@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import { Notification, NotificationType, INotification } from './notification.model';
+import { structuredLogger } from '../../common/logger';
 
 export class NotificationService {
     /**
@@ -13,7 +14,10 @@ export class NotificationService {
         relatedData?: Record<string, any>
     ): Promise<void> {
         if (!Types.ObjectId.isValid(userId)) {
-            console.error(`Invalid userId ${userId} for notification`);
+            structuredLogger.warn('Invalid userId for notification', {
+                module: 'notifications',
+                userId,
+            });
             return;
         }
 
@@ -26,7 +30,11 @@ export class NotificationService {
                 relatedData
             });
         } catch (error) {
-            console.error('Failed to create notification:', error);
+            structuredLogger.error('Failed to create notification', {
+                module: 'notifications',
+                userId,
+                error: error instanceof Error ? error.message : String(error),
+            });
         }
     }
 

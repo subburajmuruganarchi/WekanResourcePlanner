@@ -5,7 +5,7 @@ The R360 Platform is a resource management and allocation system designed for mo
 ## Architecture
 
 This is a Monorepo containing:
-- **`app/`**: Next.js 14 Frontend (React, Tailwind, Shadcn UI)
+- **`app/`**: Vite + React 19 Frontend (React Router, Tailwind, Shadcn UI)
 - **`backend/`**: Node.js Backend (Express, Mongoose, TypeScript)
 
 ## Prerequisites
@@ -33,6 +33,24 @@ npm install
 cp .env.example .env.local
 npm run dev
 ```
+
+## One-time database migration (role names)
+
+If your `roles` collection still has `ProjectManager` (no space), normalize to `Project Manager`:
+
+```bash
+cd backend
+npm run migrate:roles
+```
+
+Have users sign out and back in after migration so JWT roles refresh.
+
+## AI / Insights (read-only)
+
+- Tool APIs under `/api/ai/*` (dashboard summary, allocation explain, staffing risk, approval anomalies, time-entry suggestions)
+- UI: **Insights Center** at `/insights` (replaces legacy `/ai-analytics` mock chat)
+- Global search: `GET /api/search?q=` (header search bar)
+- Ranking and approvals remain deterministic; AI does not write to the database
 
 ## Testing
 

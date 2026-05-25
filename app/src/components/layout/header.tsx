@@ -1,4 +1,5 @@
-import { Bell, Search, CheckCircle2, AlertCircle, Info, Check } from "lucide-react"
+import { Bell, CheckCircle2, AlertCircle, Info, Check } from "lucide-react"
+import { GlobalSearch } from "./global-search"
 import { useNotifications } from "@/lib/use-notifications"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
@@ -21,14 +22,7 @@ export function Header() {
         <header className="h-20 border-b border-gray-200 bg-white px-8 flex items-center justify-between sticky top-0 z-10">
             {/* Left: Search / Breadcrumbs placeholder */}
             <div className="flex items-center gap-4 w-96">
-                <div className="relative w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Search projects, employees..."
-                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 hover:bg-white transition-colors"
-                    />
-                </div>
+                <GlobalSearch />
             </div>
 
             {/* Right: Actions */}

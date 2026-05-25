@@ -4,7 +4,14 @@ import { api } from './api-client';
 export interface RankedEmployee {
     id: string;
     name: string;
+    /** System access role */
     role: string;
+    roleId?: string;
+    jobRoleName?: string;
+    jobRoleId?: string;
+    suggestedAllocationRoleId?: string;
+    suggestedAllocationRoleName?: string;
+    matchingRoleEfforts?: { roleId: string; roleName: string; remainingHeadcount: number }[];
     primarySkill: string;
     matchingSkills?: { name: string; level: string }[];
     skillLevel: string;
@@ -20,6 +27,8 @@ export interface RankedEmployee {
         id: string;
         projectId: string;
         projectName: string;
+        roleId?: string;
+        roleName?: string;
         percentage: number;
         startDate: string;
         endDate: string;

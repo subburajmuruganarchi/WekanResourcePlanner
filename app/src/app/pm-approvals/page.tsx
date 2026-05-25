@@ -8,6 +8,8 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { api } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
+import { ApprovalAnomalyPanel } from "@/components/ai/approval-anomaly-panel"
+import { fetchApprovalAnomalies, type ApprovalInsightSummary } from "@/lib/use-ai-insights"
 
 /* ---------- Types ---------- */
 interface PendingEntry {
@@ -154,14 +156,16 @@ export function PmApprovalsPage() {
     // Collapsible state
     const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
     const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set())
+    const [approvalInsight, setApprovalInsight] = useState<ApprovalInsightSummary | null>(null)
 
     const fetchEntries = useCallback(async () => {
         if (!user?.id) return
         setLoading(true)
         setError(null)
         try {
-            const data = await api.get<PendingEntry[]>(`/time-entries/pending-approval?pmUserId=${user.id}`)
+            const data = await api.get<PendingEntry[]>('/time-entries/pending-approval')
             setEntries(data)
+            fetchApprovalAnomalies().then(setApprovalInsight)
             // Auto-expand all projects
             const projIds = new Set(data.map(e => e.projectId))
             setExpandedProjects(projIds)
@@ -204,7 +208,6 @@ export function PmApprovalsPage() {
         try {
             await api.post('/time-entries/approve', { 
                 entryIds, 
-                pmUserId: user.id,
                 overrideReason: isAdminMode && overrideReason ? overrideReason : undefined
             })
             showSuccess(`Approved ${entryIds.length} entries`)
@@ -223,7 +226,6 @@ export function PmApprovalsPage() {
         try {
             await api.post('/time-entries/approve', { 
                 entryIds: [entryId], 
-                pmUserId: user.id,
                 overrideReason: isAdminMode && overrideReason ? overrideReason : undefined
             })
             showSuccess('Entry approved')
@@ -242,7 +244,6 @@ export function PmApprovalsPage() {
         try {
             await api.post('/time-entries/reject', {
                 entryIds: [entryId],
-                pmUserId: user.id,
                 rejectionComment: rejectionComment || undefined,
                 overrideReason: isAdminMode && overrideReason ? overrideReason : undefined
             })
@@ -310,6 +311,8 @@ export function PmApprovalsPage() {
                     </Button>
                 </div>
             </div>
+
+            <ApprovalAnomalyPanel summary={approvalInsight} />
 
             {/* Messages */}
             {error && (

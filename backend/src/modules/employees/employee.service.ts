@@ -19,6 +19,8 @@ export interface EmployeeResponse {
     status: string;
     role?: string;
     roleId?: string;
+    jobRole?: string;
+    jobRoleId?: string;
     department?: string;
     position?: string;
     skills: {
@@ -40,7 +42,8 @@ interface PopulatedEmployee {
     email: string;
     employee_code?: string;
     status: string;
-    role_id?: { _id: Types.ObjectId; name: string } | Types.ObjectId;
+    role_id?: { _id: Types.ObjectId; role_name: string } | Types.ObjectId;
+    job_role_id?: { _id: Types.ObjectId; role_name: string } | Types.ObjectId;
     department?: string;
     position?: string;
     max_allocation_percent?: number;
@@ -71,6 +74,7 @@ export class EmployeeService {
 
         const employees = await Employee.find(query)
             .populate('role_id', 'role_name')
+            .populate('job_role_id', 'role_name')
             .lean() as unknown as PopulatedEmployee[];
 
         // Get skills for all employees in one query
@@ -99,6 +103,7 @@ export class EmployeeService {
 
         const employee = await Employee.findById(id)
             .populate('role_id', 'role_name')
+            .populate('job_role_id', 'role_name')
             .lean() as unknown as PopulatedEmployee | null;
 
         if (!employee) {
@@ -166,6 +171,7 @@ export class EmployeeService {
 
         const populated = await Employee.findById(employee._id)
             .populate('role_id', 'role_name')
+            .populate('job_role_id', 'role_name')
             .lean() as unknown as PopulatedEmployee;
 
         return this.mapToResponse(populated, []);
@@ -173,6 +179,7 @@ export class EmployeeService {
 
     private mapToResponse(emp: PopulatedEmployee, skills: PopulatedEmployeeSkill[]): EmployeeResponse {
         const role = emp.role_id as { _id: Types.ObjectId; role_name: string } | undefined;
+        const jobRole = emp.job_role_id as { _id: Types.ObjectId; role_name: string } | undefined;
 
         // Format join_date safely
         const formatDate = (date: Date | undefined): string | undefined => {
@@ -188,6 +195,8 @@ export class EmployeeService {
             status: emp.status || 'Active',
             role: role?.role_name,
             roleId: role?._id?.toString(),
+            jobRole: jobRole?.role_name,
+            jobRoleId: jobRole?._id?.toString(),
             department: emp.department,
             position: emp.position,
             skills: skills.map(s => ({

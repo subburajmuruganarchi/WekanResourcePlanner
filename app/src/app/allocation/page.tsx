@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react"
-import { UserPlus, Loader2 } from "lucide-react"
+import { UserPlus, Loader2, HelpCircle } from "lucide-react"
+import { AllocationExplainPanel } from "@/components/ai/allocation-explain-panel"
+import { fetchAllocationExplanation, type AllocationExplanation } from "@/lib/use-ai-insights"
 import { PageContainer } from "@/components/layout/page-container"
 import { Section } from "@/components/layout/section"
 import { Button } from "@/components/ui/button"
@@ -18,8 +20,24 @@ export function Allocation() {
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [selectedEmployee, setSelectedEmployee] = useState<RankedEmployee | null>(null)
     const [editingAllocation, setEditingAllocation] = useState<{
-        id: string; percentage: number; startDate: string; endDate: string; skillId?: string
+        id: string; percentage: number; startDate: string; endDate: string; skillId?: string; roleId?: string
     } | null>(null)
+    const [explainLoading, setExplainLoading] = useState(false)
+    const [explanation, setExplanation] = useState<AllocationExplanation | null>(null)
+
+    const handleExplain = async (employeeId: string) => {
+        if (!selectedProjectId) return
+        setExplainLoading(true)
+        setExplanation(null)
+        const result = await fetchAllocationExplanation(
+            selectedProjectId,
+            employeeId,
+            selectedProject?.startDate,
+            selectedProject?.endDate
+        )
+        setExplanation(result)
+        setExplainLoading(false)
+    }
 
 
 
@@ -55,6 +73,7 @@ export function Allocation() {
                 startDate: projectAlloc.startDate,
                 endDate: projectAlloc.endDate,
                 skillId: projectAlloc.skillId,
+                roleId: projectAlloc.roleId,
             })
             setIsDialogOpen(true)
         }
@@ -201,9 +220,10 @@ export function Allocation() {
                     <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
                         <h4 className="text-sm font-semibold text-blue-900 mb-2">Ranking Logic</h4>
                         <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
-                            <li>Multi-Skill Match (Project Requirements)</li>
-                            <li>Period Availability % (Avg. over project window)</li>
-                            <li>Experience Level</li>
+                            <li>Skill match (project skill requirements)</li>
+                            <li>Role effort gaps (unfilled job roles on project)</li>
+                            <li>Availability over project dates</li>
+                            <li>Experience on matched skills</li>
                         </ol>
                     </div>
                 </div>
@@ -226,10 +246,12 @@ export function Allocation() {
                                     <TableHeader>
                                         <TableRow className="bg-gray-50">
                                             <TableHead>Employee</TableHead>
+                                            <TableHead>Access / Job role</TableHead>
                                             <TableHead>Skill Match</TableHead>
                                             <TableHead>Current Allocations</TableHead>
                                             <TableHead>Availability</TableHead>
                                             <TableHead>Experience</TableHead>
+                                            <TableHead>Match</TableHead>
                                             <TableHead className="text-right">Action</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -237,9 +259,26 @@ export function Allocation() {
                                         {(employeesToShow || []).map((emp) => (
                                             <TableRow key={emp.id} className="hover:bg-gray-50 group">
                                                 <TableCell>
-                                                    <div>
-                                                        <div className="font-medium text-gray-900">{emp.name}</div>
-                                                        <div className="text-xs text-gray-500">{emp.role}</div>
+                                                    <div className="font-medium text-gray-900">{emp.name}</div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="text-xs space-y-1">
+                                                        <div>
+                                                            <span className="text-gray-400">Access:</span>{' '}
+                                                            <span className="text-gray-700">{emp.role}</span>
+                                                        </div>
+                                                        {emp.jobRoleName && (
+                                                            <div>
+                                                                <span className="text-gray-400">Job:</span>{' '}
+                                                                <span className="text-gray-800 font-medium">{emp.jobRoleName}</span>
+                                                            </div>
+                                                        )}
+                                                        {emp.suggestedAllocationRoleName && (
+                                                            <div>
+                                                                <span className="text-gray-400">Suggest:</span>{' '}
+                                                                <span className="text-brand-700 font-medium">{emp.suggestedAllocationRoleName}</span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
@@ -291,8 +330,23 @@ export function Allocation() {
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-sm text-gray-600">{emp.experienceYears} yrs</TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-sm font-medium">{Math.round((emp.matchScore ?? 0) * 100)}%</span>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-7 text-xs justify-start px-1"
+                                                            onClick={() => handleExplain(emp.id)}
+                                                        >
+                                                            <HelpCircle className="w-3 h-3 mr-1" />
+                                                            Why?
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
                                                 <TableCell className="text-right">
-                                                    <RoleGuard allowedRoles={["Admin", "ProjectManager"]}>
+                                                    <RoleGuard allowedRoles={["Admin"]}>
                                                         {emp.isAllocatedToProject ? (
                                                             <Button
                                                                 size="sm"
@@ -325,6 +379,12 @@ export function Allocation() {
                 </div>
             </div>
 
+            <AllocationExplainPanel
+                explanation={explanation}
+                loading={explainLoading}
+                onClose={() => setExplanation(null)}
+            />
+
             <AllocationDialog
                 open={isDialogOpen}
                 onOpenChange={setIsDialogOpen}
@@ -333,11 +393,15 @@ export function Allocation() {
                 projectId={selectedProjectId || ""}
                 projectName={selectedProjectName}
                 skillRequirements={selectedProject?.skillRequirements}
+                roleEfforts={selectedProject?.roleEfforts}
+                suggestedAllocationRoleId={selectedEmployee?.suggestedAllocationRoleId}
+                suggestedAllocationRoleName={selectedEmployee?.suggestedAllocationRoleName}
                 allocationId={editingAllocation?.id}
                 initialPercentage={editingAllocation?.percentage}
                 initialStartDate={editingAllocation?.startDate}
                 initialEndDate={editingAllocation?.endDate}
                 initialSkillId={editingAllocation?.skillId}
+                initialRoleId={editingAllocation?.roleId}
                 onSuccess={handleAllocationSuccess}
             />
         </PageContainer>

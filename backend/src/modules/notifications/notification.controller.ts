@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { notificationService } from './notification.service';
+import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
 
 export class NotificationController {
     /**
@@ -7,7 +8,12 @@ export class NotificationController {
      */
     async getNotifications(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
+            const authId = getAuthEmployeeId(req.user);
             const { userId } = req.params;
+            if (authId && userId !== authId && req.user?.role !== 'Admin') {
+                res.status(403).json({ status: 'error', message: 'Access denied.' });
+                return;
+            }
             const notifications = await notificationService.getUserNotifications(userId);
             res.json({ status: 'success', data: notifications });
         } catch (error) {
@@ -26,10 +32,15 @@ export class NotificationController {
     async markAsRead(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const { notificationId } = req.params;
-            const { userId } = req.body;
+            const authId = getAuthEmployeeId(req.user);
+            const userId = (req.body.userId as string) || authId;
 
             if (!userId) {
                 res.status(400).json({ status: 'error', message: 'userId is required' });
+                return;
+            }
+            if (authId && userId !== authId && req.user?.role !== 'Admin') {
+                res.status(403).json({ status: 'error', message: 'Access denied.' });
                 return;
             }
 
@@ -50,10 +61,15 @@ export class NotificationController {
      */
     async markAllAsRead(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const { userId } = req.body;
+            const authId = getAuthEmployeeId(req.user);
+            const userId = (req.body.userId as string) || authId;
 
             if (!userId) {
                 res.status(400).json({ status: 'error', message: 'userId is required' });
+                return;
+            }
+            if (authId && userId !== authId && req.user?.role !== 'Admin') {
+                res.status(403).json({ status: 'error', message: 'Access denied.' });
                 return;
             }
 

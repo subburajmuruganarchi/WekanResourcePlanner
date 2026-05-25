@@ -198,7 +198,6 @@ export function TimesheetApprovalsTab({ projectId }: { projectId: string }) {
         try {
             await api.post('/time-entries/approve', { 
                 entryIds, 
-                pmUserId: user.id,
                 overrideReason: isAdminMode && overrideReason ? overrideReason : undefined
             })
             showSuccess(`Approved ${entryIds.length} entry(ies)`)
@@ -217,7 +216,6 @@ export function TimesheetApprovalsTab({ projectId }: { projectId: string }) {
         try {
             await api.post('/time-entries/reject', {
                 entryIds: [entryId],
-                pmUserId: user.id,
                 rejectionComment: rejectionComment || undefined,
                 overrideReason: isAdminMode && overrideReason ? overrideReason : undefined
             })

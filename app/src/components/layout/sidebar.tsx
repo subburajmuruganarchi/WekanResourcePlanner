@@ -12,6 +12,7 @@ import {
     Sparkles,
     ClipboardCheck,
     Shield,
+    Activity,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -22,10 +23,11 @@ const navItems = [
     { label: "Time Entry", icon: Clock, path: "/time-entry" },
     { label: "PM Approvals", icon: ClipboardCheck, path: "/pm-approvals" },
     { label: "OKRs", icon: Target, path: "/okrs" },
-    { label: "AI Analytics", icon: Sparkles, path: "/ai-analytics" },
+    { label: "Insights Center", icon: Sparkles, path: "/insights" },
     { label: "Reports", icon: FileBarChart, path: "/reports" },
     { label: "Skill Master", icon: List, path: "/skills" },
     { label: "User Control", icon: Shield, path: "/user-control" },
+    { label: "System Health", icon: Activity, path: "/system-health" },
 ]
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
@@ -43,9 +45,10 @@ export function Sidebar({ className, ...props }: SidebarProps) {
         "/pm-approvals": ["Admin", "Project Manager"],
         "/okrs": ["*"],
         "/reports": ["Admin", "Project Manager"],
-        "/ai-analytics": ["Admin", "Project Manager"],
+        "/insights": ["Admin", "Project Manager"],
         "/skills": ["Admin"],
         "/user-control": ["Admin"],
+        "/system-health": ["Admin"],
     }
 
     const filteredItems = navItems.filter(item => {

@@ -7,7 +7,8 @@ export interface IEmployee extends Document {
     email: string;
     employee_code?: string;  // Optional - not all records have this
     status: string;
-    role_id?: Types.ObjectId;  // Optional - not all records have this
+    role_id?: Types.ObjectId;  // System access role (Admin, Project Manager, Employee)
+    job_role_id?: Types.ObjectId;  // Job role for allocations (Developer, SDE, etc.)
     department?: string;
     position?: string;  // DB uses 'position' not 'designation'
     password?: string; // Hashed password
@@ -28,6 +29,7 @@ const EmployeeSchema = new Schema<IEmployee>({
     employee_code: { type: String, unique: true, sparse: true, index: true, uppercase: true, trim: true },
     status: { type: String, default: 'Active' },
     role_id: { type: Schema.Types.ObjectId, ref: 'Role' },
+    job_role_id: { type: Schema.Types.ObjectId, ref: 'Role' },
     department: { type: String, trim: true },
     position: { type: String, trim: true },
     password: { type: String, select: false },

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { okrService } from './okr.service';
 import { AppError } from '../../common/errors/app-error';
+import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
 
 export class OkrController {
 
@@ -39,11 +40,12 @@ export class OkrController {
         try {
             const { employeeId } = req.params;
             const { period } = req.query;
-            const user = (req as any).user;
+            const user = req.user;
+            const authEmployeeId = getAuthEmployeeId(user);
 
             // RBAC: Employees can ONLY see their own OKRs
-            if (user && !['Admin', 'Project Manager'].includes(user.role)) {
-                if (employeeId !== user.id) {
+            if (user && authEmployeeId && !['Admin', 'Project Manager'].includes(user.role)) {
+                if (employeeId !== authEmployeeId) {
                     res.status(403).json({
                         status: 'error',
                         message: 'Access denied. You can only view your own OKRs.'

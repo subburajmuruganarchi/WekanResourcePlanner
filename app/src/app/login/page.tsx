@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/lib/auth-context"
+import { getHomeRoute } from "@/lib/home-route"
 import { GoogleLogin } from "@react-oauth/google"
 
 export function LoginPage() {
@@ -18,8 +19,8 @@ export function LoginPage() {
         setError(null)
         
         try {
-            await login(email, password)
-            navigate("/dashboard", { replace: true })
+            const loggedIn = await login(email, password)
+            navigate(getHomeRoute(loggedIn.role), { replace: true })
         } catch (err: any) {
             setError(err.message || "Failed to log in. Please check your credentials.")
         }
@@ -28,8 +29,8 @@ export function LoginPage() {
     const handleGoogleSuccess = async (credentialResponse: any) => {
         setError(null)
         try {
-            await googleLogin(credentialResponse.credential)
-            navigate("/dashboard", { replace: true })
+            const loggedIn = await googleLogin(credentialResponse.credential)
+            navigate(getHomeRoute(loggedIn.role), { replace: true })
         } catch (err: any) {
             setError(err.message || "Google login failed.")
         }

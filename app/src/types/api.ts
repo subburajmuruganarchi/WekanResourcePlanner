@@ -1,7 +1,7 @@
 // Frontend API Type Definitions
 // Aligned with resource-360 database structure (snake_case in DB, camelCase in API response)
 
-export type RoleType = 'Admin' | 'ProjectManager' | 'Employee';
+export type RoleType = 'Admin' | 'Project Manager' | 'Employee';
 
 export type EmployeeStatus = 'Active' | 'Inactive' | 'On Probation' | 'On Notice Period' | 'Terminated';
 
@@ -84,6 +84,8 @@ export interface Employee {
     status: EmployeeStatus;
     role?: EmployeeRole;
     roleId?: string;
+    jobRole?: string;
+    jobRoleId?: string;
     department?: EmployeeDepartment;
     position?: string;
     skills: EmployeeSkill[];

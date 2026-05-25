@@ -1,18 +1,35 @@
 import { Request, Response, NextFunction } from 'express';
 import { timeEntryService, CreateTimeEntryRequest } from './time-entry.service';
+import { getAuthEmployeeId, assertEmployeeScope } from '../../common/utils/auth-user.util';
+
+function requireAuthEmployeeId(req: Request, res: Response): string | null {
+    const id = getAuthEmployeeId(req.user);
+    if (!id) {
+        res.status(401).json({ status: 'error', message: 'Authentication required.' });
+        return null;
+    }
+    return id;
+}
 
 export class TimeEntryController {
     async create(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
+            const targetEmployeeId = req.body.employeeId as string;
+            const scope = assertEmployeeScope(req.user, targetEmployeeId);
+            if (!scope.ok) {
+                res.status(403).json({ status: 'error', message: scope.message });
+                return;
+            }
+
             const request: CreateTimeEntryRequest = {
-                employeeId: req.body.employeeId,
+                employeeId: targetEmployeeId,
                 projectId: req.body.projectId,
                 timeCodeId: req.body.timeCodeId,
                 date: req.body.date,
                 hours: req.body.hours,
                 comments: req.body.comments,
                 overrideReason: req.body.overrideReason,
-                requestingUserId: (req as any).user?.id || req.body.requestingUserId, // Use auth user if available
+                requestingUserId: getAuthEmployeeId(req.user) || req.body.requestingUserId,
             };
 
             const timeEntry = await timeEntryService.createTimeEntry(request);
@@ -45,12 +62,13 @@ export class TimeEntryController {
                 return;
             }
 
-            const user = (req as any).user;
+            const user = req.user;
             const targetEmployeeId = employeeId as string;
+            const authEmployeeId = getAuthEmployeeId(user);
 
             // RBAC: Employees can ONLY see their own entries
-            if (user && !['Admin', 'Project Manager'].includes(user.role)) {
-                if (targetEmployeeId !== user.id) {
+            if (user && authEmployeeId && !['Admin', 'Project Manager'].includes(user.role)) {
+                if (targetEmployeeId !== authEmployeeId) {
                     res.status(403).json({
                         status: 'error',
                         message: 'Access denied. You can only view your own time entries.'
@@ -89,6 +107,12 @@ export class TimeEntryController {
                 return;
             }
 
+            const scope = assertEmployeeScope(req.user, employeeId as string);
+            if (!scope.ok) {
+                res.status(403).json({ status: 'error', message: scope.message });
+                return;
+            }
+
             const estimates = await timeEntryService.getEstimatedHours(
                 employeeId as string,
                 week as string
@@ -110,9 +134,9 @@ export class TimeEntryController {
     async delete(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const { id } = req.params;
-            const { employeeId } = req.body;
+            const targetEmployeeId = (req.body?.employeeId as string) || getAuthEmployeeId(req.user);
 
-            if (!employeeId) {
+            if (!targetEmployeeId) {
                 res.status(400).json({
                     status: 'error',
                     message: 'employeeId is required',
@@ -120,7 +144,13 @@ export class TimeEntryController {
                 return;
             }
 
-            await timeEntryService.deleteEntry(id, employeeId);
+            const scope = assertEmployeeScope(req.user, targetEmployeeId);
+            if (!scope.ok) {
+                res.status(403).json({ status: 'error', message: scope.message });
+                return;
+            }
+
+            await timeEntryService.deleteEntry(id, targetEmployeeId);
 
             res.json({
                 status: 'success',
@@ -144,6 +174,12 @@ export class TimeEntryController {
                     status: 'error',
                     message: 'employeeId and week query parameters are required',
                 });
+                return;
+            }
+
+            const scope = assertEmployeeScope(req.user, employeeId as string);
+            if (!scope.ok) {
+                res.status(403).json({ status: 'error', message: scope.message });
                 return;
             }
 
@@ -181,6 +217,12 @@ export class TimeEntryController {
                 return;
             }
 
+            const scope = assertEmployeeScope(req.user, employeeId);
+            if (!scope.ok) {
+                res.status(403).json({ status: 'error', message: scope.message });
+                return;
+            }
+
             const result = await timeEntryService.submitWeeklyEntries(
                 employeeId,
                 weekStart,
@@ -206,12 +248,14 @@ export class TimeEntryController {
      */
     async approve(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const { entryIds, pmUserId } = req.body;
+            const { entryIds } = req.body;
+            const pmUserId = requireAuthEmployeeId(req, res);
+            if (!pmUserId) return;
 
-            if (!entryIds || !Array.isArray(entryIds) || entryIds.length === 0 || !pmUserId) {
+            if (!entryIds || !Array.isArray(entryIds) || entryIds.length === 0) {
                 res.status(400).json({
                     status: 'error',
-                    message: 'entryIds (array) and pmUserId are required',
+                    message: 'entryIds (array) is required',
                 });
                 return;
             }
@@ -242,12 +286,14 @@ export class TimeEntryController {
      */
     async reject(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const { entryIds, pmUserId, rejectionComment } = req.body;
+            const { entryIds, rejectionComment } = req.body;
+            const pmUserId = requireAuthEmployeeId(req, res);
+            if (!pmUserId) return;
 
-            if (!entryIds || !Array.isArray(entryIds) || entryIds.length === 0 || !pmUserId) {
+            if (!entryIds || !Array.isArray(entryIds) || entryIds.length === 0) {
                 res.status(400).json({
                     status: 'error',
-                    message: 'entryIds (array) and pmUserId are required',
+                    message: 'entryIds (array) is required',
                 });
                 return;
             }
@@ -279,17 +325,10 @@ export class TimeEntryController {
      */
     async pendingApproval(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const { pmUserId } = req.query;
+            const pmUserId = requireAuthEmployeeId(req, res);
+            if (!pmUserId) return;
 
-            if (!pmUserId) {
-                res.status(400).json({
-                    status: 'error',
-                    message: 'pmUserId query parameter is required',
-                });
-                return;
-            }
-
-            const entries = await timeEntryService.getPendingApprovalForPM(pmUserId as string);
+            const entries = await timeEntryService.getPendingApprovalForPM(pmUserId);
 
             res.json({
                 status: 'success',

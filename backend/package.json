@@ -9,7 +9,10 @@
         "build": "tsc",
         "lint": "eslint . --ext .ts",
         "format": "prettier --write .",
-        "test": "jest"
+        "test": "jest",
+        "migrate:roles": "ts-node src/scripts/normalize-role-names.ts",
+        "seed:dev": "ts-node scripts/seed-dev-data.ts",
+        "verify:seed": "ts-node scripts/verify-seed.ts"
     },
     "keywords": [],
     "author": "R360 Team",

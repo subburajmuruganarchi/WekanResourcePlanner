@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Percent, Loader2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { api } from "@/lib/api-client"
-import type { SkillRequirement } from "@/types/api"
+import type { Employee, SkillRequirement, RoleEffort } from "@/types/api"
 
 interface AllocationDialogProps {
     open: boolean
@@ -14,13 +14,16 @@ interface AllocationDialogProps {
     employeeName: string
     projectId: string
     projectName: string
-    skillRequirements?: SkillRequirement[] // project skill requirements for dropdown
-    // Edit mode props
+    skillRequirements?: SkillRequirement[]
+    roleEfforts?: RoleEffort[]
+    suggestedAllocationRoleId?: string
+    suggestedAllocationRoleName?: string
     allocationId?: string
     initialPercentage?: number
     initialStartDate?: string
     initialEndDate?: string
     initialSkillId?: string
+    initialRoleId?: string
     onSuccess?: () => void
 }
 
@@ -32,9 +35,6 @@ interface AllocationRequest {
     startDate: string
     endDate: string
     percentage: number
-    isAdminOverride?: boolean
-    overrideReason?: string
-    authorizedById?: string
 }
 
 export function AllocationDialog({
@@ -45,11 +45,15 @@ export function AllocationDialog({
     projectId,
     projectName,
     skillRequirements = [],
+    roleEfforts = [],
+    suggestedAllocationRoleId,
+    suggestedAllocationRoleName,
     allocationId,
     initialPercentage,
     initialStartDate,
     initialEndDate,
     initialSkillId,
+    initialRoleId,
     onSuccess
 }: AllocationDialogProps) {
     const isEditMode = !!allocationId
@@ -58,13 +62,32 @@ export function AllocationDialog({
     const [startDate, setStartDate] = useState(initialStartDate || "")
     const [endDate, setEndDate] = useState(initialEndDate || "")
     const [selectedSkillId, setSelectedSkillId] = useState(initialSkillId || "")
+    const [selectedRoleId, setSelectedRoleId] = useState("")
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [roleLoading, setRoleLoading] = useState(false)
 
-    // Placeholder role ID
-    const roleId = "000000000000000000000001"
+    const roleOptions = useMemo(() => {
+        const map = new Map<string, string>()
+        for (const effort of roleEfforts) {
+            if (effort.roleId) {
+                const label = effort.roleName
+                    ? `${effort.roleName} (${effort.remainingHeadcount ?? effort.originalHeadcount} open)`
+                    : effort.roleId
+                map.set(effort.roleId, label)
+            }
+        }
+        for (const req of skillRequirements) {
+            if (req.roleId && req.roleName) {
+                map.set(req.roleId, `${req.roleName} (skill req)`)
+            }
+        }
+        if (suggestedAllocationRoleId && suggestedAllocationRoleName && !map.has(suggestedAllocationRoleId)) {
+            map.set(suggestedAllocationRoleId, suggestedAllocationRoleName)
+        }
+        return Array.from(map.entries()).map(([id, label]) => ({ id, label }))
+    }, [roleEfforts, skillRequirements, suggestedAllocationRoleId, suggestedAllocationRoleName])
 
-    // Reset form when dialog opens/closes or initial values change
     useEffect(() => {
         if (open) {
             setPercentage(initialPercentage?.toString() || "50")
@@ -75,13 +98,61 @@ export function AllocationDialog({
         }
     }, [open, initialPercentage, initialStartDate, initialEndDate, initialSkillId])
 
+    useEffect(() => {
+        if (!open) {
+            setSelectedRoleId("")
+            setRoleLoading(false)
+            return
+        }
+
+        if (isEditMode && initialRoleId) {
+            setSelectedRoleId(initialRoleId)
+            setRoleLoading(false)
+            return
+        }
+
+        if (suggestedAllocationRoleId) {
+            setSelectedRoleId(suggestedAllocationRoleId)
+            setRoleLoading(false)
+            return
+        }
+
+        if (roleOptions.length > 0) {
+            setSelectedRoleId(roleOptions[0].id)
+            setRoleLoading(false)
+            return
+        }
+
+        let cancelled = false
+        setRoleLoading(true)
+        api.get<Employee>(`/employees/${employeeId}`)
+            .then((emp) => {
+                if (cancelled) return
+                const jobId = emp.jobRoleId
+                if (jobId) {
+                    setSelectedRoleId(jobId)
+                } else {
+                    setSelectedRoleId("")
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setSelectedRoleId("")
+            })
+            .finally(() => {
+                if (!cancelled) setRoleLoading(false)
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [open, isEditMode, employeeId, suggestedAllocationRoleId, initialRoleId, roleOptions])
+
     const handleSubmit = async () => {
         setLoading(true)
         setError(null)
 
         try {
             if (isEditMode) {
-                // Update existing allocation
                 await api.put(`/allocations/${allocationId}`, {
                     percentage: parseInt(percentage, 10),
                     startDate,
@@ -89,11 +160,20 @@ export function AllocationDialog({
                     skillId: selectedSkillId || undefined,
                 })
             } else {
-                // Create new allocation
+                if (!selectedRoleId) {
+                    setError(
+                        roleOptions.length === 0
+                            ? 'Define role efforts on the project (or set a job role on the employee) before allocating.'
+                            : 'Select the job role for this allocation.'
+                    )
+                    setLoading(false)
+                    return
+                }
+
                 const request: AllocationRequest = {
                     projectId,
                     employeeId,
-                    roleId,
+                    roleId: selectedRoleId,
                     skillId: selectedSkillId || undefined,
                     startDate,
                     endDate,
@@ -103,15 +183,10 @@ export function AllocationDialog({
                 await api.post('/allocations', request)
             }
 
-            // Success - close dialog and notify parent
             onOpenChange(false)
             onSuccess?.()
         } catch (err) {
-            if (err instanceof Error) {
-                setError(err.message)
-            } else {
-                setError('An unexpected error occurred')
-            }
+            setError(err instanceof Error ? err.message : 'An unexpected error occurred')
         } finally {
             setLoading(false)
         }
@@ -121,6 +196,8 @@ export function AllocationDialog({
         setError(null)
         onOpenChange(false)
     }
+
+    const needsRolePick = !isEditMode && roleOptions.length > 0
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
@@ -144,7 +221,32 @@ export function AllocationDialog({
                 )}
 
                 <div className="grid gap-4 py-4">
-                    {/* Skill Selection */}
+                    {!isEditMode && (
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <label className="text-right text-sm font-medium text-gray-700">Job role</label>
+                            <div className="col-span-3">
+                                {roleOptions.length > 0 ? (
+                                    <Select value={selectedRoleId} onValueChange={setSelectedRoleId}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Select project role..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {roleOptions.map((opt) => (
+                                                <SelectItem key={opt.id} value={opt.id}>
+                                                    {opt.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                ) : (
+                                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-md p-2">
+                                        No role efforts on this project. Add them under Projects → Role Efforts, or ensure the employee has a job role set.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {skillRequirements.length > 0 && (
                         <div className="grid grid-cols-4 items-center gap-4">
                             <label className="text-right text-sm font-medium text-gray-700">Skill</label>
@@ -213,7 +315,13 @@ export function AllocationDialog({
                     </Button>
                     <Button
                         onClick={handleSubmit}
-                        disabled={loading || !startDate || !endDate}
+                        disabled={
+                            loading ||
+                            roleLoading ||
+                            !startDate ||
+                            !endDate ||
+                            (!isEditMode && needsRolePick && !selectedRoleId)
+                        }
                     >
                         {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                         {isEditMode ? 'Update Allocation' : 'Confirm Allocation'}

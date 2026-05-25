@@ -3,6 +3,7 @@ import { EmployeeSkill } from '../employees/employee-skill.model';
 import { ProjectAllocation, IProjectAllocation, AllocationOverrideLog } from './allocation.model';
 import { Project } from '../projects/project.model';
 import { ProjectSkillRequirement } from '../projects/project-skill-requirement.model';
+import { ProjectRoleEffort } from '../projects/project-role-effort.model';
 import { Types, startSession } from 'mongoose';
 
 export interface RankingRequest {
@@ -12,10 +13,22 @@ export interface RankingRequest {
     endDate?: string;
 }
 
+const ACCESS_ROLE_NAMES = new Set(['Admin', 'Project Manager', 'Employee', 'User']);
+
 export interface RankedEmployee {
     id: string;
     name: string;
+    /** System access role (JWT / sidebar). */
     role: string;
+    roleId?: string;
+    /** Job role on employee profile (Developer, etc.). */
+    jobRoleName?: string;
+    jobRoleId?: string;
+    /** Best role_id to use when creating an allocation for this project. */
+    suggestedAllocationRoleId?: string;
+    suggestedAllocationRoleName?: string;
+    /** Open role slots on the project this employee fits. */
+    matchingRoleEfforts?: { roleId: string; roleName: string; remainingHeadcount: number }[];
     primarySkill: string;
     matchingSkills: { name: string; level: string }[];
     skillLevel: string;
@@ -31,6 +44,8 @@ export interface RankedEmployee {
         id: string;
         projectId: string;
         projectName: string;
+        roleId?: string;
+        roleName?: string;
         percentage: number;
         startDate: string;
         endDate: string;
@@ -88,7 +103,16 @@ interface PopulatedEmployee {
     position?: string;
     department?: string;
     role_id?: { _id: Types.ObjectId; role_name: string };
+    job_role_id?: { _id: Types.ObjectId; role_name: string };
     is_active?: boolean;
+}
+
+interface RoleEffortGap {
+    roleId: string;
+    roleName: string;
+    requiredHeadcount: number;
+    fulfilledHeadcount: number;
+    remainingHeadcount: number;
 }
 
 interface PopulatedEmployeeSkill {
@@ -401,6 +425,7 @@ export class AllocationService {
         // Get all active employees
         const employees = await Employee.find({ is_active: { $ne: false } })
             .populate('role_id', 'role_name')
+            .populate('job_role_id', 'role_name')
             .lean() as unknown as PopulatedEmployee[];
 
         // Get all employee skills
@@ -421,10 +446,24 @@ export class AllocationService {
 
         // Fetch project skill requirements if projectId is provided
         let projectRequirements: any[] = [];
-        if (request.projectId && !request.skillName) {
-            projectRequirements = await ProjectSkillRequirement.find({ project_id: request.projectId })
-                .populate('skill_id', 'name')
+        let roleEffortGaps: RoleEffortGap[] = [];
+        let projectAllocations: IProjectAllocation[] = [];
+
+        if (request.projectId && Types.ObjectId.isValid(request.projectId)) {
+            const projectOid = new Types.ObjectId(request.projectId);
+            if (!request.skillName) {
+                projectRequirements = await ProjectSkillRequirement.find({ project_id: projectOid })
+                    .populate('skill_id', 'name')
+                    .lean();
+            }
+            const roleEfforts = await ProjectRoleEffort.find({ project_id: projectOid })
+                .populate('role_id', 'role_name')
                 .lean();
+            projectAllocations = await ProjectAllocation.find({
+                project_id: projectOid,
+                is_active: true,
+            }).lean();
+            roleEffortGaps = this.computeRoleEffortGaps(roleEfforts, projectAllocations);
         }
 
         // Calculate availability and match score for each employee
@@ -433,7 +472,9 @@ export class AllocationService {
                 emp,
                 request,
                 skillsByEmployee.get(emp._id.toString()) || [],
-                projectRequirements
+                projectRequirements,
+                roleEffortGaps,
+                projectAllocations
             ))
         );
 
@@ -441,13 +482,135 @@ export class AllocationService {
         return rankedEmployees.sort((a, b) => b.matchScore - a.matchScore);
     }
 
+    private computeRoleEffortGaps(
+        roleEfforts: Array<{
+            role_id: { _id: Types.ObjectId; role_name: string } | Types.ObjectId;
+            required_headcount: number;
+            start_date: Date;
+            end_date: Date;
+        }>,
+        allocations: IProjectAllocation[]
+    ): RoleEffortGap[] {
+        return roleEfforts.map((effort) => {
+            const role = effort.role_id as { _id: Types.ObjectId; role_name: string };
+            const roleId = role?._id?.toString() || (effort.role_id as Types.ObjectId).toString();
+            const roleName = role?.role_name || 'Role';
+            const reqStart = new Date(effort.start_date);
+            const reqEnd = new Date(effort.end_date);
+            const reqDays = Math.max(
+                1,
+                Math.ceil((reqEnd.getTime() - reqStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
+            );
+
+            const fulfilledHeadcount = allocations.reduce((sum, alloc) => {
+                if (alloc.role_id?.toString() !== roleId) return sum;
+                const allocStart = new Date(alloc.start_date);
+                const allocEnd = new Date(alloc.end_date);
+                const overlapStart = new Date(Math.max(allocStart.getTime(), reqStart.getTime()));
+                const overlapEnd = new Date(Math.min(allocEnd.getTime(), reqEnd.getTime()));
+                if (overlapStart <= overlapEnd) {
+                    const overlapDays =
+                        Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    const percent = (alloc.allocation_percent || 0) / 100;
+                    return sum + percent * (overlapDays / reqDays);
+                }
+                return sum;
+            }, 0);
+
+            const remaining = Math.max(0, effort.required_headcount - fulfilledHeadcount);
+            return {
+                roleId,
+                roleName,
+                requiredHeadcount: effort.required_headcount,
+                fulfilledHeadcount,
+                remainingHeadcount: Math.round(remaining * 10) / 10,
+            };
+        });
+    }
+
+    private resolveSuggestedAllocationRole(
+        emp: PopulatedEmployee,
+        roleEffortGaps: RoleEffortGap[],
+        projectRequirements: Array<{ role_id?: Types.ObjectId | { _id: Types.ObjectId } }>,
+        existingProjectAlloc?: IProjectAllocation
+    ): { roleId?: string; roleName?: string; matching: RankedEmployee['matchingRoleEfforts'] } {
+        if (existingProjectAlloc?.role_id) {
+            const rid = existingProjectAlloc.role_id.toString();
+            const gap = roleEffortGaps.find((g) => g.roleId === rid);
+            return {
+                roleId: rid,
+                roleName: gap?.roleName,
+                matching: roleEffortGaps
+                    .filter((g) => g.remainingHeadcount > 0)
+                    .map((g) => ({
+                        roleId: g.roleId,
+                        roleName: g.roleName,
+                        remainingHeadcount: g.remainingHeadcount,
+                    })),
+            };
+        }
+
+        const jobRoleId = (emp.job_role_id as { _id: Types.ObjectId; role_name: string } | undefined)?._id?.toString();
+        const jobRoleName = (emp.job_role_id as { _id: Types.ObjectId; role_name: string } | undefined)?.role_name;
+
+        const openGaps = roleEffortGaps.filter((g) => g.remainingHeadcount > 0);
+
+        if (jobRoleId && openGaps.some((g) => g.roleId === jobRoleId)) {
+            return {
+                roleId: jobRoleId,
+                roleName: jobRoleName,
+                matching: openGaps.map((g) => ({
+                    roleId: g.roleId,
+                    roleName: g.roleName,
+                    remainingHeadcount: g.remainingHeadcount,
+                })),
+            };
+        }
+
+        if (openGaps.length > 0) {
+            const best = openGaps.sort((a, b) => b.remainingHeadcount - a.remainingHeadcount)[0];
+            return {
+                roleId: best.roleId,
+                roleName: best.roleName,
+                matching: openGaps.map((g) => ({
+                    roleId: g.roleId,
+                    roleName: g.roleName,
+                    remainingHeadcount: g.remainingHeadcount,
+                })),
+            };
+        }
+
+        if (jobRoleId && !ACCESS_ROLE_NAMES.has(jobRoleName || '')) {
+            return { roleId: jobRoleId, roleName: jobRoleName, matching: [] };
+        }
+
+        for (const req of projectRequirements) {
+            const reqRoleId = (req.role_id as { _id: Types.ObjectId } | undefined)?._id?.toString()
+                || (req.role_id as Types.ObjectId | undefined)?.toString();
+            if (reqRoleId) {
+                const gap = roleEffortGaps.find((g) => g.roleId === reqRoleId);
+                return {
+                    roleId: reqRoleId,
+                    roleName: gap?.roleName,
+                    matching: [],
+                };
+            }
+        }
+
+        return { matching: [] };
+    }
+
     private async calculateRanking(
         emp: PopulatedEmployee,
         request: RankingRequest,
         skills: PopulatedEmployeeSkill[],
-        projectRequirements: any[] = []
+        projectRequirements: any[] = [],
+        roleEffortGaps: RoleEffortGap[] = [],
+        projectAllocations: IProjectAllocation[] = []
     ): Promise<RankedEmployee> {
-        const roleName = emp.role_id?.role_name || emp.department || 'Employee';
+        const accessRoleName = emp.role_id?.role_name || emp.department || 'Employee';
+        const jobRoleName = emp.job_role_id?.role_name;
+        const jobRoleId = emp.job_role_id?._id?.toString();
 
         // Find the matching skills
         let matchedSkill: PopulatedEmployeeSkill | undefined;
@@ -553,11 +716,15 @@ export class AllocationService {
             $or: [
                 { end_date: { $gte: analysisStart }, start_date: { $lte: analysisEnd } }
             ]
-        }).populate('project_id', 'project_name project_code').lean();
+        })
+            .populate('project_id', 'project_name project_code')
+            .populate('role_id', 'role_name')
+            .lean();
 
         let weightedBusyDays = 0;
         const currentAllocations = allocations.map(a => {
             const proj = a.project_id as unknown as { _id: Types.ObjectId; project_name: string; project_code: string };
+            const allocRole = a.role_id as unknown as { _id: Types.ObjectId; role_name: string } | undefined;
             const allocStart = new Date(a.start_date);
             const allocEnd = new Date(a.end_date);
 
@@ -574,6 +741,8 @@ export class AllocationService {
                 id: a._id.toString(),
                 projectId: proj?._id?.toString() || '',
                 projectName: proj?.project_name || proj?.project_code || 'Unknown',
+                roleId: allocRole?._id?.toString() || a.role_id?.toString(),
+                roleName: allocRole?.role_name,
                 percentage: a.allocation_percent,
                 startDate: allocStart.toISOString().split('T')[0],
                 endDate: allocEnd.toISOString().split('T')[0],
@@ -588,21 +757,57 @@ export class AllocationService {
             ? allocations.some(a => a.project_id && (a.project_id as any)._id?.toString() === request.projectId)
             : false;
 
+        // Role effort fit (up to 20 pts when project defines role efforts)
+        let roleEffortScore = 0;
+        if (roleEffortGaps.length > 0) {
+            const openGaps = roleEffortGaps.filter((g) => g.remainingHeadcount > 0);
+            if (jobRoleId && openGaps.some((g) => g.roleId === jobRoleId)) {
+                roleEffortScore = 20;
+            } else if (openGaps.length > 0) {
+                roleEffortScore = 8;
+            }
+        }
+
+        const existingOnProject = request.projectId
+            ? projectAllocations.find(
+                (a) =>
+                    a.employee_id.toString() === emp._id.toString()
+            )
+            : undefined;
+
+        const suggested = this.resolveSuggestedAllocationRole(
+            emp,
+            roleEffortGaps,
+            projectRequirements,
+            existingOnProject
+        );
+
         // Calculate other match factors
         const availabilityScore = availability / 100;
         const experienceScore = Math.min(empExpYears / 10, 1);
 
-        // Calculate composite score (weighted)
-        const matchScoreValue = (
-            skillMatchScore +
-            (availabilityScore * 35) +
-            (experienceScore * 25)
-        ) / 100;
+        // Calculate composite score (weighted) — skills 40, availability 30, experience 20, role 10
+        const matchScoreValue = Math.min(
+            1,
+            (skillMatchScore +
+                roleEffortScore +
+                availabilityScore * 30 +
+                experienceScore * 20) /
+                110
+        );
+
+        const accessRoleId = (emp.role_id as { _id: Types.ObjectId } | undefined)?._id?.toString();
 
         return {
             id: emp._id.toString(),
             name: `${emp.first_name} ${emp.last_name}`,
-            role: roleName,
+            role: accessRoleName,
+            roleId: accessRoleId,
+            jobRoleName,
+            jobRoleId,
+            suggestedAllocationRoleId: suggested.roleId,
+            suggestedAllocationRoleName: suggested.roleName,
+            matchingRoleEfforts: suggested.matching,
             primarySkill: skillName,
             matchingSkills,
             skillLevel,

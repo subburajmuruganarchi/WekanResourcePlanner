@@ -6,7 +6,8 @@ import {
     Users, 
     Calendar, 
     Activity,
-    Info
+    Info,
+    AlertCircle,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,18 +17,16 @@ import { api } from "@/lib/api"
 export default function ReportsPage() {
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [downloading, setDownloading] = useState<string | null>(null)
+    const [downloadError, setDownloadError] = useState<string | null>(null)
 
-    const handleRefresh = async () => {
+    const handleRefresh = () => {
         setIsRefreshing(true)
-        // Simulate a data refresh
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        setIsRefreshing(false)
-        console.log("Dashboard data refreshed")
-        // In a real app, this might trigger a context refresh or a specific API call
+        window.location.reload()
     }
 
     const downloadReport = async (type: "consolidated" | "role-summary-hrs" | "role-summary-perc" | "bandwidth") => {
         setDownloading(type)
+        setDownloadError(null)
         try {
             let endpoint = ""
             let filename = ""
@@ -65,9 +64,11 @@ export default function ReportsPage() {
             link.parentNode?.removeChild(link)
             window.URL.revokeObjectURL(url)
             
-            console.log(`Downloaded ${filename}`)
         } catch (error) {
-            console.error("Failed to download report", error)
+            const message = error instanceof Error
+                ? error.message
+                : "Failed to download report. Please try again."
+            setDownloadError(message)
         } finally {
             setDownloading(null)
         }
@@ -125,6 +126,16 @@ export default function ReportsPage() {
                     Refresh Reports
                 </Button>
             </div>
+
+            {downloadError && (
+                <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-sm font-medium">Report download failed</p>
+                        <p className="text-sm mt-1">{downloadError}</p>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
                 {reportCards.map((report) => (

@@ -7,6 +7,7 @@ import { IRole, Role } from '../roles/role.model';
 import { AppError } from '../../common/errors/app-error';
 import { OAuth2Client } from 'google-auth-library';
 import { env } from '../../config/env';
+import { normalizeRoleName } from '../../common/utils/auth-user.util';
 
 const client = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
@@ -28,7 +29,7 @@ export class AuthService {
         }
 
         // Default to 'User' if no role assigned
-        const roleName = employee.role_id ? employee.role_id.role_name : 'User';
+        const roleName = normalizeRoleName(employee.role_id ? employee.role_id.role_name : 'User');
 
         const payload: TokenPayload = {
             employeeId: employee._id.toString(),
@@ -79,7 +80,7 @@ export class AuthService {
                 await employee.save();
             }
 
-            const roleName = employee.role_id ? employee.role_id.role_name : 'User';
+            const roleName = normalizeRoleName(employee.role_id ? employee.role_id.role_name : 'User');
 
             const payload: TokenPayload = {
                 employeeId: employee._id.toString(),

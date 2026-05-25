@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { api } from "./api"
+import { normalizeRoleName } from "./role-utils"
 
-export type Role = "Admin" | "ProjectManager" | "Employee" | "Project Manager" | "User" | "Frontend Developer" | "Backend Developer" | "Full Stack Engineer" | string
+export type Role = "Admin" | "Project Manager" | "Employee" | "User" | string
 
 export interface User {
     id: string
@@ -13,8 +14,8 @@ export interface User {
 
 interface AuthContextType {
     user: User | null
-    login: (email: string, passwordString: string) => Promise<void>
-    googleLogin: (idToken: string) => Promise<void>
+    login: (email: string, passwordString: string) => Promise<User>
+    googleLogin: (idToken: string) => Promise<User>
     logout: () => void
     isLoading: boolean
 }
@@ -28,7 +29,8 @@ function loadUserFromStorage(): User | null {
     try {
         const stored = localStorage.getItem(STORAGE_KEY)
         if (stored) {
-            return JSON.parse(stored) as User
+            const parsed = JSON.parse(stored) as User
+            return { ...parsed, role: normalizeRoleName(parsed.role) }
         }
     } catch {
         // Ignore parse errors
@@ -66,10 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     id: userData.id,
                     name: `${userData.firstName} ${userData.lastName}`.trim(),
                     email: userData.email,
-                    role: userData.role as Role,
+                    role: normalizeRoleName(userData.role) as Role,
                 }
                 
                 setUser(mappedUser)
+                return mappedUser
             } else {
                 throw new Error(response.data?.message || 'Login failed')
             }
@@ -91,10 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     id: userData.id,
                     name: `${userData.firstName} ${userData.lastName}`.trim(),
                     email: userData.email,
-                    role: userData.role as Role,
+                    role: normalizeRoleName(userData.role) as Role,
                 }
                 
                 setUser(mappedUser)
+                return mappedUser
             } else {
                 throw new Error(response.data?.message || 'Google login failed')
             }

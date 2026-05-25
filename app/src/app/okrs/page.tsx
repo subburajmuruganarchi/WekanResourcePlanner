@@ -62,7 +62,7 @@ function getStatusBadge(status: string): { bg: string; text: string } {
 
 export default function OkrsPage() {
     const { user } = useAuth()
-    const canCreate = user?.role === "Admin" || user?.role === "ProjectManager"
+    const canCreate = user?.role === "Admin" || user?.role === "Project Manager"
     const canEdit = canCreate
     const canDelete = user?.role === "Admin"
     const canUpdateProgress = true // All roles can update their own OKR progress

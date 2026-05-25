@@ -1,9 +1,16 @@
+import { recordApiFailure } from './error-tracker';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 interface ApiResponse<T> {
     status: 'success' | 'error';
     data?: T;
     message?: string;
+    requestId?: string;
+}
+
+function currentRoute(): string {
+    return typeof window !== 'undefined' ? window.location.pathname : '';
 }
 
 async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -17,13 +24,30 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
         headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers,
-    });
+    let response: Response;
+    try {
+        response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            ...options,
+            headers,
+        });
+    } catch (networkErr) {
+        const message = networkErr instanceof Error ? networkErr.message : 'Network error';
+        recordApiFailure({
+            endpoint,
+            status: 0,
+            message,
+            route: currentRoute(),
+        });
+        throw new Error(message);
+    }
 
-    // Handle 401 Unauthorized globally for fetch API as well
     if (response.status === 401) {
+        recordApiFailure({
+            endpoint,
+            status: 401,
+            message: 'Unauthorized',
+            route: currentRoute(),
+        });
         localStorage.removeItem('r360_auth_token');
         localStorage.removeItem('r360_auth_user');
         if (window.location.pathname !== '/login') {
@@ -32,13 +56,31 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
         throw new Error('Unauthorized');
     }
 
-    const json: ApiResponse<T> & T = await response.json();
-
-    if (!response.ok || (json.status && json.status === 'error')) {
-        throw new Error(json.message || 'API request failed');
+    let json: ApiResponse<T> & T;
+    try {
+        json = await response.json();
+    } catch {
+        const message = 'Invalid API response';
+        recordApiFailure({
+            endpoint,
+            status: response.status,
+            message,
+            route: currentRoute(),
+        });
+        throw new Error(message);
     }
 
-    // If json has a data field, return it, otherwise return the whole object (for non-wrapped responses)
+    if (!response.ok || (json.status && json.status === 'error')) {
+        const message = json.message || 'API request failed';
+        recordApiFailure({
+            endpoint,
+            status: response.status,
+            message,
+            route: currentRoute(),
+        });
+        throw new Error(message);
+    }
+
     return (json.data !== undefined ? json.data : json) as T;
 }
 
@@ -50,6 +92,9 @@ export const api = {
         fetchApi<T>(endpoint, { method: 'PUT', body: JSON.stringify(data) }),
     patch: <T>(endpoint: string, data: unknown) =>
         fetchApi<T>(endpoint, { method: 'PATCH', body: JSON.stringify(data) }),
-    delete: <T>(endpoint: string) =>
-        fetchApi<T>(endpoint, { method: 'DELETE' }),
+    delete: <T>(endpoint: string, data?: unknown) =>
+        fetchApi<T>(endpoint, {
+            method: 'DELETE',
+            ...(data !== undefined ? { body: JSON.stringify(data) } : {}),
+        }),
 };

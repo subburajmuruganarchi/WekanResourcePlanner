@@ -8,6 +8,7 @@ import { ArrowLeft, Users, Calendar, Clock, DollarSign, Loader2 } from "lucide-r
 import { useProject } from "@/lib/use-projects"
 import { useAuth } from "@/lib/auth-context"
 import { TimesheetApprovalsTab } from "./components/timesheet-approvals-tab"
+import { StaffingRiskBadge } from "@/components/ai/staffing-risk-badge"
 
 export function ProjectDetail() {
     const navigate = useNavigate()
@@ -70,6 +71,7 @@ export function ProjectDetail() {
                             <Badge variant={project.priority === "High" ? "warning" : project.priority === "Low" ? "secondary" : "default"}>
                                 {project.priority} Priority
                             </Badge>
+                            {id && <StaffingRiskBadge projectId={id} />}
                         </div>
                         <p className="font-mono text-sm text-gray-500">{project.code}</p>
                     </div>

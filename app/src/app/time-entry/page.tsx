@@ -11,7 +11,9 @@ import { Badge } from "@/components/ui/badge"
 import { useTimeEntries } from "@/lib/use-time-entries"
 import { useEmployees } from "@/lib/use-employees"
 import { useProjects } from "@/lib/use-projects"
+import { useAuth } from "@/lib/auth-context"
 import { api } from "@/lib/api-client"
+import { fetchTimeEntrySuggestions, type TimeEntrySuggestions } from "@/lib/use-ai-insights"
 
 interface TimeCodeResponse {
     id: string
@@ -22,6 +24,7 @@ interface TimeCodeResponse {
 
 interface DayEntry {
     tempId: string
+    serverEntryId?: string
     projectCode: string
     hours: number
     comments: string
@@ -95,18 +98,30 @@ export function TimeEntry() {
     const [dailyForecast, setDailyForecast] = useState<DailyForecastData | null>(null)
     const [submitError, setSubmitError] = useState<string | null>(null)
     const [submitSuccess, setSubmitSuccess] = useState(false)
+    const [submitWarnings, setSubmitWarnings] = useState<string[]>([])
+    const [suggestions, setSuggestions] = useState<TimeEntrySuggestions | null>(null)
+    const [allocationEstimates, setAllocationEstimates] = useState<{
+        totalEstimated: number
+        byProject: { projectName: string; estimatedHours: number; percentage: number }[]
+    } | null>(null)
     const [timeCodeId, setTimeCodeId] = useState<string | null>(null)
 
-    const { submitTimeEntry, loading } = useTimeEntries()
+    const { user } = useAuth()
+    const isSelfOnly = user?.role === 'Employee' || user?.role === 'User'
+    const { submitTimeEntry, submitWeeklyTimesheet, deleteTimeEntry, loading } = useTimeEntries()
     const { employees, loading: loadingEmployees } = useEmployees()
     const { projects, loading: loadingProjects } = useProjects()
 
-    // Initialize selected employee
+    // Initialize selected employee (employees locked to self)
     useEffect(() => {
+        if (isSelfOnly && user?.id) {
+            setSelectedEmployeeId(user.id)
+            return
+        }
         if (employees.length > 0 && !selectedEmployeeId) {
             setSelectedEmployeeId(employees[0].id)
         }
-    }, [employees, selectedEmployeeId])
+    }, [employees, selectedEmployeeId, isSelfOnly, user?.id])
 
     // Fetch time code
     useEffect(() => {
@@ -141,6 +156,7 @@ export function TimeEntry() {
                     .filter(e => e.date === day.fullDate)
                     .map(e => ({
                         tempId: generateTempId(),
+                        serverEntryId: e.id,
                         projectCode: projectIdToCode[e.projectId] || '',
                         hours: e.hours,
                         comments: e.comments || '',
@@ -171,6 +187,15 @@ export function TimeEntry() {
     useEffect(() => {
         fetchDailyForecast()
     }, [fetchDailyForecast])
+
+    useEffect(() => {
+        if (!selectedEmployeeId || weekDates.length === 0) return
+        fetchTimeEntrySuggestions(selectedEmployeeId, weekDates[0].fullDate).then(setSuggestions)
+        const weekStart = weekDates[0].fullDate
+        api.get<{ totalEstimated: number; byProject: { projectName: string; estimatedHours: number; percentage: number }[] }>(
+            `/time-entries/estimates?employeeId=${selectedEmployeeId}&week=${weekStart}`
+        ).then(setAllocationEstimates).catch(() => setAllocationEstimates(null))
+    }, [selectedEmployeeId, weekDates])
 
     // Clear success/error messages after a delay
     useEffect(() => {
@@ -230,13 +255,21 @@ export function TimeEntry() {
         ))
     }, [])
 
-    const removeEntry = useCallback((dayIndex: number, tempId: string) => {
+    const removeEntry = useCallback(async (dayIndex: number, tempId: string) => {
+        const entry = weekData[dayIndex]?.entries.find(e => e.tempId === tempId)
+        if (entry?.serverEntryId && selectedEmployeeId) {
+            try {
+                await deleteTimeEntry(entry.serverEntryId, selectedEmployeeId)
+            } catch {
+                return
+            }
+        }
         setWeekData(prev => prev.map((day, i) =>
             i === dayIndex
                 ? { ...day, entries: day.entries.filter(e => e.tempId !== tempId) }
                 : day
         ))
-    }, [])
+    }, [weekData, selectedEmployeeId, deleteTimeEntry])
 
     const updateEntry = useCallback((dayIndex: number, tempId: string, field: keyof DayEntry, value: string | number) => {
         setWeekData(prev => prev.map((day, i) =>
@@ -259,6 +292,7 @@ export function TimeEntry() {
     const handleSubmit = async () => {
         setSubmitError(null)
         setSubmitSuccess(false)
+        setSubmitWarnings([])
 
         if (!selectedEmployee) {
             setSubmitError("No employee selected.")
@@ -276,33 +310,64 @@ export function TimeEntry() {
             return
         }
 
-        try {
-            for (const entry of allEntries) {
-                const projectId = getProjectId(entry.projectCode)
-                if (!projectId) continue
-                if (!timeCodeId) {
-                    setSubmitError("Time code not configured.")
-                    return
-                }
+        if (!timeCodeId) {
+            setSubmitError("Time code not configured.")
+            return
+        }
 
-                await submitTimeEntry({
-                    employeeId: selectedEmployee.id,
-                    projectId,
-                    timeCodeId,
-                    date: entry.fullDate,
-                    hours: entry.hours,
-                    comments: entry.comments || undefined,
-                })
+        const invalidRows: { projectCode: string; date: string }[] = []
+        const entriesToSave: typeof allEntries = []
+
+        for (const entry of allEntries) {
+            const projectId = getProjectId(entry.projectCode)
+            if (!projectId) {
+                invalidRows.push({ projectCode: entry.projectCode, date: entry.fullDate })
+                continue
             }
+            entriesToSave.push(entry)
+        }
+
+        if (invalidRows.length > 0) {
+            const lines = invalidRows.map(
+                (r) => `${r.projectCode} on ${r.date}`
+            )
+            setSubmitError(
+                `${invalidRows.length} ${invalidRows.length === 1 ? 'entry' : 'entries'} skipped due to invalid project configuration: ${lines.join('; ')}. Fix project codes before submitting.`
+            )
+            return
+        }
+
+        try {
+            for (const entry of entriesToSave) {
+                const projectId = getProjectId(entry.projectCode)!
+                try {
+                    await submitTimeEntry({
+                        employeeId: selectedEmployee.id,
+                        projectId,
+                        timeCodeId,
+                        date: entry.fullDate,
+                        hours: entry.hours,
+                        comments: entry.comments || undefined,
+                    })
+                } catch (saveErr) {
+                    const detail = saveErr instanceof Error ? saveErr.message : 'Unknown error'
+                    throw new Error(
+                        `Failed to save ${entry.projectCode} on ${entry.fullDate}: ${detail}`
+                    )
+                }
+            }
+
+            const weekStart = weekDates[0].fullDate
+            const submitResult = await submitWeeklyTimesheet(selectedEmployee.id, weekStart)
+
             setSubmitSuccess(true)
-            // Reload EVERYTHING from the server to ensure consistency
+            setSubmitWarnings(submitResult.warnings ?? [])
             await Promise.all([fetchSavedEntries(), fetchDailyForecast()])
         } catch (err) {
-            if (err instanceof Error) {
-                setSubmitError(err.message)
-            } else {
-                setSubmitError("Failed to submit time entries")
-            }
+            const detail = err instanceof Error ? err.message : 'Unknown error'
+            setSubmitError(
+                `Unable to save all entries. Timesheet not submitted. ${detail}`
+            )
         }
     }
 
@@ -329,22 +394,34 @@ export function TimeEntry() {
 
     return (
         <PageContainer className="space-y-6">
+            {isSelfOnly && (
+                <Card className="p-4 border-brand-100 bg-brand-50/40">
+                    <p className="text-sm text-gray-800">
+                        <strong>Welcome, {user?.name}.</strong> Log your hours for the week, then submit for PM approval.
+                        Track OKRs from the sidebar when needed.
+                    </p>
+                </Card>
+            )}
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-semibold text-gray-900">Weekly Time Entry</h1>
                     <div className="flex items-center gap-4 mt-1">
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-gray-600">Employee:</span>
-                            <Select value={selectedEmployeeId} onValueChange={handleEmployeeChange}>
-                                <SelectTrigger className="h-8 w-[200px]">
-                                    <SelectValue placeholder="Select employee" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {employees.map(emp => (
-                                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            {isSelfOnly ? (
+                                <span className="text-sm font-medium text-gray-900">{user?.name}</span>
+                            ) : (
+                                <Select value={selectedEmployeeId} onValueChange={handleEmployeeChange}>
+                                    <SelectTrigger className="h-8 w-[200px]">
+                                        <SelectValue placeholder="Select employee" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {employees.map(emp => (
+                                            <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
                         </div>
                         <Badge variant="warning">Draft</Badge>
                     </div>
@@ -376,8 +453,48 @@ export function TimeEntry() {
                         <Clock className="w-5 h-5 text-green-500 mt-0.5" />
                         <div>
                             <h4 className="font-medium text-green-900 text-sm">Timesheet Submitted</h4>
-                            <p className="text-sm text-green-700 mt-1">Your time entries have been saved successfully.</p>
+                            <p className="text-sm text-green-700 mt-1">
+                                Entries saved and submitted for PM approval.
+                            </p>
+                            {submitWarnings.length > 0 && (
+                                <ul className="text-sm text-amber-700 mt-2 list-disc pl-4">
+                                    {submitWarnings.map((w, i) => (
+                                        <li key={i}>{w}</li>
+                                    ))}
+                                </ul>
+                            )}
                         </div>
+                    </div>
+                </Card>
+            )}
+
+            {allocationEstimates && allocationEstimates.byProject.length > 0 && (
+                <Card className="p-4 border-gray-200">
+                    <h4 className="text-sm font-semibold text-gray-900 mb-2">Allocation estimates (this week)</h4>
+                    <p className="text-xs text-gray-600 mb-2">
+                        Expected ~{allocationEstimates.totalEstimated}h from active allocations
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        {allocationEstimates.byProject.map((p, i) => (
+                            <span key={i} className="text-xs px-2 py-1 bg-gray-100 rounded-md">
+                                {p.projectName}: {p.estimatedHours}h ({p.percentage}%)
+                            </span>
+                        ))}
+                    </div>
+                </Card>
+            )}
+
+            {suggestions && suggestions.days.length > 0 && (
+                <Card className="p-4 border-blue-100 bg-blue-50/30">
+                    <h4 className="text-sm font-semibold text-gray-900 mb-1">Suggested hours (confirm manually)</h4>
+                    <p className="text-xs text-gray-600 mb-3">{suggestions.narrative}</p>
+                    <div className="flex flex-wrap gap-2">
+                        {suggestions.days.map((d) => (
+                            <div key={d.date} className="text-xs px-2 py-1 bg-white border rounded-md">
+                                {d.date}: <strong>{d.suggestedHours}h</strong>
+                                <span className="text-gray-400 ml-1">({d.source})</span>
+                            </div>
+                        ))}
                     </div>
                 </Card>
             )}
