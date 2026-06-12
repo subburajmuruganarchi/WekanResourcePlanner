@@ -47,7 +47,7 @@ const allowedOrigins =
               'http://localhost:5173',
               'http://localhost:3000',
               'http://127.0.0.1:5173',
-              "https://wekan-resource-planner-r4yzvl2t9-subburajm-3775s-projects.vercel.app",
+              "https://wekan-resource-planner-parypq8iw-subburajm-3775s-projects.vercel.app",
               frontendOrigin,
           ];
 
