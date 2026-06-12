@@ -1,0 +1,18 @@
+{
+    "skillRequirements": [
+        {
+            "skillId": "69868ab41e2ead422e97257e",
+            "minSkillLevel": "Expert",
+            "requiredHeadcount": 3,
+            "requiredDays": 120
+        },
+        {
+            "skillId": "69868ab41e2ead422e97257f",
+            "minSkillLevel": "Intermediate",
+            "requiredHeadcount": 2,
+            "requiredDays": 90
+        }
+    ],
+    "businessGoal": "Complete redesign of the e-commerce platform with improved UX and performance",
+    "staffingStrategy": "BestFit"
+}

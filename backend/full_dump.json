@@ -1,0 +1,455 @@
+{
+  "roles": [
+    {
+      "id": "6986cb6f02fb311a9c0578bf",
+      "name": "Frontend Engineer"
+    },
+    {
+      "id": "6986cb6f02fb311a9c0578c0",
+      "name": "Backend Engineer"
+    },
+    {
+      "id": "6986cb6f02fb311a9c0578c1",
+      "name": "Full Stack Engineer"
+    },
+    {
+      "id": "699c6de82a314fa64e42b2f7",
+      "name": "DevOps Engineer"
+    },
+    {
+      "id": "699c6de82a314fa64e42b2fa",
+      "name": "QA Engineer"
+    },
+    {
+      "id": "699c6de82a314fa64e42b2fd",
+      "name": "Project Manager"
+    },
+    {
+      "id": "69afef57689f363b6e2e8c6c",
+      "name": "Admin"
+    },
+    {
+      "id": "69b7e301f68556cf3273782b",
+      "name": "Architect"
+    },
+    {
+      "id": "69b7e302f68556cf3273782f",
+      "name": "Associate Architect"
+    },
+    {
+      "id": "69b7e302f68556cf32737833",
+      "name": "SDE III (Full Stack)"
+    },
+    {
+      "id": "69b7e302f68556cf32737836",
+      "name": "SDE II (Full Stack)"
+    },
+    {
+      "id": "69b7e302f68556cf32737839",
+      "name": "SDE II (Backend)"
+    },
+    {
+      "id": "69b7e302f68556cf3273783c",
+      "name": "SDE II (Frontend)"
+    },
+    {
+      "id": "69b7e302f68556cf3273783f",
+      "name": "SDE (Frontend)"
+    },
+    {
+      "id": "69b7e302f68556cf32737842",
+      "name": "DBA"
+    },
+    {
+      "id": "69b7e302f68556cf32737845",
+      "name": "Mobile Architect"
+    },
+    {
+      "id": "69b7e302f68556cf32737848",
+      "name": "SDE III (Mobile)"
+    },
+    {
+      "id": "69b7e302f68556cf3273784b",
+      "name": "SDE II (Mobile)"
+    },
+    {
+      "id": "69b7e302f68556cf3273784e",
+      "name": "SDE (Mobile)"
+    },
+    {
+      "id": "69b7e32b7796d3dd1241a1a5",
+      "name": "SDE (Backend)"
+    },
+    {
+      "id": "69b7e32b7796d3dd1241a1a8",
+      "name": "SDE III (Backend)"
+    },
+    {
+      "id": "69b7e32b7796d3dd1241a1ab",
+      "name": "MongoDB Database Administrator"
+    },
+    {
+      "id": "69b7e32b7796d3dd1241a1ae",
+      "name": "SDE (Full Stack)"
+    },
+    {
+      "id": "69b7e32b7796d3dd1241a1b1",
+      "name": "SDE II (MERN)"
+    },
+    {
+      "id": "69b7e32b7796d3dd1241a1b4",
+      "name": "Chief Architect"
+    },
+    {
+      "id": "69b7e32b7796d3dd1241a1b7",
+      "name": "SDE III (Frontend)"
+    },
+    {
+      "id": "69b7e32b7796d3dd1241a1ba",
+      "name": "undefined"
+    },
+    {
+      "id": "69b8380638a08fca4d778d20",
+      "name": "Product Manager"
+    }
+  ],
+  "employees": [
+    {
+      "id": "69b7e3454b583d52c603fe0f",
+      "name": "Babu Reddy",
+      "email": "babur@wekancode.com",
+      "role": "Architect",
+      "role_id": "69b7e301f68556cf3273782b"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe11",
+      "name": "Ashwin S",
+      "email": "ashwins@wekancode.com",
+      "role": "Associate Architect",
+      "role_id": "69b7e302f68556cf3273782f"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe13",
+      "name": "Shyam Kumar",
+      "email": "shyamk@wekancode.com",
+      "role": "Associate Architect",
+      "role_id": "69b7e302f68556cf3273782f"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe15",
+      "name": "Abhishek Kumar",
+      "email": "abhishekk@wekancode.com",
+      "role": "Associate Architect",
+      "role_id": "69b7e302f68556cf3273782f"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe17",
+      "name": "Abhishek Pandit",
+      "email": "abhishekp@wekancode.com",
+      "role": "SDE III (Full Stack)",
+      "role_id": "69b7e302f68556cf32737833"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe19",
+      "name": "Satnam Singh",
+      "email": "satnams@wekancode.com",
+      "role": "SDE II (Full Stack)",
+      "role_id": "69b7e302f68556cf32737836"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe1b",
+      "name": "Navarathinam C",
+      "email": "navarathinamc@wekancode.com",
+      "role": "SDE II (Full Stack)",
+      "role_id": "69b7e302f68556cf32737836"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe1d",
+      "name": "Shashikumar D E",
+      "email": "shashik@wekancode.com",
+      "role": "SDE II (Backend)",
+      "role_id": "69b7e302f68556cf32737839"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe1f",
+      "name": "Shivathanu G C",
+      "email": "shivathanug@wekancode.com",
+      "role": "SDE II (Full Stack)",
+      "role_id": "69b7e302f68556cf32737836"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe21",
+      "name": "Ashwini Shekhawat",
+      "email": "ashwinis@wekancode.com",
+      "role": "SDE II (Full Stack)",
+      "role_id": "69b7e302f68556cf32737836"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe23",
+      "name": "Tarun Teja",
+      "email": "tarunt@wekancode.com",
+      "role": "SDE II (Backend)",
+      "role_id": "69b7e302f68556cf32737839"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe25",
+      "name": "Kavinkumaar P B",
+      "email": "kavink@wekancode.com",
+      "role": "SDE II (Backend)",
+      "role_id": "69b7e302f68556cf32737839"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe27",
+      "name": "Shubham Singh",
+      "email": "shubhamsingh@wekancode.com",
+      "role": "SDE II (Full Stack)",
+      "role_id": "69b7e302f68556cf32737836"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe29",
+      "name": "Naga Kartheek Yejandla",
+      "email": "nagakartheek@wekancode.com",
+      "role": "SDE II (Backend)",
+      "role_id": "69b7e302f68556cf32737839"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe2b",
+      "name": "Sharma S",
+      "email": "sharmas@wekancode.com",
+      "role": "SDE II (Full Stack)",
+      "role_id": "69b7e302f68556cf32737836"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe2d",
+      "name": "Anand Shirahatti",
+      "email": "anands@wekancode.com",
+      "role": "SDE II (Backend)",
+      "role_id": "69b7e302f68556cf32737839"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe2f",
+      "name": "Sanjay Verma",
+      "email": "sanjayv@wekancode.com",
+      "role": "SDE II (Backend)",
+      "role_id": "69b7e302f68556cf32737839"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe31",
+      "name": "Geetha B",
+      "email": "geethab@wekancode.com",
+      "role": "SDE II (Backend)",
+      "role_id": "69b7e302f68556cf32737839"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe33",
+      "name": "Bhavani Devi Yathapu",
+      "email": "bhavanid@wekan.company",
+      "role": "SDE II (Backend)",
+      "role_id": "69b7e302f68556cf32737839"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe35",
+      "name": "Pallav Tripathi",
+      "email": "pallavt@wekancode.com",
+      "role": "SDE II (Frontend)",
+      "role_id": "69b7e302f68556cf3273783c"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe37",
+      "name": "Anurag Tripathi",
+      "email": "anuragt@wekancode.com",
+      "role": "SDE II (Frontend)",
+      "role_id": "69b7e302f68556cf3273783c"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe39",
+      "name": "Suresh KK",
+      "email": "sureshk@wekancode.com",
+      "role": "SDE II (Frontend)",
+      "role_id": "69b7e302f68556cf3273783c"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe3b",
+      "name": "Tanmoy Barash",
+      "email": "tanmoyb@wekan.company",
+      "role": "SDE (Frontend)",
+      "role_id": "69b7e302f68556cf3273783f"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe3d",
+      "name": "Priyanshu Yadav",
+      "email": "priyanshuy@wekan.company",
+      "role": "DBA",
+      "role_id": "69b7e302f68556cf32737842"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe3f",
+      "name": "Ramachandra Naragund",
+      "email": "ramachandran@wekancode.com",
+      "role": "Mobile Architect",
+      "role_id": "69b7e302f68556cf32737845"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe41",
+      "name": "Nethaji R",
+      "email": "nethajir@wekancode.com",
+      "role": "SDE III (Mobile)",
+      "role_id": "69b7e302f68556cf32737848"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe43",
+      "name": "Ramachandran A",
+      "email": "ramachandrana@wekancode.com",
+      "role": "SDE II (Mobile)",
+      "role_id": "69b7e302f68556cf3273784b"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe45",
+      "name": "Saipavan Tej",
+      "email": "saipavant@wekan.company",
+      "role": "SDE (Mobile)",
+      "role_id": "69b7e302f68556cf3273784e"
+    },
+    {
+      "id": "69b7e3454b583d52c603fe47",
+      "name": "Heenakousar M Makandar",
+      "email": "heenakousarm@wekancode.com",
+      "role": "SDE II (Mobile)",
+      "role_id": "69b7e302f68556cf3273784b"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe49",
+      "name": "Subburaj Murugan Reddiyar",
+      "email": "subburajm@wekancode.com",
+      "role": "SDE III (Mobile)",
+      "role_id": "69b7e302f68556cf32737848"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe4b",
+      "name": "Sanjay Mali",
+      "email": "sanjaym@wekancode.com",
+      "role": "Mobile Architect",
+      "role_id": "69b7e302f68556cf32737845"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe4d",
+      "name": "Padmanabhan N",
+      "email": "padmanabhann@wekancode.com",
+      "role": "SDE II (Mobile)",
+      "role_id": "69b7e302f68556cf3273784b"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe4f",
+      "name": "Krishna Kumar",
+      "email": "krishnar@wekancode.com",
+      "role": "QA Engineer",
+      "role_id": "699c6de82a314fa64e42b2fa"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe51",
+      "name": "Prem kumar",
+      "email": "premkumark@wekancode.com",
+      "role": "QA Engineer",
+      "role_id": "699c6de82a314fa64e42b2fa"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe53",
+      "name": "Antony M",
+      "email": "antonym@wekancode.com",
+      "role": "QA Engineer",
+      "role_id": "699c6de82a314fa64e42b2fa"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe55",
+      "name": "Shrihari Rao",
+      "email": "shriharir@wekan.company",
+      "role": "SDE (Backend)",
+      "role_id": "69b7e32b7796d3dd1241a1a5"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe57",
+      "name": "Madhivanan B",
+      "email": "madhivananb@wekancode.com",
+      "role": "SDE II (Mobile)",
+      "role_id": "69b7e302f68556cf3273784b"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe59",
+      "name": "Nandish Asangi",
+      "email": "nandisha@wekan.company",
+      "role": "Architect",
+      "role_id": "69b7e301f68556cf3273782b"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe5b",
+      "name": "Ravinder Dahiya",
+      "email": "ravinderd@wekan.company",
+      "role": "SDE III (Backend)",
+      "role_id": "69b7e32b7796d3dd1241a1a8"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe5d",
+      "name": "Tamilarasu Ravi",
+      "email": "tamilarasur@wekan.company",
+      "role": "SDE II (Backend)",
+      "role_id": "69b7e302f68556cf32737839"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe5f",
+      "name": "Sanath Kumar T",
+      "email": "sanathk@wekan.company",
+      "role": "MongoDB Database Administrator",
+      "role_id": "69b7e32b7796d3dd1241a1ab"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe61",
+      "name": "Manish Sharma",
+      "email": "manishs@wekan.company",
+      "role": "SDE III (Full Stack)",
+      "role_id": "69b7e302f68556cf32737833"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe63",
+      "name": "Charumathi K",
+      "email": "charumathik@wekan.company",
+      "role": "SDE (Full Stack)",
+      "role_id": "69b7e32b7796d3dd1241a1ae"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe65",
+      "name": "Dipanshu Jain",
+      "email": "dipanshuj@wekan.company",
+      "role": "SDE II (Backend)",
+      "role_id": "69b7e302f68556cf32737839"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe67",
+      "name": "Lakshmi Prasanna",
+      "email": "lakshmip@wekan.company",
+      "role": "SDE II (Backend)",
+      "role_id": "69b7e302f68556cf32737839"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe69",
+      "name": "Hemant Jadhav",
+      "email": "hemantj@wekan.company",
+      "role": "SDE II (MERN)",
+      "role_id": "69b7e32b7796d3dd1241a1b1"
+    },
+    {
+      "id": "69b7e3464b583d52c603fe6b",
+      "name": "Abhijit Tivari",
+      "email": "abhijitt@wekancode.com",
+      "role": "QA Engineer",
+      "role_id": "699c6de82a314fa64e42b2fa"
+    },
+    {
+      "id": "69b8380738a08fca4d778d4c",
+      "name": "Kevin Jose",
+      "email": "kevinj@wekancode.com",
+      "role": "Admin",
+      "role_id": "69afef57689f363b6e2e8c6c",
+      "google_id": "114287124648069128401"
+    }
+  ]
+}

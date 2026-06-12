@@ -1,0 +1,127 @@
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { api } from "./api"
+import { normalizeRoleName } from "./role-utils"
+
+export type Role = "Admin" | "Project Manager" | "Employee" | "User" | string
+
+export interface User {
+    id: string
+    name: string
+    role: Role
+    email: string
+    avatar?: string
+}
+
+interface AuthContextType {
+    user: User | null
+    login: (email: string, passwordString: string) => Promise<User>
+    googleLogin: (idToken: string) => Promise<User>
+    logout: () => void
+    isLoading: boolean
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+const STORAGE_KEY = "r360_auth_user"
+const TOKEN_KEY = "r360_auth_token"
+
+function loadUserFromStorage(): User | null {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY)
+        if (stored) {
+            const parsed = JSON.parse(stored) as User
+            return { ...parsed, role: normalizeRoleName(parsed.role) }
+        }
+    } catch {
+        // Ignore parse errors
+    }
+    return null
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+    const [user, setUser] = useState<User | null>(() => loadUserFromStorage())
+    const [isLoading, setIsLoading] = useState(false)
+
+    // Persist user to localStorage whenever it changes
+    useEffect(() => {
+        if (user) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(user))
+        } else {
+            localStorage.removeItem(STORAGE_KEY)
+            localStorage.removeItem(TOKEN_KEY)
+        }
+    }, [user])
+
+    const login = async (email: string, passwordString: string) => {
+        setIsLoading(true)
+        try {
+            const response = await api.post('/auth/login', { email, password: passwordString })
+            
+            if (response.data?.status === 'success') {
+                const { token, user: userData } = response.data.data
+                
+                // Save the token securely in local storage
+                localStorage.setItem(TOKEN_KEY, token)
+                
+                // Map backend user to frontend User interface
+                const mappedUser: User = {
+                    id: userData.id,
+                    name: `${userData.firstName} ${userData.lastName}`.trim(),
+                    email: userData.email,
+                    role: normalizeRoleName(userData.role) as Role,
+                }
+                
+                setUser(mappedUser)
+                return mappedUser
+            } else {
+                throw new Error(response.data?.message || 'Login failed')
+            }
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const googleLogin = async (idToken: string) => {
+        setIsLoading(true)
+        try {
+            const response = await api.post('/auth/google-login', { idToken })
+            
+            if (response.data?.status === 'success') {
+                const { token, user: userData } = response.data.data
+                localStorage.setItem(TOKEN_KEY, token)
+                
+                const mappedUser: User = {
+                    id: userData.id,
+                    name: `${userData.firstName} ${userData.lastName}`.trim(),
+                    email: userData.email,
+                    role: normalizeRoleName(userData.role) as Role,
+                }
+                
+                setUser(mappedUser)
+                return mappedUser
+            } else {
+                throw new Error(response.data?.message || 'Google login failed')
+            }
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const logout = () => {
+        setUser(null)
+    }
+
+    return (
+        <AuthContext.Provider value={{ user, login, googleLogin, logout, isLoading }}>
+            {children}
+        </AuthContext.Provider>
+    )
+}
+
+export function useAuth() {
+    const context = useContext(AuthContext)
+    if (context === undefined) {
+        throw new Error("useAuth must be used within an AuthProvider")
+    }
+    return context
+}

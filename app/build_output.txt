@@ -1,0 +1,7 @@
+
+> app@0.0.0 build
+> tsc -b && vite build
+
+src/app/projects/components/project-dialog.tsx(1,20): error TS6133: 'useEffect' is declared but its value is never read.
+src/app/projects/components/project-dialog.tsx(27,94): error TS6196: 'ProjectPriority' is declared but never used.
+src/test_import.ts(1,10): error TS1484: 'SkillLevel' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.

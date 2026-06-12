@@ -1,0 +1,23 @@
+import { Router } from 'express';
+import { projectController } from './project.controller';
+import { requireRole } from '../../common/middleware/role.middleware';
+
+const router = Router();
+
+// All project routes require authentication
+router.use(requireRole());
+
+// GET /api/projects
+router.get('/', (req, res, next) => projectController.list(req, res, next));
+
+// GET /api/projects/:id
+router.get('/:id', (req, res, next) => projectController.getById(req, res, next));
+
+// POST /api/projects
+router.post('/', requireRole('Admin'), (req, res, next) => projectController.create(req, res, next));
+
+// PUT /api/projects/:id
+router.put('/:id', requireRole('Admin', 'Project Manager'), (req, res, next) => projectController.update(req, res, next));
+
+export { router as projectRouter };
+
