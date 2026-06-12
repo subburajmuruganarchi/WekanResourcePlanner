@@ -20,6 +20,9 @@ export interface IProject extends Document {
     // MCP Explainability Fields
     business_goal?: string;
     staffing_strategy?: StaffingStrategy;
+    /** Soft-delete / sync tracking for planner imports. */
+    is_active?: boolean;
+    last_sync_id?: string;
     created_at?: Date;
     updated_at?: Date;
 }
@@ -39,7 +42,9 @@ const ProjectSchema = new Schema<IProject>({
     project_logo: { type: String, trim: true },
     // MCP Explainability Fields
     business_goal: { type: String, trim: true },
-    staffing_strategy: { type: String, enum: Object.values(StaffingStrategy) }
+    staffing_strategy: { type: String, enum: Object.values(StaffingStrategy) },
+    is_active: { type: Boolean, default: true, index: true },
+    last_sync_id: { type: String, index: true, sparse: true }
 }, {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
     collection: 'projects'

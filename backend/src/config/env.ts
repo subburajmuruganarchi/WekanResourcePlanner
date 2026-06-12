@@ -35,6 +35,10 @@ const envSchema = z.object({
         })
         .min(32, 'JWT_SECRET must be at least 32 characters long'),
     GOOGLE_CLIENT_ID: z.string().optional(),
+    /** Shared secret for Google Apps Script → POST /api/google-sheet-sync/webhook */
+    GOOGLE_SHEET_SYNC_SECRET: z.string().min(16).optional(),
+    /** Optional Google Sheet document id for future pull-based sync */
+    GOOGLE_SHEET_ID: z.string().optional(),
     FRONTEND_URL: z
         .string({
             required_error: 'FRONTEND_URL is required for CORS',

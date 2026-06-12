@@ -26,6 +26,7 @@ import { systemRouter } from './modules/system/system.routes';
 import { weeklyAllocationRouter } from './modules/weekly-allocations/weekly-allocation.routes';
 import { utilizationRouter } from './modules/utilization/utilization.routes';
 import { plannerImportRouter } from './modules/planner-import/planner-import.routes';
+import { googleSheetSyncRouter } from './modules/google-sheet-sync/google-sheet-sync.routes';
 
 import './modules/skills/skill.model';
 import './modules/weekly-allocations/weekly-allocation-entry.model';
@@ -46,6 +47,7 @@ const allowedOrigins =
               'http://localhost:5173',
               'http://localhost:3000',
               'http://127.0.0.1:5173',
+              "https://wekan-resource-planner-r4yzvl2t9-subburajm-3775s-projects.vercel.app",
               frontendOrigin,
           ];
 
@@ -149,6 +151,7 @@ app.use('/api/ai', aiRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/system', systemRouter);
 app.use('/api/planner-import', plannerImportRouter);
+app.use('/api/google-sheet-sync', googleSheetSyncRouter);
 
 app.use(errorHandler);
 

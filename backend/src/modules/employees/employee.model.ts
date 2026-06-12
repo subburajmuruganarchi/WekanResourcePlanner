@@ -18,6 +18,8 @@ export interface IEmployee extends Document {
     is_active?: boolean;
     profile_image?: string;  // DB uses 'profile_image' not 'avatar_url'
     google_id?: string;      // For linking Google accounts
+    /** Last planner/Google Sheet sync batch id (soft-delete tracking). */
+    last_sync_id?: string;
     created_at?: Date;
     updated_at?: Date;
 }
@@ -38,7 +40,8 @@ const EmployeeSchema = new Schema<IEmployee>({
     exit_date: { type: Date },
     is_active: { type: Boolean, default: true },
     profile_image: { type: String, trim: true },
-    google_id: { type: String, unique: true, sparse: true, index: true }
+    google_id: { type: String, unique: true, sparse: true, index: true },
+    last_sync_id: { type: String, index: true, sparse: true }
 }, {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
     collection: 'employees'

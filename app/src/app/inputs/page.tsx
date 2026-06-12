@@ -1,7 +1,12 @@
-import { useState } from "react"
-import { Upload, FileSpreadsheet, Loader2, CheckCircle2, AlertCircle } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { Upload, FileSpreadsheet, Loader2, CheckCircle2, AlertCircle, RefreshCw, Cloud } from "lucide-react"
 import { PageContainer } from "@/components/layout/page-container"
 import { api } from "@/lib/api"
+
+interface SkippedRow {
+    identifier: string
+    reason: string
+}
 
 interface ImportResult {
     employeesUpserted: number
@@ -12,6 +17,20 @@ interface ImportResult {
     skills: number
     resourceOnly: boolean
     message: string
+    rowsReceived?: number
+    rowsProcessed?: number
+    rowsSkipped?: number
+    skippedRows?: SkippedRow[]
+    errors?: string[]
+}
+
+interface SheetSyncStatus {
+    sheet: string
+    lastSyncAt: string | null
+    status: string | null
+    rowsProcessed: number
+    rowsSkipped: number
+    errors: string[]
 }
 
 type FileKey = "resource" | "project" | "projectAllocation"
@@ -48,6 +67,28 @@ export default function InputsPage() {
     const [uploading, setUploading] = useState(false)
     const [result, setResult] = useState<ImportResult | null>(null)
     const [error, setError] = useState<string | null>(null)
+
+    const [syncStatus, setSyncStatus] = useState<SheetSyncStatus[]>([])
+    const [syncLoading, setSyncLoading] = useState(false)
+    const [syncMessage, setSyncMessage] = useState<string | null>(null)
+
+    const loadSyncStatus = useCallback(async () => {
+        setSyncLoading(true)
+        try {
+            const res = await api.get<{ data: { sheets: SheetSyncStatus[] } }>(
+                "/google-sheet-sync/status"
+            )
+            setSyncStatus(res.data?.data?.sheets ?? [])
+        } catch {
+            setSyncStatus([])
+        } finally {
+            setSyncLoading(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        loadSyncStatus()
+    }, [loadSyncStatus])
 
     const handleFileChange = (key: FileKey, file: File | undefined) => {
         setFiles((prev) => {
@@ -89,6 +130,7 @@ export default function InputsPage() {
                 { headers: { "Content-Type": "multipart/form-data" } }
             )
             setResult(res.data?.data ?? (res.data as unknown as ImportResult))
+            await loadSyncStatus()
         } catch (err: unknown) {
             const msg =
                 (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
@@ -96,6 +138,23 @@ export default function InputsPage() {
             setError(msg)
         } finally {
             setUploading(false)
+        }
+    }
+
+    const handleSyncNow = async () => {
+        setSyncMessage(null)
+        setSyncLoading(true)
+        try {
+            const res = await api.post<{ message: string }>("/google-sheet-sync/manual")
+            setSyncMessage(res.data?.message ?? "Status refreshed.")
+            await loadSyncStatus()
+        } catch (err: unknown) {
+            const msg =
+                (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+                (err instanceof Error ? err.message : "Could not refresh sync status")
+            setSyncMessage(msg)
+        } finally {
+            setSyncLoading(false)
         }
     }
 
@@ -109,10 +168,81 @@ export default function InputsPage() {
                     <h1 className="text-2xl font-bold text-gray-900">Inputs</h1>
                 </div>
                 <p className="text-gray-600 max-w-2xl">
-                    Upload WeKan Resource Planner Excel files to seed employees, projects, and weekly
-                    allocations. Uploaded files are saved to the server and imported into the database.
+                    Upload WeKan Resource Planner Excel files or sync from Google Sheets to seed
+                    employees, projects, and weekly allocations.
                 </p>
             </div>
+
+            {/* Google Sheet Sync */}
+            <section className="mb-8 p-5 bg-white border border-gray-200 rounded-xl">
+                <div className="flex items-center justify-between gap-4 mb-4">
+                    <div className="flex items-center gap-3">
+                        <Cloud className="w-6 h-6 text-blue-600" />
+                        <h2 className="text-lg font-semibold text-gray-900">Google Sheet Sync</h2>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleSyncNow}
+                        disabled={syncLoading}
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-brand-700 bg-brand-50 rounded-lg hover:bg-brand-100 disabled:opacity-60"
+                    >
+                        {syncLoading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <RefreshCw className="w-4 h-4" />
+                        )}
+                        Sync Now
+                    </button>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                    Sync is push-based from Google Apps Script. Order: Resource → Project →
+                    Project_Allocation. Use Sync Now to refresh status from the server.
+                </p>
+                {syncMessage && (
+                    <p className="text-sm text-gray-700 mb-3 p-3 bg-gray-50 rounded-lg">{syncMessage}</p>
+                )}
+                <div className="grid gap-3 md:grid-cols-3">
+                    {syncStatus.length === 0 && !syncLoading && (
+                        <p className="text-sm text-gray-500 col-span-3">No Google Sheet sync runs yet.</p>
+                    )}
+                    {syncStatus.map((s) => (
+                        <div
+                            key={s.sheet}
+                            className="p-4 border border-gray-100 rounded-lg bg-gray-50/50"
+                        >
+                            <p className="font-medium text-gray-900">{s.sheet}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                                Last sync:{" "}
+                                {s.lastSyncAt
+                                    ? new Date(s.lastSyncAt).toLocaleString()
+                                    : "Never"}
+                            </p>
+                            <p className="text-xs mt-1">
+                                Status:{" "}
+                                <span
+                                    className={
+                                        s.status === "SUCCESS"
+                                            ? "text-green-700"
+                                            : s.status === "FAILED"
+                                              ? "text-red-700"
+                                              : "text-gray-600"
+                                    }
+                                >
+                                    {s.status ?? "—"}
+                                </span>
+                            </p>
+                            <p className="text-xs text-gray-600 mt-1">
+                                Processed: {s.rowsProcessed} · Skipped: {s.rowsSkipped}
+                            </p>
+                            {s.errors.length > 0 && (
+                                <p className="text-xs text-red-600 mt-1 truncate" title={s.errors.join("; ")}>
+                                    {s.errors[0]}
+                                </p>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </section>
 
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-sm text-amber-900">
                 <strong>Recommended order:</strong> Resource → Project → Project Allocation. You can upload
@@ -204,7 +334,27 @@ export default function InputsPage() {
                                 <dt className="text-gray-600">Skills</dt>
                                 <dd className="font-semibold text-gray-900">{result.skills}</dd>
                             </div>
+                            {result.rowsSkipped != null && result.rowsSkipped > 0 && (
+                                <div>
+                                    <dt className="text-gray-600">Rows skipped</dt>
+                                    <dd className="font-semibold text-amber-800">{result.rowsSkipped}</dd>
+                                </div>
+                            )}
                         </dl>
+                        {result.skippedRows && result.skippedRows.length > 0 && (
+                            <details className="mt-3 text-sm">
+                                <summary className="cursor-pointer text-amber-800 font-medium">
+                                    Skipped rows ({result.skippedRows.length})
+                                </summary>
+                                <ul className="mt-2 space-y-1 text-gray-700 max-h-40 overflow-y-auto">
+                                    {result.skippedRows.slice(0, 20).map((s, i) => (
+                                        <li key={i}>
+                                            {s.identifier}: {s.reason}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </details>
+                        )}
                     </div>
                 )}
 
