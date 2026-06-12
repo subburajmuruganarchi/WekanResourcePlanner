@@ -1,84 +1,252 @@
 # R360 Platform
 
-The R360 Platform is a resource management and allocation system designed for modern consultancy operations.
+R360 is a resource management and allocation system for consultancy operations: employees, projects, weekly planning, time entry, PM approvals, utilization, and Excel reports.
 
 ## Architecture
 
-This is a Monorepo containing:
-- **`app/`**: Vite + React 19 Frontend (React Router, Tailwind, Shadcn UI)
-- **`backend/`**: Node.js Backend (Express, Mongoose, TypeScript)
+Monorepo with two deployable apps:
+
+| Path | Stack | Purpose |
+|------|-------|---------|
+| **`app/`** | React 19, Vite 7, TypeScript, Tailwind CSS, React Router | SPA frontend |
+| **`backend/`** | Node.js, Express, TypeScript, Mongoose | REST API |
+
+**Database:** MongoDB (local or [MongoDB Atlas](https://www.mongodb.com/atlas))
+
+```
+Browser → React SPA (static) → Express API (/api/*) → MongoDB
+```
+
+Frontend and backend can be deployed separately. See [DEPLOYMENT.md](./DEPLOYMENT.md) for production.
 
 ## Prerequisites
 
-- Node.js 18+
-- MongoDB (Local or Atlas)
+- **Node.js 18+** (Node 20 recommended)
+- **MongoDB** connection string (`mongodb://` or `mongodb+srv://`)
+- npm
 
-## Quick Start
+## Quick Start (local)
 
-### 1. Backend Setup
+### 1. Backend
 
 ```bash
 cd backend
 npm install
-npm run build
-cp .env.example .env  # Update with your Mongo URI
-npm start
+cp .env.example .env
 ```
 
-### 2. Frontend Setup
+Edit `backend/.env` — minimum required:
+
+```env
+MONGO_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/resource-360?retryWrites=true&w=majority
+JWT_SECRET=replace_with_at_least_32_random_characters
+FRONTEND_URL=http://localhost:5173
+NODE_ENV=development
+PORT=3000
+```
+
+Start API:
+
+```bash
+npm run dev
+```
+
+Verify: [http://localhost:3000/ready](http://localhost:3000/ready) → `"db": "connected"`
+
+### 2. Frontend
 
 ```bash
 cd app
 npm install
-cp .env.example .env.local
+```
+
+Create `app/.env.local`:
+
+```env
+VITE_API_URL=http://localhost:3000/api
+```
+
+Optional (Google login):
+
+```env
+VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+```
+
+Start dev server:
+
+```bash
 npm run dev
 ```
 
-## One-time database migration (role names)
+Open [http://localhost:5173](http://localhost:5173)
 
-If your `roles` collection still has `ProjectManager` (no space), normalize to `Project Manager`:
+### 3. Seed demo data
+
+From `backend/` (with MongoDB reachable):
+
+```bash
+npm run seed:planner
+```
+
+Imports Excel files from `backend/data/planner/`:
+
+- `Resource.xlsx` — employees, roles, skills
+- `Project.xlsx` — projects
+- `Project_Allocation.xlsx` — allocations and weekly grid
+
+**Default logins** (password for all seeded users: `Admin123!`):
+
+| Role | Email |
+|------|--------|
+| Admin | `admin@r360.com` |
+| Project Manager | `pm@r360.com` |
+
+Admins can also upload planner files via **Inputs** in the sidebar (`/inputs`).
+
+## Environment variables
+
+### Backend (`backend/.env`)
+
+| Variable | Required | Notes |
+|----------|----------|--------|
+| `MONGO_URI` or `DATABASE_URL` | Yes | MongoDB connection |
+| `JWT_SECRET` | Yes | Min 32 characters |
+| `FRONTEND_URL` | Yes | SPA origin for CORS (no trailing slash) |
+| `NODE_ENV` | Optional | `development` / `production` |
+| `PORT` | Optional | Default `3000` |
+| `GOOGLE_CLIENT_ID` | Optional | Google OAuth |
+| `FEATURE_WEEKLY_ALLOCATIONS_ENABLED` | Optional | Weekly planner API (`true` to enable) |
+| `FEATURE_UTILIZATION_API_ENABLED` | Optional | Utilization endpoints |
+
+Full list: [`backend/.env.example`](./backend/.env.example)
+
+### Frontend (build-time — Vite)
+
+| Variable | Required | Notes |
+|----------|----------|--------|
+| `VITE_API_URL` | Yes | e.g. `http://localhost:3000/api` |
+| `VITE_GOOGLE_CLIENT_ID` | Optional | Google sign-in button |
+
+See [`app/.env.example`](./app/.env.example)
+
+> `VITE_*` values are baked in at `npm run build`. Set them in your CI/host before building for production.
+
+## Docker (optional)
+
+```bash
+# From repo root — uses backend/.env and builds SPA with local API URL
+docker compose up --build
+```
+
+- API: [http://localhost:3000](http://localhost:3000)
+- Web: [http://localhost:8080](http://localhost:8080)
+
+MongoDB is **not** included in Compose; point `MONGO_URI` in `backend/.env` to Atlas or a local instance.
+
+## Main features
+
+| Area | Routes / API |
+|------|----------------|
+| Dashboard & heatmap | `/dashboard`, `/api/dashboard/*` |
+| Employees & projects | `/projects`, `/api/employees`, `/api/projects` |
+| Resource allocation | `/allocation`, `/api/allocations` |
+| Weekly planner | `/weekly-planner`, `/api/weekly-allocations` |
+| Time entry & PM approvals | `/time-entry`, `/pm-approvals`, `/api/time-entries` |
+| OKRs | `/okrs`, `/api/okrs` |
+| Reports (Excel) | `/reports`, `/api/reports/*` |
+| Admin inputs (Excel upload) | `/inputs`, `/api/planner-import` |
+| Insights & AI (read-only) | `/insights`, `/api/ai/*` |
+| System health | `/system-health`, `/api/system/*` |
+
+**Roles:** Admin, Project Manager, Employee — enforced in API and sidebar.
+
+## Scripts
+
+### Backend
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Dev server with hot reload |
+| `npm run build` | Compile TypeScript → `dist/` |
+| `npm start` | Run production build |
+| `npm test` | Jest unit tests |
+| `npm run seed:planner` | Import planner Excel sheets |
+| `npm run seed:resource` | Import `Resource.xlsx` only |
+| `npm run migrate:roles` | Normalize `ProjectManager` → `Project Manager` |
+| `npm run sync:weekly-legacy` | Sync legacy allocations → weekly grid |
+
+### Frontend
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Vite dev server (:5173) |
+| `npm run build` | Production build → `dist/` |
+| `npm run preview` | Preview production build |
+
+## Database migration (one-time)
+
+If roles still use `ProjectManager` (no space):
 
 ```bash
 cd backend
 npm run migrate:roles
 ```
 
-Have users sign out and back in after migration so JWT roles refresh.
-
-## AI / Insights (read-only)
-
-- Tool APIs under `/api/ai/*` (dashboard summary, allocation explain, staffing risk, approval anomalies, time-entry suggestions)
-- UI: **Insights Center** at `/insights` (replaces legacy `/ai-analytics` mock chat)
-- Global search: `GET /api/search?q=` (header search bar)
-- Ranking and approvals remain deterministic; AI does not write to the database
+Users must log out and back in so JWT roles refresh.
 
 ## Testing
 
-Run backend tests:
 ```bash
 cd backend
 npm test
 ```
 
-## Operational Readiness
+CI (`.github/workflows/validate.yml`) runs `npm run build` for both `backend/` and `app/` on push/PR.
 
-- **Health Check**: `GET /health` (Returns DB status)
-- **Logging**: JSON structured logs in Production.
-- **Correlation**: All requests include `x-request-id` header.
-- **Graceful Shutdown**: Handles SIGTERM/SIGINT to close DB connections safely.
+## Operational readiness
 
-## MCP-Ready Schema Fields
+- **Health:** `GET /health` — process up
+- **Readiness:** `GET /ready` — MongoDB connected
+- **Logging:** Structured JSON logs in production
+- **Tracing:** `x-request-id` on responses
+- **Shutdown:** SIGTERM/SIGINT closes HTTP and DB cleanly
 
-The following fields support MCP (Model Context Protocol) read-only explainability:
+## Deployment
 
-| Collection | Field | Type | Purpose |
-|------------|-------|------|---------|
-| `employees.skills` | `confidenceWeight` | number | Computed: skillType + level + experience |
-| `projects` | `businessGoal` | string | Why this project exists |
-| `projects` | `staffingStrategy` | enum | BestFit / FastFill / CostAware |
-| `project_allocations` | `allocationReason` | string | Why employee was selected |
-| `project_allocations` | `createdByRole` | enum | System / Manager / Admin |
-| `time_entries` | `normalizedHours` | virtual | hours / 8 (workday ratio) |
+Production checklist, CORS, smoke tests, backups:
 
-> **Note**: MCP accesses data via read-only service APIs only. No direct DB writes.
+**[DEPLOYMENT.md](./DEPLOYMENT.md)**
 
+Recommended hosting: MongoDB Atlas + Render/Fly.io (API) + Vercel/Netlify/Cloudflare Pages (SPA).
+
+## Project layout
+
+```
+r360/
+├── app/                 # React SPA (Vite)
+├── backend/
+│   ├── src/             # Express API source
+│   ├── scripts/         # Seed & migration scripts
+│   └── data/planner/    # Default Excel seed files
+├── scripts/             # Mongo backup/restore
+├── docker-compose.yml
+├── DEPLOYMENT.md
+└── README.md
+```
+
+## MCP-ready fields
+
+Fields that support read-only AI explainability:
+
+| Collection | Field | Purpose |
+|------------|-------|---------|
+| `project_allocations` | `allocationReason` | Why an employee was assigned |
+| `project_allocations` | `createdByRole` | Admin / Manager / System |
+| `projects` | `businessGoal` | Project rationale |
+| `projects` | `staffingStrategy` | BestFit / FastFill / CostAware |
+
+AI routes under `/api/ai/*` are read-only; ranking and approvals remain deterministic.
+
+## License
+
+ISC (see `backend/package.json`)
