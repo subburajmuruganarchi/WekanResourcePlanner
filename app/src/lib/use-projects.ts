@@ -65,28 +65,39 @@ export function useProject(id: string | undefined): UseProjectResult {
     const [project, setProject] = useState<Project | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [refreshKey, setRefreshKey] = useState(0);
 
-    const fetchProject = useCallback(async () => {
+    useEffect(() => {
         if (!id) {
             setProject(null);
             setLoading(false);
             return;
         }
+
+        setProject(null);
         setLoading(true);
         setError(null);
-        try {
-            const data = await api.get<Project>(`/projects/${id}`);
-            setProject(data);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to fetch project');
-        } finally {
-            setLoading(false);
-        }
-    }, [id]);
 
-    useEffect(() => {
-        fetchProject();
-    }, [fetchProject]);
+        let cancelled = false;
+        api.get<Project>(`/projects/${id}`)
+            .then((data) => {
+                if (!cancelled) setProject(data);
+            })
+            .catch((err) => {
+                if (!cancelled) {
+                    setError(err instanceof Error ? err.message : 'Failed to fetch project');
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
 
-    return { project, loading, error, refetch: fetchProject };
+        return () => {
+            cancelled = true;
+        };
+    }, [id, refreshKey]);
+
+    const refetch = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+    return { project, loading, error, refetch };
 }

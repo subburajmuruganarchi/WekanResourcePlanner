@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
-import { CheckCircle2, XCircle, Clock, Loader2, AlertCircle, ChevronDown, ChevronRight, MessageSquare } from "lucide-react"
+import { CheckCircle2, XCircle, Clock, Loader2, AlertCircle, ChevronDown, ChevronRight, MessageSquare, ClipboardCheck, Users, FolderKanban } from "lucide-react"
 import { PageContainer } from "@/components/layout/page-container"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -132,11 +132,21 @@ function formatDate(dateStr: string): string {
 
 function weekStatusBadge(status: string) {
     switch (status) {
-        case 'APPROVED': return <Badge className="bg-green-100 text-green-700 text-[10px]">Approved</Badge>
-        case 'PARTIAL_REJECTED': return <Badge className="bg-red-100 text-red-700 text-[10px]">Partial Rejection</Badge>
-        case 'PENDING_APPROVAL': return <Badge className="bg-amber-100 text-amber-700 text-[10px]">Pending Approval</Badge>
-        default: return <Badge variant="outline" className="text-[10px]">Draft</Badge>
+        case 'APPROVED': return <Badge className="bg-green-100 text-green-700 text-xs">Approved</Badge>
+        case 'PARTIAL_REJECTED': return <Badge className="bg-red-100 text-red-700 text-xs">Partial rejection</Badge>
+        case 'PENDING_APPROVAL': return <Badge className="bg-amber-100 text-amber-800 text-xs">Pending approval</Badge>
+        default: return <Badge variant="outline" className="text-xs">Draft</Badge>
     }
+}
+
+function SummaryMetric({ label, value, sub }: { label: string; value: string; sub?: string }) {
+    return (
+        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 min-h-[84px] flex flex-col justify-center">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{label}</p>
+            <p className="text-2xl font-semibold text-gray-900 tabular-nums mt-0.5">{value}</p>
+            {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
+        </div>
+    )
 }
 
 /* ---------- Component ---------- */
@@ -166,9 +176,9 @@ export function PmApprovalsPage() {
             const data = await api.get<PendingEntry[]>('/time-entries/pending-approval')
             setEntries(data)
             fetchApprovalAnomalies().then(setApprovalInsight)
-            // Auto-expand all projects
             const projIds = new Set(data.map(e => e.projectId))
             setExpandedProjects(projIds)
+            setExpandedEmployees(new Set(data.map(e => `${e.projectId}::${e.employeeId}`)))
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load pending approvals')
         } finally {
@@ -179,6 +189,17 @@ export function PmApprovalsPage() {
     useEffect(() => { fetchEntries() }, [fetchEntries])
 
     const grouped = useMemo(() => groupEntries(entries), [entries])
+
+    const summaryStats = useMemo(() => {
+        const employeeIds = new Set(entries.map(e => e.employeeId))
+        const totalHours = entries.reduce((sum, e) => sum + e.hours, 0)
+        return {
+            entryCount: entries.length,
+            projectCount: grouped.length,
+            employeeCount: employeeIds.size,
+            totalHours: Math.round(totalHours * 10) / 10,
+        }
+    }, [entries, grouped.length])
 
     const toggleProject = (id: string) => {
         setExpandedProjects(prev => {
@@ -272,45 +293,59 @@ export function PmApprovalsPage() {
     }
 
     return (
-        <PageContainer className="pl-0 space-y-6">
+        <PageContainer className="space-y-6">
             {/* Header */}
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-semibold text-gray-900">Timesheet Approvals</h1>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <div className="flex items-center gap-2">
+                        <ClipboardCheck className="w-6 h-6 text-brand-600" />
+                        <h1 className="text-2xl font-semibold text-gray-900">Timesheet Approvals</h1>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1 max-w-2xl">
                         {entries.length === 0
-                            ? 'No timesheets pending your approval.'
-                            : `${entries.length} entries across ${grouped.length} project(s) awaiting review.`}
+                            ? isAdminUser
+                                ? 'No submitted timesheets are waiting for approval.'
+                                : 'No timesheets pending your approval.'
+                            : isAdminUser
+                              ? 'Review submitted hours across all projects. As admin you can approve any entry.'
+                              : 'Review and approve submitted hours for projects you manage.'}
                     </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                     {isAdminUser && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-md">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input 
-                                    type="checkbox" 
-                                    checked={isAdminMode} 
-                                    onChange={(e) => setIsAdminMode(e.target.checked)}
-                                    className="w-4 h-4 text-brand-600 rounded border-gray-300 focus:ring-brand-500"
-                                />
-                                <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">Admin Override Mode</span>
-                            </label>
-                            {isAdminMode && (
-                                <input 
-                                    type="text"
-                                    className="w-48 text-xs border border-amber-200 rounded p-1 bg-white ml-2"
-                                    value={overrideReason}
-                                    onChange={(e) => setOverrideReason(e.target.value)}
-                                    placeholder="Reason for override..."
-                                />
-                            )}
-                        </div>
+                        <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                            <input
+                                type="checkbox"
+                                checked={isAdminMode}
+                                onChange={(e) => setIsAdminMode(e.target.checked)}
+                                className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                            />
+                            <span className="font-medium">Override mode</span>
+                        </label>
+                    )}
+                    {isAdminMode && (
+                        <input
+                            type="text"
+                            className="h-9 w-52 text-sm border border-amber-200 rounded-lg px-3 bg-white"
+                            value={overrideReason}
+                            onChange={(e) => setOverrideReason(e.target.value)}
+                            placeholder="Override reason (optional)"
+                        />
                     )}
                     <Button variant="outline" onClick={fetchEntries} disabled={loading}>
                         Refresh
                     </Button>
                 </div>
             </div>
+
+            {entries.length > 0 && (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <SummaryMetric label="Pending entries" value={String(summaryStats.entryCount)} />
+                    <SummaryMetric label="Projects" value={String(summaryStats.projectCount)} />
+                    <SummaryMetric label="Employees" value={String(summaryStats.employeeCount)} />
+                    <SummaryMetric label="Total hours" value={`${summaryStats.totalHours}h`} sub="Awaiting approval" />
+                </div>
+            )}
 
             <ApprovalAnomalyPanel summary={approvalInsight} />
 
@@ -340,39 +375,48 @@ export function PmApprovalsPage() {
 
             {/* Grouped Entries */}
             {grouped.map(project => (
-                <Card key={project.projectId} className="overflow-hidden">
-                    {/* Project Header */}
-                    <button
-                        className="w-full flex items-center justify-between px-6 py-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
-                        onClick={() => toggleProject(project.projectId)}
-                    >
-                        <div className="flex items-center gap-3">
-                            {expandedProjects.has(project.projectId) ? <ChevronDown className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
-                            <div className="text-left">
-                                <h2 className="text-base font-semibold text-gray-900">{project.projectName}</h2>
+                <Card key={project.projectId} className="overflow-hidden border-gray-200 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4 bg-gray-50 border-b border-gray-200">
+                        <button
+                            type="button"
+                            className="flex items-center gap-3 min-w-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded-md"
+                            onClick={() => toggleProject(project.projectId)}
+                        >
+                            {expandedProjects.has(project.projectId) ? (
+                                <ChevronDown className="w-5 h-5 text-gray-400 shrink-0" />
+                            ) : (
+                                <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
+                            )}
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <FolderKanban className="w-4 h-4 text-brand-600 shrink-0" />
+                                    <h2 className="text-base font-semibold text-gray-900 truncate">{project.projectName}</h2>
+                                </div>
                                 <span className="text-xs text-gray-500">{project.projectCode}</span>
                             </div>
-                        </div>
-                        <div className="flex items-center gap-4">
+                        </button>
+                        <div className="flex items-center gap-2 shrink-0 sm:ml-auto">
                             <Badge variant="outline" className="text-xs">{project.entryCount} entries</Badge>
-                            <Badge className="bg-brand-50 text-brand-700 border-brand-200">{project.totalHours.toFixed(1)}h</Badge>
+                            <Badge className="bg-brand-50 text-brand-700 border-brand-200 text-xs">{project.totalHours.toFixed(1)}h</Badge>
                             <Button
                                 size="sm"
-                                className="bg-green-600 hover:bg-green-700 text-white text-xs"
+                                className="bg-green-600 hover:bg-green-700 text-white h-8"
                                 disabled={!!actionLoading}
-                                onClick={(e) => {
-                                    e.stopPropagation()
+                                onClick={() => {
                                     const allIds = project.employees.flatMap(emp => emp.weeks.flatMap(w => w.entries.map(e => e.id)))
                                     handleApproveAll(allIds, project.projectId)
                                 }}
                             >
-                                {actionLoading === `approve-all-${project.projectId}` ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
-                                Approve All
+                                {actionLoading === `approve-all-${project.projectId}` ? (
+                                    <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                                ) : (
+                                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                )}
+                                Approve all
                             </Button>
                         </div>
-                    </button>
+                    </div>
 
-                    {/* Project Body */}
                     {expandedProjects.has(project.projectId) && (
                         <div className="divide-y divide-gray-100">
                             {project.employees.map(emp => {
@@ -380,147 +424,155 @@ export function PmApprovalsPage() {
                                 const isExpanded = expandedEmployees.has(empKey)
 
                                 return (
-                                    <div key={empKey}>
-                                        {/* Employee Header */}
+                                    <div key={empKey} className="bg-white">
                                         <button
-                                            className="w-full flex items-center justify-between px-6 py-3 hover:bg-gray-50 transition-colors cursor-pointer"
+                                            type="button"
+                                            className="w-full flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-gray-50/80 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/30"
                                             onClick={() => toggleEmployee(empKey)}
                                         >
-                                            <div className="flex items-center gap-3">
-                                                {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                                                <div className="w-8 h-8 bg-brand-100 rounded-full flex items-center justify-center text-xs font-medium text-brand-700">
-                                                    {emp.employeeName.split(' ').map(n => n[0]).join('')}
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                {isExpanded ? (
+                                                    <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                                                ) : (
+                                                    <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+                                                )}
+                                                <div className="w-9 h-9 bg-brand-100 rounded-full flex items-center justify-center text-xs font-semibold text-brand-700 shrink-0">
+                                                    {emp.employeeName.split(' ').map(n => n[0]).join('').slice(0, 2)}
                                                 </div>
-                                                <div className="text-left">
-                                                    <p className="text-sm font-medium text-gray-900">{emp.employeeName}</p>
-                                                    <p className="text-xs text-gray-400">{emp.employeeEmail}</p>
+                                                <div className="min-w-0 text-left">
+                                                    <p className="text-sm font-medium text-gray-900 truncate">{emp.employeeName}</p>
+                                                    <p className="text-xs text-gray-500 truncate">{emp.employeeEmail}</p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-sm text-gray-600 font-medium">{emp.totalHours.toFixed(1)}h total</span>
-                                                <Badge variant="outline" className="text-xs">{emp.weeks.length} week(s)</Badge>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <span className="text-sm text-gray-700 font-medium tabular-nums">{emp.totalHours.toFixed(1)}h</span>
+                                                <Badge variant="outline" className="text-xs">{emp.weeks.length} week{emp.weeks.length === 1 ? '' : 's'}</Badge>
                                             </div>
                                         </button>
 
-                                        {/* Weekly Entries Table */}
                                         {isExpanded && emp.weeks.map(week => (
-                                            <div key={week.weekStartDate} className="mx-6 mb-4 border border-gray-200 rounded-lg overflow-hidden">
-                                                {/* Week Header */}
-                                                <div className="flex items-center justify-between px-4 py-2 bg-blue-50 border-b border-blue-100">
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="text-xs font-medium text-blue-800">
+                                            <div key={week.weekStartDate} className="mx-5 mb-4 border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 bg-slate-50 border-b border-gray-200">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <Users className="w-4 h-4 text-slate-500" />
+                                                        <span className="text-sm font-medium text-gray-900">
                                                             Week of {formatWeek(week.weekStartDate)}
                                                         </span>
                                                         {weekStatusBadge(week.weekStatus)}
                                                     </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <Badge className="bg-blue-100 text-blue-700 text-xs">{week.totalHours.toFixed(1)}h</Badge>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <Badge variant="outline" className="text-xs tabular-nums">{week.totalHours.toFixed(1)}h</Badge>
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
-                                                            className="text-xs h-6 border-green-300 text-green-700 hover:bg-green-50"
+                                                            className="h-8 border-green-300 text-green-700 hover:bg-green-50"
                                                             disabled={!!actionLoading}
                                                             onClick={() => handleApproveAll(week.entries.map(e => e.id), `${empKey}::${week.weekStartDate}`)}
                                                         >
-                                                            {actionLoading === `approve-all-${empKey}::${week.weekStartDate}` ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Approve Week'}
+                                                            {actionLoading === `approve-all-${empKey}::${week.weekStartDate}` ? (
+                                                                <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                                                            ) : (
+                                                                <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                                            )}
+                                                            Approve week
                                                         </Button>
                                                     </div>
                                                 </div>
 
-                                                {/* Entries Table */}
-                                                <table className="w-full text-sm">
-                                                    <thead>
-                                                        <tr className="bg-gray-50 text-left text-xs text-gray-500 border-b">
-                                                            <th className="px-4 py-2 font-medium">Date</th>
-                                                            <th className="px-4 py-2 font-medium">Hours</th>
-                                                            <th className="px-4 py-2 font-medium">Time Code</th>
-                                                            <th className="px-4 py-2 font-medium">Comments</th>
-                                                            <th className="px-4 py-2 font-medium text-right">Actions</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-gray-100">
-                                                        {week.entries.map(entry => (
-                                                            <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
-                                                                <td className="px-4 py-2.5 text-gray-900 font-medium">{formatDate(entry.date)}</td>
-                                                                <td className="px-4 py-2.5">
-                                                                    <span className="font-semibold text-gray-900">{entry.hours}h</span>
-                                                                    {entry.isBillable && <Badge className="ml-2 bg-emerald-50 text-emerald-700 text-[10px] px-1.5">$</Badge>}
-                                                                </td>
-                                                                <td className="px-4 py-2.5">
-                                                                    <span className="text-gray-700">{entry.timeCode}</span>
-                                                                    <span className="text-xs text-gray-400 ml-1">({entry.timeCodeDescription})</span>
-                                                                </td>
-                                                                <td className="px-4 py-2.5 text-gray-500 max-w-[200px] truncate">
-                                                                    {entry.comments || '—'}
-                                                                    {entry.overrideReason && (
-                                                                        <div className="text-[10px] text-amber-600 italic font-medium mt-0.5" title={entry.overrideReason}>
-                                                                            Override: {entry.overrideReason}
-                                                                        </div>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-4 py-2.5 text-right">
-                                                                    {(entry.status === 'Submitted' || isAdminMode) && (
-                                                                        <div className="flex items-center justify-end gap-1">
-                                                                            <Button
-                                                                                size="sm"
-                                                                                variant="ghost"
-                                                                                className="h-7 w-7 p-0 text-green-600 hover:bg-green-50"
-                                                                                title={isAdminMode ? "Admin Approval (Override)" : "Approve"}
-                                                                                disabled={!!actionLoading || (isAdminMode && !overrideReason)}
-                                                                                onClick={() => handleApproveOne(entry.id)}
-                                                                            >
-                                                                                {actionLoading === `approve-${entry.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                                                                            </Button>
-                                                                            <Button
-                                                                                size="sm"
-                                                                                variant="ghost"
-                                                                                className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
-                                                                                title={isAdminMode ? "Admin Rejection (Override)" : "Reject"}
-                                                                                disabled={!!actionLoading}
-                                                                                onClick={() => { setRejectingEntryId(entry.id); setRejectionComment(""); }}
-                                                                            >
-                                                                                <XCircle className="w-4 h-4" />
-                                                                            </Button>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {/* Inline Reject Comment */}
-                                                                    {rejectingEntryId === entry.id && (
-                                                                        <div className="mt-2 text-left p-2 bg-red-50 rounded-md border border-red-200 min-w-[200px] absolute right-0 z-10 shadow-sm">
-                                                                            <div className="flex items-center gap-1 mb-1">
-                                                                                <MessageSquare className="w-3 h-3 text-red-500" />
-                                                                                <span className="text-xs text-red-600 font-medium">
-                                                                                    {isAdminMode ? 'Override Detail (Required)' : 'Rejection reason (optional)'}
-                                                                                </span>
-                                                                            </div>
-                                                                            <textarea
-                                                                                className="w-full text-xs border border-red-200 rounded p-1.5 resize-none bg-white"
-                                                                                rows={2}
-                                                                                maxLength={500}
-                                                                                value={isAdminMode ? overrideReason : rejectionComment}
-                                                                                onChange={(e) => isAdminMode ? setOverrideReason(e.target.value) : setRejectionComment(e.target.value)}
-                                                                                placeholder={isAdminMode ? "Why are you overriding?" : "Enter reason for rejection…"}
-                                                                                autoFocus
-                                                                            />
-                                                                            <div className="flex gap-1 mt-1">
-                                                                                <Button
-                                                                                    size="sm"
-                                                                                    className="h-6 text-xs bg-red-600 hover:bg-red-700 text-white"
-                                                                                    disabled={!!actionLoading || (isAdminMode && !overrideReason)}
-                                                                                    onClick={() => handleRejectOne(entry.id)}
-                                                                                >
-                                                                                    {actionLoading === `reject-${entry.id}` ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                                                                                    {isAdminMode ? 'Confirm Override' : 'Reject'}
-                                                                                </Button>
-                                                                                <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setRejectingEntryId(null)}>Cancel</Button>
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
-                                                                </td>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-sm">
+                                                        <thead>
+                                                            <tr className="bg-gray-50/80 text-left text-xs text-gray-500 border-b border-gray-100">
+                                                                <th className="px-4 py-2.5 font-medium">Date</th>
+                                                                <th className="px-4 py-2.5 font-medium">Hours</th>
+                                                                <th className="px-4 py-2.5 font-medium">Time code</th>
+                                                                <th className="px-4 py-2.5 font-medium">Comments</th>
+                                                                <th className="px-4 py-2.5 font-medium text-right w-28">Actions</th>
                                                             </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-100">
+                                                            {week.entries.map(entry => (
+                                                                <tr key={entry.id} className="hover:bg-gray-50/60">
+                                                                    <td className="px-4 py-3 text-gray-900 font-medium whitespace-nowrap">{formatDate(entry.date)}</td>
+                                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                                        <span className="font-semibold text-gray-900 tabular-nums">{entry.hours}h</span>
+                                                                        {entry.isBillable && (
+                                                                            <Badge className="ml-2 bg-emerald-50 text-emerald-700 text-[10px] px-1.5">Billable</Badge>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-4 py-3">
+                                                                        <span className="text-gray-800 font-medium">{entry.timeCode}</span>
+                                                                        <span className="block text-xs text-gray-500 mt-0.5">{entry.timeCodeDescription}</span>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-gray-600 max-w-[220px]">
+                                                                        <span className="line-clamp-2">{entry.comments || '—'}</span>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right relative">
+                                                                        {(entry.status === 'Submitted' || isAdminMode) && (
+                                                                            <div className="inline-flex items-center justify-end gap-1">
+                                                                                <Button
+                                                                                    size="icon"
+                                                                                    variant="ghost"
+                                                                                    className="h-8 w-8 text-green-600 hover:bg-green-50"
+                                                                                    title="Approve entry"
+                                                                                    disabled={!!actionLoading}
+                                                                                    onClick={() => handleApproveOne(entry.id)}
+                                                                                >
+                                                                                    {actionLoading === `approve-${entry.id}` ? (
+                                                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                                                    ) : (
+                                                                                        <CheckCircle2 className="w-4 h-4" />
+                                                                                    )}
+                                                                                </Button>
+                                                                                <Button
+                                                                                    size="icon"
+                                                                                    variant="ghost"
+                                                                                    className="h-8 w-8 text-red-500 hover:bg-red-50"
+                                                                                    title="Reject entry"
+                                                                                    disabled={!!actionLoading}
+                                                                                    onClick={() => { setRejectingEntryId(entry.id); setRejectionComment("") }}
+                                                                                >
+                                                                                    <XCircle className="w-4 h-4" />
+                                                                                </Button>
+                                                                            </div>
+                                                                        )}
+
+                                                                        {rejectingEntryId === entry.id && (
+                                                                            <div className="absolute right-4 top-full mt-1 z-20 w-64 text-left p-3 bg-white rounded-lg border border-red-200 shadow-lg">
+                                                                                <div className="flex items-center gap-1 mb-2">
+                                                                                    <MessageSquare className="w-3.5 h-3.5 text-red-500" />
+                                                                                    <span className="text-xs text-red-700 font-medium">
+                                                                                        {isAdminMode ? 'Override reason' : 'Rejection reason (optional)'}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <textarea
+                                                                                    className="w-full text-xs border border-gray-200 rounded-md p-2 resize-none bg-white focus:outline-none focus:ring-2 focus:ring-red-200"
+                                                                                    rows={2}
+                                                                                    maxLength={500}
+                                                                                    value={isAdminMode ? overrideReason : rejectionComment}
+                                                                                    onChange={(e) => isAdminMode ? setOverrideReason(e.target.value) : setRejectionComment(e.target.value)}
+                                                                                    placeholder={isAdminMode ? 'Why are you overriding?' : 'Enter reason for rejection…'}
+                                                                                    autoFocus
+                                                                                />
+                                                                                <div className="flex gap-2 mt-2">
+                                                                                    <Button
+                                                                                        size="sm"
+                                                                                        className="h-7 text-xs bg-red-600 hover:bg-red-700 text-white"
+                                                                                        disabled={!!actionLoading || (isAdminMode && !overrideReason)}
+                                                                                        onClick={() => handleRejectOne(entry.id)}
+                                                                                    >
+                                                                                        Reject
+                                                                                    </Button>
+                                                                                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setRejectingEntryId(null)}>Cancel</Button>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>

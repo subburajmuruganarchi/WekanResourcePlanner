@@ -18,11 +18,14 @@ interface AllocationDialogProps {
     roleEfforts?: RoleEffort[]
     suggestedAllocationRoleId?: string
     suggestedAllocationRoleName?: string
+    projectStartDate?: string
+    projectEndDate?: string
     allocationId?: string
     initialPercentage?: number
     initialStartDate?: string
     initialEndDate?: string
     initialSkillId?: string
+    initialSkillIds?: string[]
     initialRoleId?: string
     onSuccess?: () => void
 }
@@ -32,6 +35,7 @@ interface AllocationRequest {
     employeeId: string
     roleId: string
     skillId?: string
+    skillIds?: string[]
     startDate: string
     endDate: string
     percentage: number
@@ -48,11 +52,14 @@ export function AllocationDialog({
     roleEfforts = [],
     suggestedAllocationRoleId,
     suggestedAllocationRoleName,
+    projectStartDate,
+    projectEndDate,
     allocationId,
     initialPercentage,
     initialStartDate,
     initialEndDate,
     initialSkillId,
+    initialSkillIds,
     initialRoleId,
     onSuccess
 }: AllocationDialogProps) {
@@ -61,7 +68,7 @@ export function AllocationDialog({
     const [percentage, setPercentage] = useState(initialPercentage?.toString() || "50")
     const [startDate, setStartDate] = useState(initialStartDate || "")
     const [endDate, setEndDate] = useState(initialEndDate || "")
-    const [selectedSkillId, setSelectedSkillId] = useState(initialSkillId || "")
+    const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
     const [selectedRoleId, setSelectedRoleId] = useState("")
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -91,12 +98,24 @@ export function AllocationDialog({
     useEffect(() => {
         if (open) {
             setPercentage(initialPercentage?.toString() || "50")
-            setStartDate(initialStartDate || "")
-            setEndDate(initialEndDate || "")
-            setSelectedSkillId(initialSkillId || "")
+            setStartDate(initialStartDate || projectStartDate || "")
+            setEndDate(initialEndDate || projectEndDate || "")
+            const skills =
+                initialSkillIds?.length
+                    ? initialSkillIds
+                    : initialSkillId
+                      ? [initialSkillId]
+                      : []
+            setSelectedSkillIds(skills)
             setError(null)
         }
-    }, [open, initialPercentage, initialStartDate, initialEndDate, initialSkillId])
+    }, [open, initialPercentage, initialStartDate, initialEndDate, initialSkillId, initialSkillIds, projectStartDate, projectEndDate])
+
+    const toggleSkill = (skillId: string) => {
+        setSelectedSkillIds((prev) =>
+            prev.includes(skillId) ? prev.filter((id) => id !== skillId) : [...prev, skillId]
+        )
+    }
 
     useEffect(() => {
         if (!open) {
@@ -157,7 +176,7 @@ export function AllocationDialog({
                     percentage: parseInt(percentage, 10),
                     startDate,
                     endDate,
-                    skillId: selectedSkillId || undefined,
+                    skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : undefined,
                 })
             } else {
                 if (!selectedRoleId) {
@@ -174,7 +193,7 @@ export function AllocationDialog({
                     projectId,
                     employeeId,
                     roleId: selectedRoleId,
-                    skillId: selectedSkillId || undefined,
+                    skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : undefined,
                     startDate,
                     endDate,
                     percentage: parseInt(percentage, 10),
@@ -201,7 +220,7 @@ export function AllocationDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[480px]">
                 <DialogHeader>
                     <DialogTitle>{isEditMode ? 'Edit Allocation' : 'Allocate Resource'}</DialogTitle>
                     <DialogDescription>
@@ -248,26 +267,44 @@ export function AllocationDialog({
                     )}
 
                     {skillRequirements.length > 0 && (
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <label className="text-right text-sm font-medium text-gray-700">Skill</label>
-                            <div className="col-span-3">
-                                <Select value={selectedSkillId} onValueChange={setSelectedSkillId}>
-                                    <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Select skill requirement..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {skillRequirements.map((req) => (
-                                            <SelectItem key={req.skillId} value={req.skillId}>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-medium">{req.skillName || 'Skill'}</span>
-                                                    <span className="text-xs text-gray-400">
-                                                        ({req.minSkillLevel}+, {req.originalHeadcount} needed)
+                        <div className="grid grid-cols-4 items-start gap-4">
+                            <label className="text-right text-sm font-medium text-gray-700 pt-2">Skills</label>
+                            <div className="col-span-3 space-y-2">
+                                <p className="text-xs text-gray-500">Select one or more project skill requirements.</p>
+                                <div className="max-h-44 overflow-y-auto rounded-lg border border-gray-200 divide-y">
+                                    {skillRequirements.map((req) => {
+                                        const checked = selectedSkillIds.includes(req.skillId)
+                                        return (
+                                            <label
+                                                key={req.skillId}
+                                                className={`flex items-start gap-3 p-3 cursor-pointer transition-colors ${
+                                                    checked ? 'bg-brand-50/60' : 'hover:bg-gray-50'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                                                    checked={checked}
+                                                    onChange={() => toggleSkill(req.skillId)}
+                                                />
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block text-sm font-medium text-gray-900">
+                                                        {req.skillName || 'Skill'}
                                                     </span>
-                                                </div>
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                                    <span className="block text-xs text-gray-500 mt-0.5">
+                                                        {req.minSkillLevel}+ · {req.originalHeadcount} needed
+                                                        {req.roleName ? ` · ${req.roleName}` : ''}
+                                                    </span>
+                                                </span>
+                                            </label>
+                                        )
+                                    })}
+                                </div>
+                                {selectedSkillIds.length > 0 && (
+                                    <p className="text-xs text-gray-600">
+                                        {selectedSkillIds.length} skill{selectedSkillIds.length === 1 ? '' : 's'} selected
+                                    </p>
+                                )}
                             </div>
                         </div>
                     )}

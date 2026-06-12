@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { buildDashboardInsight } from '../../services/ai/dashboard-ai.service';
+import { parseDashboardPeriodQuery } from '../dashboard/dashboard-period.util';
 import { explainAllocationRank } from '../../services/ai/allocation-ai.service';
 import { assessStaffingRisk } from '../../services/ai/staffing-risk.service';
 import { analyzePendingApprovals } from '../../services/ai/approval-ai.service';
@@ -9,7 +10,15 @@ import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
 export class AiController {
     async dashboardSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const insight = await buildDashboardInsight();
+            let period;
+            try {
+                period = parseDashboardPeriodQuery(req.query as Record<string, unknown>);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Invalid period';
+                res.status(400).json({ status: 'error', message });
+                return;
+            }
+            const insight = await buildDashboardInsight(period);
             res.json({ status: 'success', data: insight });
         } catch (error) {
             next(error);
@@ -60,7 +69,8 @@ export class AiController {
                 res.status(401).json({ status: 'error', message: 'Authentication required.' });
                 return;
             }
-            const summary = await analyzePendingApprovals(pmUserId);
+            const includeAll = req.user?.role === 'Admin';
+            const summary = await analyzePendingApprovals(pmUserId, { includeAll });
             res.json({ status: 'success', data: summary });
         } catch (error) {
             next(error);

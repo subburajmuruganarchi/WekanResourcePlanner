@@ -148,10 +148,24 @@ export class ProjectService {
             roleEffortsByProject.get(projId)!.push(effort);
         });
 
+        const allAllocations = await ProjectAllocation.find({
+            project_id: { $in: projectIds },
+        }).lean();
+
+        const allocationsByProject = new Map<string, typeof allAllocations>();
+        allAllocations.forEach((allocation) => {
+            const projId = allocation.project_id.toString();
+            if (!allocationsByProject.has(projId)) {
+                allocationsByProject.set(projId, []);
+            }
+            allocationsByProject.get(projId)!.push(allocation);
+        });
+
         return projects.map(proj => this.mapToResponse(
             proj,
             skillReqsByProject.get(proj._id.toString()) || [],
-            roleEffortsByProject.get(proj._id.toString()) || []
+            roleEffortsByProject.get(proj._id.toString()) || [],
+            allocationsByProject.get(proj._id.toString()) || []
         ));
     }
 

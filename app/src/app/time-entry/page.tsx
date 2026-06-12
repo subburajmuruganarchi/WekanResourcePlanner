@@ -1,7 +1,17 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback } from "react"
-import { Calendar, Save, Clock, Info, Loader2, AlertCircle, Plus, Trash2, Target } from "lucide-react"
+import { Calendar, Save, Clock, Loader2, AlertCircle, Plus, Trash2, Target, Pencil, ChevronLeft, ChevronRight } from "lucide-react"
+import { snapToMonday } from "@/lib/dashboard-period"
+import {
+    getCurrentWeekStart,
+    getWeekDaysFromMonday,
+    formatWeekRangeLabel,
+    shiftWeekStart,
+    isCurrentWeek,
+    isFutureWeek,
+    getMissingWeekdays,
+} from "@/lib/time-entry-week"
 import { PageContainer } from "@/components/layout/page-container"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,7 +23,6 @@ import { useEmployees } from "@/lib/use-employees"
 import { useProjects } from "@/lib/use-projects"
 import { useAuth } from "@/lib/auth-context"
 import { api } from "@/lib/api-client"
-import { fetchTimeEntrySuggestions, type TimeEntrySuggestions } from "@/lib/use-ai-insights"
 
 interface TimeCodeResponse {
     id: string
@@ -28,7 +37,9 @@ interface DayEntry {
     projectCode: string
     hours: number
     comments: string
+    status?: string
     isDirty?: boolean
+    isEditing?: boolean
 }
 
 interface DayData {
@@ -63,33 +74,15 @@ const otherCodes = [
     { code: "MEETING", name: "Internal Meetings" },
 ]
 
-function getWeekDates(): { day: string; date: string; fullDate: string }[] {
-    const today = new Date()
-    const dayOfWeek = today.getUTCDay()
-    const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-    const monday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
-    monday.setUTCDate(monday.getUTCDate() - diff)
-
-    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    return days.map((day, i) => {
-        const d = new Date(monday)
-        d.setUTCDate(monday.getUTCDate() + i)
-        return {
-            day,
-            date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
-            fullDate: d.toISOString().split('T')[0]
-        }
-    })
-}
-
 function generateTempId() {
     return `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
 
 export function TimeEntry() {
-    const weekDates = useMemo(() => getWeekDates(), [])
+    const [selectedWeekStart, setSelectedWeekStart] = useState(() => getCurrentWeekStart())
+    const weekDates = useMemo(() => getWeekDaysFromMonday(selectedWeekStart), [selectedWeekStart])
     const [weekData, setWeekData] = useState<DayData[]>(() =>
-        weekDates.map(d => ({
+        getWeekDaysFromMonday(getCurrentWeekStart()).map(d => ({
             ...d,
             entries: []
         }))
@@ -99,44 +92,74 @@ export function TimeEntry() {
     const [submitError, setSubmitError] = useState<string | null>(null)
     const [submitSuccess, setSubmitSuccess] = useState(false)
     const [submitWarnings, setSubmitWarnings] = useState<string[]>([])
-    const [suggestions, setSuggestions] = useState<TimeEntrySuggestions | null>(null)
     const [allocationEstimates, setAllocationEstimates] = useState<{
         totalEstimated: number
-        byProject: { projectName: string; estimatedHours: number; percentage: number }[]
+        byProject: { projectId: string; projectName: string; estimatedHours: number; percentage: number }[]
     } | null>(null)
     const [timeCodeId, setTimeCodeId] = useState<string | null>(null)
+    const [timeCodeError, setTimeCodeError] = useState<string | null>(null)
+    const [savingEntryId, setSavingEntryId] = useState<string | null>(null)
+    const [rowSaveMessage, setRowSaveMessage] = useState<string | null>(null)
 
     const { user } = useAuth()
     const isSelfOnly = user?.role === 'Employee' || user?.role === 'User'
+    const isProjectManager = user?.role === 'Project Manager'
     const { submitTimeEntry, submitWeeklyTimesheet, deleteTimeEntry, loading } = useTimeEntries()
-    const { employees, loading: loadingEmployees } = useEmployees()
+    const { employees, loading: loadingEmployees } = useEmployees({ allocatedToMyProjects: isProjectManager })
     const { projects, loading: loadingProjects } = useProjects()
 
-    // Initialize selected employee (employees locked to self)
+    // Initialize selected employee (employees locked to self; PM sees allocated team only)
     useEffect(() => {
         if (isSelfOnly && user?.id) {
             setSelectedEmployeeId(user.id)
             return
         }
-        if (employees.length > 0 && !selectedEmployeeId) {
+        if (employees.length === 0) {
+            setSelectedEmployeeId('')
+            return
+        }
+        if (!selectedEmployeeId || !employees.some((e) => e.id === selectedEmployeeId)) {
             setSelectedEmployeeId(employees[0].id)
         }
     }, [employees, selectedEmployeeId, isSelfOnly, user?.id])
 
-    // Fetch time code
     useEffect(() => {
-        const fetchTimeCode = async () => {
-            try {
-                const codes = await api.get<TimeCodeResponse[]>('/time-entries/codes')
-                if (codes.length > 0) {
-                    setTimeCodeId(codes[0].id)
-                }
-            } catch {
+        setWeekData(weekDates.map((d) => ({ ...d, entries: [] })))
+        setSubmitError(null)
+        setSubmitSuccess(false)
+        setSubmitWarnings([])
+    }, [selectedWeekStart, weekDates])
+
+    // Fetch time code (after auth — endpoint requires token)
+    const loadTimeCodes = useCallback(async () => {
+        try {
+            const codes = await api.get<TimeCodeResponse[]>('/time-entries/codes')
+            if (codes.length > 0) {
+                const preferred =
+                    codes.find((c) => c.code === 'DEV') ||
+                    codes.find((c) => c.code === 'BILLABLE') ||
+                    codes[0]
+                setTimeCodeId(preferred.id)
+                setTimeCodeError(null)
+            } else {
                 setTimeCodeId(null)
+                setTimeCodeError('No time codes are configured. Contact an administrator or refresh after backend setup.')
             }
+        } catch (err) {
+            setTimeCodeId(null)
+            const detail = err instanceof Error ? err.message : 'Unknown error'
+            setTimeCodeError(
+                detail === 'Failed to fetch' || detail === 'Network error'
+                    ? 'Could not reach the API. Check that the backend is running and VITE_API_URL is correct.'
+                    : `Could not load time codes: ${detail}`
+            )
         }
-        fetchTimeCode()
     }, [])
+
+    useEffect(() => {
+        if (!user) return
+        void loadTimeCodes()
+    }, [user, loadTimeCodes])
 
     const fetchSavedEntries = useCallback(async () => {
         if (!selectedEmployeeId || projects.length === 0) return
@@ -144,7 +167,7 @@ export function TimeEntry() {
 
         try {
             const entries = await api.get<{
-                id: string; employeeId: string; projectId: string; date: string; hours: number; comments?: string
+                id: string; employeeId: string; projectId: string; date: string; hours: number; comments?: string; status: string
             }[]>(`/time-entries?employeeId=${selectedEmployeeId}&week=${weekStart}`)
 
             // Map projectId back to projectCode
@@ -160,7 +183,9 @@ export function TimeEntry() {
                         projectCode: projectIdToCode[e.projectId] || '',
                         hours: e.hours,
                         comments: e.comments || '',
-                        isDirty: false
+                        status: e.status,
+                        isDirty: false,
+                        isEditing: false,
                     }))
                 return { ...day, entries: dayEntries.length > 0 ? dayEntries : [] }
             }))
@@ -190,9 +215,8 @@ export function TimeEntry() {
 
     useEffect(() => {
         if (!selectedEmployeeId || weekDates.length === 0) return
-        fetchTimeEntrySuggestions(selectedEmployeeId, weekDates[0].fullDate).then(setSuggestions)
         const weekStart = weekDates[0].fullDate
-        api.get<{ totalEstimated: number; byProject: { projectName: string; estimatedHours: number; percentage: number }[] }>(
+        api.get<{ totalEstimated: number; byProject: { projectId: string; projectName: string; estimatedHours: number; percentage: number }[] }>(
             `/time-entries/estimates?employeeId=${selectedEmployeeId}&week=${weekStart}`
         ).then(setAllocationEstimates).catch(() => setAllocationEstimates(null))
     }, [selectedEmployeeId, weekDates])
@@ -208,18 +232,39 @@ export function TimeEntry() {
         }
     }, [submitSuccess, submitError])
 
+    useEffect(() => {
+        if (!rowSaveMessage) return
+        const timer = setTimeout(() => setRowSaveMessage(null), 3000)
+        return () => clearTimeout(timer)
+    }, [rowSaveMessage])
+
     const selectedEmployee = useMemo(() =>
         employees.find(e => e.id === selectedEmployeeId),
         [employees, selectedEmployeeId]
     )
 
     const allocatedProjects = useMemo(() => {
-        return projects.map(p => ({
+        const allocatedIds = new Set<string>()
+        allocationEstimates?.byProject.forEach((p) => allocatedIds.add(p.projectId))
+        dailyForecast?.days.forEach((d) =>
+            d.byProject.forEach((p) => allocatedIds.add(p.projectId))
+        )
+
+        const fromAllocations = projects.filter((p) => allocatedIds.has(p.id))
+
+        const usedCodes = new Set(
+            weekData.flatMap((d) => d.entries.map((e) => e.projectCode)).filter(Boolean)
+        )
+        const fromExistingEntries = projects.filter(
+            (p) => usedCodes.has(p.code) && !allocatedIds.has(p.id)
+        )
+
+        return [...fromAllocations, ...fromExistingEntries].map((p) => ({
             code: p.code,
             name: p.name,
-            id: p.id
+            id: p.id,
         }))
-    }, [projects])
+    }, [projects, allocationEstimates, dailyForecast, weekData])
 
     const totalHours = useMemo(() =>
         weekData.reduce((sum, day) =>
@@ -232,6 +277,132 @@ export function TimeEntry() {
         [weekData]
     )
 
+    const dirtyEntryCount = useMemo(
+        () =>
+            weekData.reduce(
+                (count, day) =>
+                    count +
+                    day.entries.filter((e) => e.isDirty && e.hours > 0 && e.projectCode).length,
+                0
+            ),
+        [weekData]
+    )
+
+    const weekTimesheetStatus = useMemo(() => {
+        const entries = weekData.flatMap((d) => d.entries).filter((e) => e.hours > 0 && e.projectCode)
+        if (entries.length === 0) return 'empty' as const
+        const statuses = entries.map((e) => e.status || 'Draft')
+        if (statuses.every((s) => s === 'PM_Approved')) return 'approved' as const
+        if (statuses.every((s) => s === 'Submitted')) return 'submitted' as const
+        if (statuses.some((s) => s === 'PM_Rejected')) return 'rejected' as const
+        if (statuses.some((s) => s === 'Submitted' || s === 'PM_Approved')) return 'partial' as const
+        return 'draft' as const
+    }, [weekData])
+
+    const isTimesheetLocked =
+        weekTimesheetStatus === 'submitted' || weekTimesheetStatus === 'approved'
+
+    const viewingCurrentWeek = isCurrentWeek(selectedWeekStart)
+    const viewingFutureWeek = isFutureWeek(selectedWeekStart)
+
+    const missingWeekdays = useMemo(() => {
+        const byDate = new Map<string, { hours: number; projectCode: string }[]>()
+        for (const day of weekData) {
+            byDate.set(
+                day.fullDate,
+                day.entries.map((e) => ({ hours: e.hours, projectCode: e.projectCode }))
+            )
+        }
+        return getMissingWeekdays(weekDates, byDate)
+    }, [weekData, weekDates])
+
+    const canSubmitWeek =
+        !isTimesheetLocked &&
+        !isFutureWeek(selectedWeekStart) &&
+        missingWeekdays.length === 0 &&
+        dirtyEntryCount === 0 &&
+        totalHours > 0
+
+    const getProjectId = useCallback(
+        (code: string): string | null => {
+            return allocatedProjects.find((p) => p.code === code)?.id || null
+        },
+        [allocatedProjects]
+    )
+
+    const saveEntry = useCallback(
+        async (dayIndex: number, tempId: string) => {
+            if (!selectedEmployee) {
+                setSubmitError('No employee selected.')
+                return
+            }
+            if (!timeCodeId) {
+                setSubmitError('Time code not configured.')
+                return
+            }
+
+            const day = weekData[dayIndex]
+            const entry = day?.entries.find((e) => e.tempId === tempId)
+            if (!entry) return
+
+            if (!entry.projectCode || entry.hours <= 0) {
+                setSubmitError('Select a project and enter hours before saving.')
+                return
+            }
+
+            const projectId = allocatedProjects.find((p) => p.code === entry.projectCode)?.id
+            if (!projectId) {
+                setSubmitError(`Invalid project: ${entry.projectCode}. Only allocated projects can be saved.`)
+                return
+            }
+
+            setSavingEntryId(tempId)
+            setSubmitError(null)
+            setRowSaveMessage(null)
+
+            try {
+                const saved = await submitTimeEntry({
+                    employeeId: selectedEmployee.id,
+                    projectId,
+                    timeCodeId,
+                    date: day.fullDate,
+                    hours: entry.hours,
+                    comments: entry.comments || undefined,
+                })
+
+                setWeekData((prev) =>
+                    prev.map((d, i) =>
+                        i === dayIndex
+                            ? {
+                                  ...d,
+                                  entries: d.entries.map((e) =>
+                                      e.tempId === tempId
+                                          ? {
+                                                ...e,
+                                                serverEntryId: saved.id,
+                                                status: saved.status,
+                                                isDirty: false,
+                                                isEditing: false,
+                                            }
+                                          : e
+                                  ),
+                              }
+                            : d
+                    )
+                )
+                setRowSaveMessage('Entry saved.')
+                await fetchDailyForecast()
+            } catch (err) {
+                const message = err instanceof Error ? err.message : 'Failed to save entry'
+                setSubmitError(message)
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+            } finally {
+                setSavingEntryId(null)
+            }
+        },
+        [selectedEmployee, timeCodeId, weekData, allocatedProjects, submitTimeEntry, fetchDailyForecast]
+    )
+
     const handleEmployeeChange = useCallback((newId: string) => {
         if (newId === selectedEmployeeId) return
         if (hasUnsavedChanges) {
@@ -240,20 +411,53 @@ export function TimeEntry() {
             )
             if (!confirmed) return
         }
-        // Reset form
-        setWeekData(weekDates.map(d => ({ ...d, entries: [] })))
         setSubmitError(null)
         setSubmitSuccess(false)
         setSelectedEmployeeId(newId)
-    }, [selectedEmployeeId, hasUnsavedChanges, weekDates])
+    }, [selectedEmployeeId, hasUnsavedChanges])
+
+    const handleWeekChange = useCallback((newWeekStart: string) => {
+        const snapped = snapToMonday(newWeekStart)
+        if (snapped === selectedWeekStart) return
+        if (hasUnsavedChanges) {
+            const confirmed = window.confirm(
+                'You have unsaved time entries. Switching weeks will discard unsaved changes. Continue?'
+            )
+            if (!confirmed) return
+        }
+        setSelectedWeekStart(snapped)
+    }, [selectedWeekStart, hasUnsavedChanges])
 
     const addEntry = useCallback((dayIndex: number) => {
         setWeekData(prev => prev.map((day, i) =>
             i === dayIndex
-                ? { ...day, entries: [...day.entries, { tempId: generateTempId(), projectCode: "", hours: 0, comments: "", isDirty: true }] }
+                ? { ...day, entries: [...day.entries, { tempId: generateTempId(), projectCode: "", hours: 0, comments: "", isDirty: true, isEditing: true }] }
                 : day
         ))
     }, [])
+
+    const startEditingEntry = useCallback((dayIndex: number, tempId: string) => {
+        setWeekData(prev => prev.map((day, i) =>
+            i === dayIndex
+                ? { ...day, entries: day.entries.map(e => e.tempId === tempId ? { ...e, isEditing: true } : e) }
+                : day
+        ))
+    }, [])
+
+    const cancelEditingEntry = useCallback((dayIndex: number, tempId: string) => {
+        setWeekData(prev => prev.map((day, i) => {
+            if (i !== dayIndex) return day
+            return {
+                ...day,
+                entries: day.entries.map(e => {
+                    if (e.tempId !== tempId) return e
+                    if (!e.serverEntryId) return e
+                    return { ...e, isEditing: false, isDirty: false }
+                }),
+            }
+        }))
+        void fetchSavedEntries()
+    }, [fetchSavedEntries])
 
     const removeEntry = useCallback(async (dayIndex: number, tempId: string) => {
         const entry = weekData[dayIndex]?.entries.find(e => e.tempId === tempId)
@@ -274,14 +478,10 @@ export function TimeEntry() {
     const updateEntry = useCallback((dayIndex: number, tempId: string, field: keyof DayEntry, value: string | number) => {
         setWeekData(prev => prev.map((day, i) =>
             i === dayIndex
-                ? { ...day, entries: day.entries.map(e => e.tempId === tempId ? { ...e, [field]: value, isDirty: true } : e) }
+                ? { ...day, entries: day.entries.map(e => e.tempId === tempId ? { ...e, [field]: value, isDirty: true, isEditing: true } : e) }
                 : day
         ))
     }, [])
-
-    const getProjectId = (code: string): string | null => {
-        return allocatedProjects.find(p => p.code === code)?.id || null
-    }
 
     const getStatusColor = (hours: number) => {
         if (hours === 40) return "bg-green-100 text-green-600 border-green-200"
@@ -299,6 +499,16 @@ export function TimeEntry() {
             return
         }
 
+        if (weekTimesheetStatus === 'approved') {
+            setSubmitError('This timesheet has already been approved by your PM.')
+            return
+        }
+
+        if (weekTimesheetStatus === 'submitted') {
+            setSubmitError('This timesheet is already submitted and awaiting PM approval.')
+            return
+        }
+
         const allEntries = weekData.flatMap((day, _) =>
             day.entries
                 .filter(e => e.hours > 0 && e.projectCode)
@@ -307,6 +517,18 @@ export function TimeEntry() {
 
         if (allEntries.length === 0) {
             setSubmitError("No time entries to submit. Add hours to at least one entry.")
+            return
+        }
+
+        if (isFutureWeek(selectedWeekStart)) {
+            setSubmitError('Timesheets for future weeks cannot be submitted. You can plan entries, but submit after the week begins.')
+            return
+        }
+
+        if (missingWeekdays.length > 0) {
+            setSubmitError(
+                `Complete all weekdays before submitting. Missing entries for: ${missingWeekdays.join(', ')}.`
+            )
             return
         }
 
@@ -362,17 +584,19 @@ export function TimeEntry() {
 
             setSubmitSuccess(true)
             setSubmitWarnings(submitResult.warnings ?? [])
+            setRowSaveMessage(null)
             await Promise.all([fetchSavedEntries(), fetchDailyForecast()])
         } catch (err) {
             const detail = err instanceof Error ? err.message : 'Unknown error'
             setSubmitError(
                 `Unable to save all entries. Timesheet not submitted. ${detail}`
             )
+            window.scrollTo({ top: 0, behavior: 'smooth' })
         }
     }
 
     const handleReset = () => {
-        setWeekData(weekDates.map(d => ({ ...d, entries: [] })))
+        void fetchSavedEntries()
         setSubmitError(null)
         setSubmitSuccess(false)
     }
@@ -390,7 +614,7 @@ export function TimeEntry() {
         )
     }
 
-    const selectedWeek = `${weekDates[0].date} - ${weekDates[6].date}, ${new Date().getFullYear()}`
+    const selectedWeek = formatWeekRangeLabel(selectedWeekStart)
 
     return (
         <PageContainer className="space-y-6">
@@ -402,14 +626,31 @@ export function TimeEntry() {
                     </p>
                 </Card>
             )}
+            {isProjectManager && !loadingEmployees && employees.length === 0 && (
+                <Card className="p-4 border-amber-200 bg-amber-50">
+                    <p className="text-sm text-amber-900">
+                        No employees are allocated to your managed projects yet. Assign team members under{' '}
+                        <strong>Resource Allocation</strong> to enter time on their behalf.
+                    </p>
+                </Card>
+            )}
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-semibold text-gray-900">Weekly Time Entry</h1>
+                    {isProjectManager && (
+                        <p className="text-sm text-gray-500 mt-1">
+                            Employees allocated to your managed projects.
+                        </p>
+                    )}
                     <div className="flex items-center gap-4 mt-1">
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-gray-600">Employee:</span>
                             {isSelfOnly ? (
                                 <span className="text-sm font-medium text-gray-900">{user?.name}</span>
+                            ) : loadingEmployees ? (
+                                <span className="text-sm text-gray-500">Loading…</span>
+                            ) : employees.length === 0 ? (
+                                <span className="text-sm text-gray-500">No allocated employees</span>
                             ) : (
                                 <Select value={selectedEmployeeId} onValueChange={handleEmployeeChange}>
                                     <SelectTrigger className="h-8 w-[200px]">
@@ -423,17 +664,68 @@ export function TimeEntry() {
                                 </Select>
                             )}
                         </div>
-                        <Badge variant="warning">Draft</Badge>
+                        <Badge
+                            variant={
+                                weekTimesheetStatus === 'approved'
+                                    ? 'success'
+                                    : weekTimesheetStatus === 'submitted'
+                                      ? 'info'
+                                      : weekTimesheetStatus === 'rejected'
+                                        ? 'warning'
+                                        : 'warning'
+                            }
+                        >
+                            {weekTimesheetStatus === 'approved'
+                                ? 'Approved'
+                                : weekTimesheetStatus === 'submitted'
+                                  ? 'Submitted'
+                                  : weekTimesheetStatus === 'rejected'
+                                    ? 'Rejected'
+                                    : weekTimesheetStatus === 'partial'
+                                      ? 'Partial'
+                                      : 'Draft'}
+                        </Badge>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleReset} disabled={loading}>Reset</Button>
-                    <Button className="gap-2" onClick={handleSubmit} disabled={loading || !selectedEmployee}>
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        Submit Timesheet
-                    </Button>
-                </div>
+                {!isTimesheetLocked ? (
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={handleReset} disabled={loading}>Reset</Button>
+                        <Button
+                            className="gap-2"
+                            onClick={handleSubmit}
+                            disabled={loading || !selectedEmployee || !timeCodeId || !canSubmitWeek}
+                        >
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                            Submit Timesheet
+                        </Button>
+                    </div>
+                ) : weekTimesheetStatus === 'approved' ? (
+                    <p className="text-sm text-green-700 font-medium">Approved by PM</p>
+                ) : (
+                    <p className="text-sm text-blue-700 font-medium">Awaiting PM approval</p>
+                )}
             </div>
+
+            {timeCodeError && (
+                <Card className="p-4 bg-amber-50 border-amber-200">
+                    <div className="flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-amber-900 text-sm">Time codes unavailable</h4>
+                            <p className="text-sm text-amber-800 mt-1">{timeCodeError}</p>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2"
+                                onClick={() => void loadTimeCodes()}
+                            >
+                                Retry
+                            </Button>
+                        </div>
+                    </div>
+                </Card>
+            )}
 
             {submitError && (
                 <Card className="p-4 bg-red-50 border-red-200">
@@ -468,15 +760,21 @@ export function TimeEntry() {
                 </Card>
             )}
 
+            {rowSaveMessage && (
+                <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
+                    {rowSaveMessage}
+                </p>
+            )}
+
             {allocationEstimates && allocationEstimates.byProject.length > 0 && (
                 <Card className="p-4 border-gray-200">
-                    <h4 className="text-sm font-semibold text-gray-900 mb-2">Allocation estimates (this week)</h4>
+                    <h4 className="text-sm font-semibold text-gray-900 mb-2">Your allocations this week</h4>
                     <p className="text-xs text-gray-600 mb-2">
-                        Expected ~{allocationEstimates.totalEstimated}h from active allocations
+                        Expected ~{allocationEstimates.totalEstimated}h from active project allocations
                     </p>
                     <div className="flex flex-wrap gap-2">
-                        {allocationEstimates.byProject.map((p, i) => (
-                            <span key={i} className="text-xs px-2 py-1 bg-gray-100 rounded-md">
+                        {allocationEstimates.byProject.map((p) => (
+                            <span key={p.projectId} className="text-xs px-2 py-1 bg-gray-100 rounded-md">
                                 {p.projectName}: {p.estimatedHours}h ({p.percentage}%)
                             </span>
                         ))}
@@ -484,18 +782,77 @@ export function TimeEntry() {
                 </Card>
             )}
 
-            {suggestions && suggestions.days.length > 0 && (
-                <Card className="p-4 border-blue-100 bg-blue-50/30">
-                    <h4 className="text-sm font-semibold text-gray-900 mb-1">Suggested hours (confirm manually)</h4>
-                    <p className="text-xs text-gray-600 mb-3">{suggestions.narrative}</p>
-                    <div className="flex flex-wrap gap-2">
-                        {suggestions.days.map((d) => (
-                            <div key={d.date} className="text-xs px-2 py-1 bg-white border rounded-md">
-                                {d.date}: <strong>{d.suggestedHours}h</strong>
-                                <span className="text-gray-400 ml-1">({d.source})</span>
-                            </div>
-                        ))}
+            {/* Week selector */}
+            <Card className="p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9 shrink-0"
+                            onClick={() => handleWeekChange(shiftWeekStart(selectedWeekStart, -1))}
+                            aria-label="Previous week"
+                        >
+                            <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        <div className="min-w-0 text-center sm:text-left">
+                            <p className="text-xs text-gray-500 font-medium uppercase">
+                                {viewingCurrentWeek
+                                    ? 'Current week'
+                                    : viewingFutureWeek
+                                      ? 'Future week'
+                                      : 'Past week'}
+                            </p>
+                            <p className="font-semibold text-gray-900">{selectedWeek}</p>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9 shrink-0"
+                            onClick={() => handleWeekChange(shiftWeekStart(selectedWeekStart, 1))}
+                            aria-label="Next week"
+                        >
+                            <ChevronRight className="w-4 h-4" />
+                        </Button>
                     </div>
+                    <div className="flex items-center gap-2 justify-center sm:justify-end">
+                        <Input
+                            type="date"
+                            className="h-9 w-[150px]"
+                            value={selectedWeekStart}
+                            onChange={(e) => handleWeekChange(e.target.value)}
+                        />
+                        {!viewingCurrentWeek && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleWeekChange(getCurrentWeekStart())}
+                            >
+                                This week
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            </Card>
+
+            {viewingFutureWeek && (
+                <Card className="p-4 bg-blue-50 border-blue-200">
+                    <p className="text-sm text-blue-900">
+                        <strong>Future week.</strong> You can view allocations and draft entries, but timesheet submit
+                        is only available for the current week and past weeks.
+                    </p>
+                </Card>
+            )}
+
+            {missingWeekdays.length > 0 && !isTimesheetLocked && !viewingFutureWeek && (
+                <Card className="p-4 bg-amber-50 border-amber-200">
+                    <p className="text-sm text-amber-900">
+                        <strong>Week incomplete.</strong> Add and save time for:{' '}
+                        {missingWeekdays.join(', ')}.
+                    </p>
                 </Card>
             )}
 
@@ -508,7 +865,7 @@ export function TimeEntry() {
                                 <Calendar className="w-5 h-5 text-gray-500" />
                             </div>
                             <div>
-                                <p className="text-xs text-gray-500 font-medium uppercase">Current Week</p>
+                                <p className="text-xs text-gray-500 font-medium uppercase">Week total</p>
                                 <span className="font-semibold">{selectedWeek}</span>
                             </div>
                         </div>
@@ -550,38 +907,7 @@ export function TimeEntry() {
                 )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                {/* Guidelines */}
-                <div className="lg:col-span-1 space-y-4">
-                    <Card className="p-4 bg-blue-50/50 border-blue-100">
-                        <div className="flex items-start gap-3">
-                            <Info className="w-5 h-5 text-blue-600 mt-0.5" />
-                            <div>
-                                <h4 className="font-medium text-blue-900 text-sm">Available Projects</h4>
-                                <ul className="mt-2 space-y-1 text-sm text-blue-800">
-                                    {allocatedProjects.length === 0 ? (
-                                        <li className="text-gray-500">No projects available</li>
-                                    ) : (
-                                        allocatedProjects.map(p => (
-                                            <li key={p.code}>• <strong>{p.name}</strong></li>
-                                        ))
-                                    )}
-                                </ul>
-                            </div>
-                        </div>
-                    </Card>
-                    <Card className="p-4 bg-gray-50/50 border-gray-200">
-                        <h4 className="font-medium text-gray-900 text-sm mb-2">Time Codes</h4>
-                        <ul className="space-y-1 text-xs text-gray-600">
-                            <li>• <strong>PRJ-XXX</strong>: Project Work</li>
-                            <li>• <strong>LV-XX</strong>: Leave Types</li>
-                            <li>• <strong>TRAINING</strong>: Training</li>
-                        </ul>
-                    </Card>
-                </div>
-
-                {/* Daily Entries */}
-                <div className="lg:col-span-3 space-y-4">
+            <div className="space-y-4">
                     {weekData.map((day, dayIndex) => {
                         const dayTotal = day.entries.reduce((sum, e) => sum + (Number(e.hours) || 0), 0)
                         const isWeekend = day.day === "Saturday" || day.day === "Sunday"
@@ -616,9 +942,11 @@ export function TimeEntry() {
                                                 </div>
                                             )
                                         })()}
-                                        <Button size="sm" variant="outline" className="gap-1" onClick={() => addEntry(dayIndex)}>
-                                            <Plus className="w-4 h-4" /> Add Entry
-                                        </Button>
+                                        {!isTimesheetLocked && (
+                                            <Button size="sm" variant="outline" className="gap-1" onClick={() => addEntry(dayIndex)}>
+                                                <Plus className="w-4 h-4" /> Add Entry
+                                            </Button>
+                                        )}
                                     </div>
                                 </div>
 
@@ -628,16 +956,43 @@ export function TimeEntry() {
                                     </div>
                                 ) : (
                                     <div className="divide-y">
-                                        {day.entries.map(entry => (
-                                            <div key={entry.tempId} className="p-4 flex items-center gap-4">
-                                                <Select value={entry.projectCode} onValueChange={(val) => updateEntry(dayIndex, entry.tempId, 'projectCode', val)}>
-                                                    <SelectTrigger className="h-9 w-[180px]">
+                                        {day.entries.map(entry => {
+                                            const canSave =
+                                                !!timeCodeId &&
+                                                !!entry.projectCode &&
+                                                entry.hours > 0 &&
+                                                !!getProjectId(entry.projectCode)
+                                            const isSaving = savingEntryId === entry.tempId
+                                            const isSubmittedEntry =
+                                                entry.status === 'Submitted' || entry.status === 'PM_Approved'
+                                            const isLocked =
+                                                isSubmittedEntry ||
+                                                (!!entry.serverEntryId && !entry.isDirty && !entry.isEditing)
+
+                                            return (
+                                            <div key={entry.tempId} className="p-4 flex flex-col lg:flex-row lg:items-center gap-3">
+                                                <Select
+                                                    value={entry.projectCode}
+                                                    disabled={isLocked}
+                                                    onValueChange={(val) => updateEntry(dayIndex, entry.tempId, 'projectCode', val)}
+                                                >
+                                                    <SelectTrigger className="h-9 w-full lg:w-[200px] shrink-0">
                                                         <SelectValue placeholder="Select code" />
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectGroup>
                                                             <SelectLabel>Projects</SelectLabel>
-                                                            {allocatedProjects.map(p => <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>)}
+                                                            {allocatedProjects.length === 0 ? (
+                                                                <SelectItem value="__none__" disabled>
+                                                                    No allocated projects this week
+                                                                </SelectItem>
+                                                            ) : (
+                                                                allocatedProjects.map((p) => (
+                                                                    <SelectItem key={p.code} value={p.code}>
+                                                                        {p.name}
+                                                                    </SelectItem>
+                                                                ))
+                                                            )}
                                                         </SelectGroup>
                                                         <SelectGroup>
                                                             <SelectLabel>Leaves</SelectLabel>
@@ -652,39 +1007,148 @@ export function TimeEntry() {
 
                                                 <Input
                                                     type="number"
-                                                    className="h-9 w-20"
+                                                    className="h-9 w-full lg:w-24 shrink-0"
                                                     min="0"
                                                     max="24"
                                                     step="0.5"
                                                     placeholder="Hours"
+                                                    disabled={isLocked}
                                                     value={entry.hours || ''}
                                                     onChange={(e) => updateEntry(dayIndex, entry.tempId, 'hours', parseFloat(e.target.value) || 0)}
                                                 />
 
                                                 <Input
-                                                    className="h-9 flex-1"
+                                                    className="h-9 flex-1 min-w-0"
                                                     placeholder="Comments (optional)"
+                                                    disabled={isLocked}
                                                     value={entry.comments}
                                                     onChange={(e) => updateEntry(dayIndex, entry.tempId, 'comments', e.target.value)}
                                                 />
 
-                                                <Button
-                                                    size="icon"
-                                                    variant="ghost"
-                                                    className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                                                    onClick={() => removeEntry(dayIndex, entry.tempId)}
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
+                                                <div className="flex items-center gap-2 shrink-0 lg:ml-auto">
+                                                    {isLocked && (
+                                                        <Badge
+                                                            variant={
+                                                                entry.status === 'Submitted'
+                                                                    ? 'info'
+                                                                    : entry.status === 'PM_Approved'
+                                                                      ? 'success'
+                                                                      : 'success'
+                                                            }
+                                                            className="text-xs"
+                                                        >
+                                                            {entry.status === 'Submitted'
+                                                                ? 'Submitted'
+                                                                : entry.status === 'PM_Approved'
+                                                                  ? 'Approved'
+                                                                  : 'Saved'}
+                                                        </Badge>
+                                                    )}
+                                                    {isLocked && !isSubmittedEntry ? (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="gap-1.5"
+                                                            disabled={isSaving || loading}
+                                                            onClick={() => startEditingEntry(dayIndex, entry.tempId)}
+                                                        >
+                                                            <Pencil className="w-4 h-4" />
+                                                            Edit
+                                                        </Button>
+                                                    ) : isSubmittedEntry ? null : (
+                                                        <>
+                                                            {entry.serverEntryId && entry.isEditing && !entry.isDirty && (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    className="text-gray-600"
+                                                                    disabled={isSaving || loading}
+                                                                    onClick={() => cancelEditingEntry(dayIndex, entry.tempId)}
+                                                                >
+                                                                    Cancel
+                                                                </Button>
+                                                            )}
+                                                            <Button
+                                                                size="sm"
+                                                                variant={entry.isDirty ? 'default' : 'outline'}
+                                                                className="gap-1.5"
+                                                                disabled={!canSave || isSaving || loading}
+                                                                onClick={() => void saveEntry(dayIndex, entry.tempId)}
+                                                            >
+                                                                {isSaving ? (
+                                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                                ) : (
+                                                                    <Save className="w-4 h-4" />
+                                                                )}
+                                                                Save
+                                                            </Button>
+                                                        </>
+                                                    )}
+                                                    {!isSubmittedEntry && (
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            className="text-red-500 hover:text-red-600 hover:bg-red-50 shrink-0"
+                                                            disabled={isSaving}
+                                                            onClick={() => removeEntry(dayIndex, entry.tempId)}
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </div>
-                                        ))}
+                                            )
+                                        })}
                                     </div>
                                 )}
                             </Card>
                         )
                     })}
-                </div>
             </div>
+
+            {(hasUnsavedChanges || totalHours > 0 || isTimesheetLocked) && (
+                <div className="sticky bottom-0 z-10 -mx-4 px-4 py-3 bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
+                    <div className="max-w-[100%] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="space-y-1">
+                            {submitError && (
+                                <p className="text-sm text-red-700 font-medium">{submitError}</p>
+                            )}
+                            <p className="text-sm text-gray-600">
+                                {weekTimesheetStatus === 'approved'
+                                    ? `${totalHours}h approved this week — no further action needed.`
+                                    : weekTimesheetStatus === 'submitted'
+                                      ? `${totalHours}h submitted this week — awaiting PM approval.`
+                                      : viewingFutureWeek
+                                        ? `${totalHours}h drafted for a future week — submit is disabled until this week starts.`
+                                        : dirtyEntryCount > 0
+                                          ? `${dirtyEntryCount} unsaved ${dirtyEntryCount === 1 ? 'entry' : 'entries'} — save each row, then submit the full timesheet for approval.`
+                                          : missingWeekdays.length > 0
+                                            ? `Add time for ${missingWeekdays.join(', ')} before submitting.`
+                                            : `${totalHours}h logged — all weekdays complete, ready to submit for PM approval.`}
+                            </p>
+                        </div>
+                        {!isTimesheetLocked && (
+                        <div className="flex gap-2 shrink-0">
+                            <Button variant="outline" onClick={handleReset} disabled={loading}>
+                                Reset
+                            </Button>
+                            <Button
+                                className="gap-2"
+                                onClick={handleSubmit}
+                                disabled={loading || !selectedEmployee || !timeCodeId || !canSubmitWeek}
+                            >
+                                {loading ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Save className="w-4 h-4" />
+                                )}
+                                Submit Timesheet
+                            </Button>
+                        </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </PageContainer>
     )
 }

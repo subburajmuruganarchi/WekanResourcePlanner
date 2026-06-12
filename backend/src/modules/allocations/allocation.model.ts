@@ -7,6 +7,7 @@ export interface IProjectAllocation extends Document {
     employee_id: Types.ObjectId;
     role_id: Types.ObjectId;
     skill_id?: Types.ObjectId;
+    skill_ids?: Types.ObjectId[];
     start_date: Date;
     end_date: Date;
     allocation_percent: number;
@@ -22,6 +23,7 @@ const ProjectAllocationSchema = new Schema<IProjectAllocation>({
     employee_id: { type: Schema.Types.ObjectId, ref: 'Employee', required: true, index: true },
     role_id: { type: Schema.Types.ObjectId, ref: 'Role', required: true },
     skill_id: { type: Schema.Types.ObjectId, ref: 'Skill' },
+    skill_ids: [{ type: Schema.Types.ObjectId, ref: 'Skill' }],
     start_date: { type: Date, required: true },
     end_date: { type: Date, required: true },
     allocation_percent: { type: Number, required: true, min: 0, max: 100 },

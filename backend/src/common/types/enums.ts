@@ -96,3 +96,27 @@ export enum CreatedByRole {
     ADMIN = 'Admin',
 }
 
+/** How a weekly_allocation_entries row was created or last influenced. */
+export enum WeeklyAllocationSource {
+    PLANNED = 'Planned',
+    ACTUAL = 'Actual',
+    FORECAST = 'Forecast',
+    LEGACY_SYNC = 'LegacySync',
+    MANUAL = 'Manual',
+}
+
+/** Lifecycle of a weekly planning cell. */
+export enum WeeklyAllocationStatus {
+    DRAFT = 'Draft',
+    PUBLISHED = 'Published',
+    LOCKED = 'Locked',
+    ARCHIVED = 'Archived',
+}
+
+export enum WeeklyUtilizationSnapshotType {
+    PLANNED = 'Planned',
+    ACTUAL = 'Actual',
+    VARIANCE = 'Variance',
+    FORECAST = 'Forecast',
+}
+

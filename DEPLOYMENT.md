@@ -95,6 +95,12 @@ db.time_entries.countDocuments({
 | `PORT` | Optional | Default `3000` |
 | `LOG_LEVEL` | Optional | `info` recommended |
 | `GOOGLE_CLIENT_ID` | Optional | Only if Google login enabled |
+| `FEATURE_WEEKLY_ALLOCATIONS_ENABLED` | Optional | Weekly planner grid (`true` to enable) |
+| `FEATURE_UTILIZATION_API_ENABLED` | Optional | `GET /api/utilization/*` (default on) |
+| `FEATURE_WEEKLY_ACTUALS_SYNC_ENABLED` | Optional | Reconcile `PM_Approved` time → `actual_hours` |
+| `FEATURE_WEEKLY_UTILIZATION_SNAPSHOTS` | Optional | Historical planned/actual/variance snapshots |
+
+After enabling weekly allocations, run `cd backend && npm run sync:weekly-legacy` once if migrating from legacy `project_allocations`. Approve time entries (or `POST /api/utilization/sync` as Admin) to populate actual hours.
 
 Startup **fails fast** with clear errors if required vars are invalid.
 

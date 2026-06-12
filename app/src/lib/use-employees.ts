@@ -2,6 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from './api-client';
 import type { Employee } from '@/types/api';
 
+interface UseEmployeesOptions {
+    /** When true, PMs only receive employees allocated to their managed projects. */
+    allocatedToMyProjects?: boolean;
+}
+
 interface UseEmployeesResult {
     employees: Employee[];
     loading: boolean;
@@ -11,7 +16,8 @@ interface UseEmployeesResult {
     updateEmployee: (id: string, data: Partial<Employee>) => Promise<void>;
 }
 
-export function useEmployees(): UseEmployeesResult {
+export function useEmployees(options: UseEmployeesOptions = {}): UseEmployeesResult {
+    const { allocatedToMyProjects = false } = options;
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -20,14 +26,15 @@ export function useEmployees(): UseEmployeesResult {
         setLoading(true);
         setError(null);
         try {
-            const data = await api.get<Employee[]>('/employees');
+            const query = allocatedToMyProjects ? '?allocatedToMyProjects=true' : '';
+            const data = await api.get<Employee[]>(`/employees${query}`);
             setEmployees(data);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to fetch employees');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [allocatedToMyProjects]);
 
     useEffect(() => {
         fetchEmployees();

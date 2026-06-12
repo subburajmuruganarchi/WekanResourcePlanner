@@ -53,10 +53,13 @@ export function useDashboardInsight() {
     const [insight, setInsight] = useState<DashboardInsight | null>(null);
     const [loading, setLoading] = useState(false);
 
-    const fetchInsight = useCallback(async () => {
+    const fetchInsight = useCallback(async (params?: { weekStartFrom: string; weekStartTo: string }) => {
         setLoading(true);
         try {
-            const data = await api.get<DashboardInsight>('/ai/dashboard-summary');
+            const q = params
+                ? `?weekStartFrom=${params.weekStartFrom}&weekStartTo=${params.weekStartTo}`
+                : '';
+            const data = await api.get<DashboardInsight>(`/ai/dashboard-summary${q}`);
             setInsight(data);
         } catch {
             setInsight(null);

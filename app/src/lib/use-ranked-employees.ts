@@ -16,6 +16,8 @@ export interface RankedEmployee {
     matchingSkills?: { name: string; level: string }[];
     skillLevel: string;
     availability: number;
+    peakCommittedPercent: number;
+    minFreePercent: number;
     experienceYears: number;
     matchScore: number;
     factors: {
@@ -33,8 +35,19 @@ export interface RankedEmployee {
         startDate: string;
         endDate: string;
         skillId?: string;
+        skillIds?: string[];
     }[];
     isAllocatedToProject: boolean;
+    projectAllocation?: {
+        id: string;
+        percentage: number;
+        startDate: string;
+        endDate: string;
+        roleId?: string;
+        roleName?: string;
+        skillId?: string;
+        skillIds?: string[];
+    };
 }
 
 interface UseRankedEmployeesParams {

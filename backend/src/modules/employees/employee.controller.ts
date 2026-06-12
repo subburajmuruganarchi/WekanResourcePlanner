@@ -6,6 +6,7 @@ import { AppError } from '../../common/errors/app-error';
 import { Employee } from './employee.model';
 import { Role } from '../roles/role.model';
 import { Types } from 'mongoose';
+import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
 
 export class EmployeeController {
     async list(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -16,7 +17,20 @@ export class EmployeeController {
                 isActive: req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined
             };
 
-            const employees = await employeeService.findAll(params);
+            const user = req.user;
+            const allocatedToMyProjects = req.query.allocatedToMyProjects === 'true';
+
+            let employees;
+            if (allocatedToMyProjects && user?.role === 'Project Manager') {
+                const pmEmployeeId = getAuthEmployeeId(user);
+                if (!pmEmployeeId) {
+                    res.status(401).json({ status: 'error', message: 'Authentication required.' });
+                    return;
+                }
+                employees = await employeeService.findAllocatedToProjectManager(pmEmployeeId, params);
+            } else {
+                employees = await employeeService.findAll(params);
+            }
 
             res.json({
                 status: 'success',

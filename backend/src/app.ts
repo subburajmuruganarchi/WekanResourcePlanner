@@ -23,8 +23,13 @@ import reportsRouter from './modules/reports/reports.routes';
 import { aiRouter } from './modules/ai/ai.routes';
 import { searchRouter } from './modules/search/search.routes';
 import { systemRouter } from './modules/system/system.routes';
+import { weeklyAllocationRouter } from './modules/weekly-allocations/weekly-allocation.routes';
+import { utilizationRouter } from './modules/utilization/utilization.routes';
+import { plannerImportRouter } from './modules/planner-import/planner-import.routes';
 
 import './modules/skills/skill.model';
+import './modules/weekly-allocations/weekly-allocation-entry.model';
+import './modules/utilization/weekly-utilization-snapshot.model';
 import './modules/roles/role.model';
 
 const app = express();
@@ -112,7 +117,7 @@ app.get('/ready', (req, res) => {
 
 const globalLimiter = createRateLimiter({
     windowMs: 15 * 60 * 1000,
-    max: 200,
+    max: env.NODE_ENV === 'development' ? 2000 : 200,
     skip: skipHealthProbes,
 });
 app.use(globalLimiter);
@@ -130,6 +135,8 @@ const reportsLimiter = createRateLimiter({
 app.use('/api/employees', employeeRouter);
 app.use('/api/projects', projectRouter);
 app.use('/api/allocations', allocationRouter);
+app.use('/api/weekly-allocations', weeklyAllocationRouter);
+app.use('/api/utilization', utilizationRouter);
 app.use('/api/time-entries', timeEntryRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/roles', roleRouter);
@@ -141,6 +148,7 @@ app.use('/api/reports', reportsLimiter, reportsRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/system', systemRouter);
+app.use('/api/planner-import', plannerImportRouter);
 
 app.use(errorHandler);
 

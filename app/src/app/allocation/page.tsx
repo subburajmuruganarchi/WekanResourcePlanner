@@ -1,57 +1,63 @@
-import { useState, useMemo } from "react"
-import { UserPlus, Loader2, HelpCircle } from "lucide-react"
-import { AllocationExplainPanel } from "@/components/ai/allocation-explain-panel"
-import { fetchAllocationExplanation, type AllocationExplanation } from "@/lib/use-ai-insights"
+import { useState, useMemo, useEffect } from "react"
+import { Loader2 } from "lucide-react"
 import { PageContainer } from "@/components/layout/page-container"
 import { Section } from "@/components/layout/section"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { RoleGuard } from "@/components/shared/role-guard"
 import { AllocationDialog } from "./components/allocation-dialog"
+import { AvailableResourceCards } from "./components/available-resource-cards"
+import { ProjectManagerAssignment } from "./components/project-manager-assignment"
 import { useRankedEmployees, type RankedEmployee } from "@/lib/use-ranked-employees"
 import { useProjects, useProject } from "@/lib/use-projects"
+import { useAuth } from "@/lib/auth-context"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export function Allocation() {
-    const { projects, loading: projLoading } = useProjects()
+    const { user } = useAuth()
+    const canEditPm = user?.role === 'Admin'
+    const { projects, loading: projLoading, refetch: refetchProjects } = useProjects()
     const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>()
     const { project: selectedProject, loading: projectDetailsLoading, refetch: refetchProject } = useProject(selectedProjectId)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [selectedEmployee, setSelectedEmployee] = useState<RankedEmployee | null>(null)
     const [editingAllocation, setEditingAllocation] = useState<{
-        id: string; percentage: number; startDate: string; endDate: string; skillId?: string; roleId?: string
+        id: string; percentage: number; startDate: string; endDate: string; skillId?: string; skillIds?: string[]; roleId?: string
     } | null>(null)
-    const [explainLoading, setExplainLoading] = useState(false)
-    const [explanation, setExplanation] = useState<AllocationExplanation | null>(null)
+    const [selectedSkillFilter, setSelectedSkillFilter] = useState<string | undefined>()
 
-    const handleExplain = async (employeeId: string) => {
-        if (!selectedProjectId) return
-        setExplainLoading(true)
-        setExplanation(null)
-        const result = await fetchAllocationExplanation(
-            selectedProjectId,
-            employeeId,
-            selectedProject?.startDate,
-            selectedProject?.endDate
-        )
-        setExplanation(result)
-        setExplainLoading(false)
-    }
+    useEffect(() => {
+        setSelectedSkillFilter(undefined)
+    }, [selectedProjectId])
 
+    const listProject = useMemo(
+        () => projects.find((p) => p.id === selectedProjectId),
+        [projects, selectedProjectId]
+    )
 
+    const activeProject = useMemo(() => {
+        if (selectedProject?.id === selectedProjectId) return selectedProject
+        return listProject ?? null
+    }, [selectedProject, selectedProjectId, listProject])
+
+    const detailProject = selectedProject?.id === selectedProjectId ? selectedProject : null
 
     const rankedParams = useMemo(() => ({
         projectId: selectedProjectId,
-        startDate: selectedProject?.startDate,
-        endDate: selectedProject?.endDate,
-    }), [selectedProjectId, selectedProject?.startDate, selectedProject?.endDate])
+        skill: selectedSkillFilter,
+        startDate: activeProject?.startDate,
+        endDate: activeProject?.endDate,
+    }), [selectedProjectId, selectedSkillFilter, activeProject?.startDate, activeProject?.endDate])
 
     const { rankedEmployees, loading: rankLoading, error: rankError, refetch: refetchRanked } = useRankedEmployees(rankedParams)
 
     const handleAllocationSuccess = () => {
         refetchRanked()
         refetchProject()
+    }
+
+    const handlePmUpdated = () => {
+        refetchProject()
+        refetchProjects()
     }
 
     const handleAllocate = (employee: RankedEmployee) => {
@@ -73,6 +79,11 @@ export function Allocation() {
                 startDate: projectAlloc.startDate,
                 endDate: projectAlloc.endDate,
                 skillId: projectAlloc.skillId,
+                skillIds: projectAlloc.skillIds?.length
+                    ? projectAlloc.skillIds
+                    : projectAlloc.skillId
+                      ? [projectAlloc.skillId]
+                      : undefined,
                 roleId: projectAlloc.roleId,
             })
             setIsDialogOpen(true)
@@ -91,299 +102,250 @@ export function Allocation() {
                 <p className="text-sm text-gray-600 mt-1">Allocate resources to projects based on skills, availability, and experience.</p>
             </div>
 
-            {/* Top Row: Project Selection */}
-            <div className="bg-white p-6 border border-gray-200 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center gap-4">
-                <div className="flex-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 block">Select Project to Allocate Resources</label>
-                    <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                        <SelectTrigger className="w-full md:w-[400px] h-12 text-base font-medium border-gray-200 focus:ring-brand-500 rounded-xl">
-                            <SelectValue placeholder="Choose a project..." />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-xl border-gray-200 shadow-xl">
-                            {projLoading ? (
-                                <div className="flex items-center justify-center p-4">
-                                    <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
-                                </div>
-                            ) : (
-                                (projects || []).map((project) => (
-                                    <SelectItem key={project.id} value={project.id} className="h-10 text-sm focus:bg-brand-50 focus:text-brand-900 cursor-pointer">
-                                        <div className="flex items-center justify-between w-full gap-2">
-                                            <span>{project.name}</span>
-                                            <span className="text-[10px] text-gray-400 font-mono bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">{project.code}</span>
-                                        </div>
-                                    </SelectItem>
-                                ))
-                            )}
-                        </SelectContent>
-                    </Select>
-                </div>
-                {selectedProjectId && (
-                    <div className="flex gap-2">
-                        <Badge variant="outline" className="h-12 px-4 rounded-xl bg-gray-50 border-gray-200 text-gray-600 flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-green-500" />
-                            {selectedProject?.status || 'Active'}
-                        </Badge>
+            {/* Project + PM toolbar */}
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div
+                    className={
+                        selectedProjectId && activeProject
+                            ? canEditPm
+                                ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_auto_auto]'
+                                : 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_auto]'
+                            : 'max-w-xl'
+                    }
+                >
+                    <div className="space-y-2 min-w-0">
+                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Select project
+                        </label>
+                        <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                            <SelectTrigger className="h-11 w-full rounded-xl border-gray-200 text-sm font-medium">
+                                <SelectValue placeholder="Choose a project…" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl shadow-xl">
+                                {projLoading ? (
+                                    <div className="flex items-center justify-center p-4">
+                                        <Loader2 className="h-5 w-5 animate-spin text-brand-500" />
+                                    </div>
+                                ) : (
+                                    (projects || []).map((project) => (
+                                        <SelectItem key={project.id} value={project.id}>
+                                            <span className="flex items-center gap-2">
+                                                <span>{project.name}</span>
+                                                <span className="font-mono text-[10px] text-gray-400">
+                                                    {project.code}
+                                                </span>
+                                            </span>
+                                        </SelectItem>
+                                    ))
+                                )}
+                            </SelectContent>
+                        </Select>
                     </div>
-                )}
+
+                    {selectedProjectId && activeProject && (
+                        <>
+                            <ProjectManagerAssignment
+                                key={selectedProjectId}
+                                projectId={selectedProjectId}
+                                managerId={activeProject.managerId}
+                                managerName={activeProject.managerName}
+                                readOnly={!canEditPm}
+                                onUpdated={handlePmUpdated}
+                            />
+                            <div className="space-y-2 min-w-0">
+                                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    Status
+                                </label>
+                                <div className="flex h-11 items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm font-medium text-gray-700">
+                                    <span
+                                        className={`h-2 w-2 shrink-0 rounded-full ${
+                                            activeProject.status === 'Active'
+                                                ? 'bg-green-500'
+                                                : activeProject.status === 'Planning'
+                                                  ? 'bg-amber-500'
+                                                  : 'bg-gray-400'
+                                        }`}
+                                    />
+                                    {activeProject.status || 'Active'}
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                {/* Left Column: Requirements */}
-                <div className="lg:col-span-1 space-y-6">
-
-                    {/* Project Requirements Section */}
-                    {selectedProjectId && (
-                        <Section title="Project Requirements">
-                            {projectDetailsLoading ? (
-                                <div className="flex items-center justify-center p-4">
-                                    <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
-                                </div>
-                            ) : selectedProject ? (
-                                <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
-                                    {/* Business Goal */}
-                                    {selectedProject.businessGoal && (
-                                        <div>
-                                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Business Goal</label>
-                                            <p className="text-sm text-gray-700">{selectedProject.businessGoal}</p>
-                                        </div>
-                                    )}
-
-                                    {/* Staffing Strategy */}
-                                    {selectedProject.staffingStrategy && (
-                                        <div>
-                                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Staffing Strategy</label>
-                                            <Badge variant="outline" className="text-xs">{selectedProject.staffingStrategy}</Badge>
-                                        </div>
-                                    )}
-
-                                    {/* Skill Requirements */}
-                                    {selectedProject.skillRequirements && selectedProject.skillRequirements.length > 0 && (
-                                        <div>
-                                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Skill Requirements</label>
-                                            <div className="space-y-2">
-                                                {selectedProject.skillRequirements.map((req, i) => (
-                                                    <div key={i} className="bg-gray-50 rounded-lg p-2">
-                                                        <div className="flex items-center justify-between mb-1">
-                                                            <div className="flex items-center gap-2">
-                                                                <Badge variant="default" className="text-[10px] bg-red-500 hover:bg-red-600 border-none">{req.skillName || 'Skill'}</Badge>
-                                                                <span className="text-xs text-gray-400 font-medium">{req.minSkillLevel}+</span>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <div className="text-xs font-bold text-gray-900">{req.fulfilledPercent}% fulfilled</div>
-                                                                <div className="text-[10px] text-gray-400 font-medium">{req.originalHeadcount} people required</div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-[10px] text-gray-500 tabular-nums">
-                                                            {req.startDate} to {req.endDate} ({req.requiredDays}d)
-                                                        </div>
-                                                    </div>
-                                                ))}
+            {selectedProjectId && (
+                <div className="space-y-6">
+                    {/* Project Requirements */}
+                    <Section title="Project Requirements">
+                        {projectDetailsLoading ? (
+                            <div className="flex items-center justify-center p-8 bg-white border border-gray-200 rounded-xl">
+                                <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+                            </div>
+                        ) : detailProject ? (
+                            <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-6">
+                                {(detailProject.businessGoal || detailProject.staffingStrategy) && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-gray-100">
+                                        {detailProject.businessGoal && (
+                                            <div>
+                                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Business Goal</label>
+                                                <p className="text-sm text-gray-700">{detailProject.businessGoal}</p>
                                             </div>
-                                        </div>
-                                    )}
-
-                                    {/* Role Efforts */}
-                                    {selectedProject.roleEfforts && selectedProject.roleEfforts.length > 0 && (
-                                        <div>
-                                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Role Efforts</label>
-                                            <div className="space-y-2">
-                                                {selectedProject.roleEfforts.map((effort, i) => (
-                                                    <div key={i} className="bg-gray-50 rounded-lg p-2">
-                                                        <div className="flex items-center justify-between mb-1">
-                                                            <Badge variant="secondary" className="text-[10px] bg-red-50 text-red-700 border-red-100">{effort.roleName || 'Role'}</Badge>
-                                                            <div className="text-right">
-                                                                <div className="text-xs font-bold text-gray-900">{effort.fulfilledPercent}% fulfilled</div>
-                                                                <div className="text-[10px] text-gray-400 font-medium">{effort.originalHeadcount} required</div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-[10px] text-gray-500 tabular-nums flex justify-between">
-                                                            <span>{effort.startDate} to {effort.endDate}</span>
-                                                            <span>{effort.hoursPerDay}h/day</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* No requirements message */}
-                                    {(!selectedProject.skillRequirements || selectedProject.skillRequirements.length === 0) &&
-                                        (!selectedProject.roleEfforts || selectedProject.roleEfforts.length === 0) &&
-                                        !selectedProject.businessGoal && (
-                                            <p className="text-xs text-gray-400 italic">No requirements defined for this project</p>
                                         )}
-                                </div>
-                            ) : null}
-                        </Section>
-                    )}
+                                        {detailProject.staffingStrategy && (
+                                            <div>
+                                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Staffing Strategy</label>
+                                                <Badge variant="outline" className="text-xs">{detailProject.staffingStrategy}</Badge>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
+                                {/* Required Skills — primary driver for resource matching */}
+                                <div>
+                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Required Skills</label>
+                                        {selectedSkillFilter && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 text-xs"
+                                                onClick={() => setSelectedSkillFilter(undefined)}
+                                            >
+                                                Show all matching skills
+                                            </Button>
+                                        )}
+                                    </div>
+                                    {detailProject.skillRequirements && detailProject.skillRequirements.length > 0 ? (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                            {detailProject.skillRequirements.map((req) => {
+                                                const skillLabel = req.skillName || 'Skill';
+                                                const isActive = selectedSkillFilter === skillLabel;
+                                                return (
+                                                    <button
+                                                        key={req.skillId}
+                                                        type="button"
+                                                        onClick={() => setSelectedSkillFilter(isActive ? undefined : skillLabel)}
+                                                        className={`text-left bg-gray-50 rounded-lg p-3 border transition-colors ${
+                                                            isActive
+                                                                ? 'border-brand-500 ring-2 ring-brand-100 bg-brand-50/50'
+                                                                : 'border-gray-100 hover:border-gray-200 hover:bg-gray-100/80'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <Badge variant="default" className="text-[10px] bg-brand-600 hover:bg-brand-700 border-none">
+                                                                {skillLabel}
+                                                            </Badge>
+                                                            <span className="text-xs text-gray-400 font-medium">{req.minSkillLevel}+</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between text-[10px] text-gray-500">
+                                                            <span>{req.originalHeadcount} needed · {req.fulfilledPercent}% filled</span>
+                                                            {req.roleName && <span>{req.roleName}</span>}
+                                                        </div>
+                                                        <div className="text-[10px] text-gray-400 tabular-nums mt-1">
+                                                            {req.startDate} to {req.endDate}
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-3">
+                                            No skill requirements defined for this project. Add tech skills under Projects to filter available resources by skill match.
+                                        </p>
+                                    )}
+                                    {detailProject.skillRequirements && detailProject.skillRequirements.length > 0 && (
+                                        <p className="text-xs text-gray-500 mt-2">
+                                            {selectedSkillFilter
+                                                ? `Showing resources matching "${selectedSkillFilter}". Click the skill again or use "Show all matching skills" to reset.`
+                                                : 'Available resources below are filtered to employees who match at least one required skill. Click a skill to narrow the list.'}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Role Efforts — headcount by job role */}
+                                {detailProject.roleEfforts && detailProject.roleEfforts.length > 0 && (
+                                    <div>
+                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 block">Role Headcount</label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                            {detailProject.roleEfforts.map((effort) => (
+                                                <div key={effort.roleId} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <Badge variant="secondary" className="text-[10px] bg-gray-200 text-gray-800 border-none">
+                                                            {effort.roleName || 'Role'}
+                                                        </Badge>
+                                                        <span className="text-xs font-bold text-gray-900">{effort.fulfilledPercent}% filled</span>
+                                                    </div>
+                                                    <div className="text-[10px] text-gray-500 tabular-nums flex justify-between">
+                                                        <span>{effort.originalHeadcount} required</span>
+                                                        <span>{effort.hoursPerDay}h/day · {effort.startDate} to {effort.endDate}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : null}
+                    </Section>
+
+                    {/* Ranking Logic hint */}
                     <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
                         <h4 className="text-sm font-semibold text-blue-900 mb-2">Ranking Logic</h4>
                         <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
                             <li>Skill match (project skill requirements)</li>
                             <li>Role effort gaps (unfilled job roles on project)</li>
-                            <li>Availability over project dates</li>
+                            <li>Free capacity over project dates (all active projects)</li>
                             <li>Experience on matched skills</li>
                         </ol>
+                        <p className="text-xs text-blue-800/90 mt-3 pt-3 border-t border-blue-200 leading-relaxed">
+                            <strong>Free capacity</strong> includes every <strong>active</strong> allocation on
+                            other projects whose dates overlap this project&apos;s window. When someone is
+                            released from another project (end date passed or allocation updated), refresh
+                            the list or re-select the project to see updated availability.
+                        </p>
                     </div>
-                </div>
 
-                {/* Right Column: Ranked Table */}
-                <div className="lg:col-span-3">
-                    <Section title={`Available Resources (${employeesToShow.length})`} description="Ranked by best match">
-                        <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                            {rankLoading ? (
-                                <div className="flex items-center justify-center p-8">
-                                    <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
-                                    <span className="ml-2 text-gray-500">Loading ranked employees...</span>
-                                </div>
-                            ) : rankError ? (
-                                <div className="p-8 text-center text-red-600">
-                                    <p>Error: {rankError}</p>
-                                </div>
-                            ) : (
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-gray-50">
-                                            <TableHead>Employee</TableHead>
-                                            <TableHead>Access / Job role</TableHead>
-                                            <TableHead>Skill Match</TableHead>
-                                            <TableHead>Current Allocations</TableHead>
-                                            <TableHead>Availability</TableHead>
-                                            <TableHead>Experience</TableHead>
-                                            <TableHead>Match</TableHead>
-                                            <TableHead className="text-right">Action</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {(employeesToShow || []).map((emp) => (
-                                            <TableRow key={emp.id} className="hover:bg-gray-50 group">
-                                                <TableCell>
-                                                    <div className="font-medium text-gray-900">{emp.name}</div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="text-xs space-y-1">
-                                                        <div>
-                                                            <span className="text-gray-400">Access:</span>{' '}
-                                                            <span className="text-gray-700">{emp.role}</span>
-                                                        </div>
-                                                        {emp.jobRoleName && (
-                                                            <div>
-                                                                <span className="text-gray-400">Job:</span>{' '}
-                                                                <span className="text-gray-800 font-medium">{emp.jobRoleName}</span>
-                                                            </div>
-                                                        )}
-                                                        {emp.suggestedAllocationRoleName && (
-                                                            <div>
-                                                                <span className="text-gray-400">Suggest:</span>{' '}
-                                                                <span className="text-brand-700 font-medium">{emp.suggestedAllocationRoleName}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-col gap-2 py-1">
-                                                        {emp.matchingSkills && emp.matchingSkills.length > 0 ? (
-                                                            emp.matchingSkills.map((ms, i) => (
-                                                                <div key={i} className="flex items-center gap-2">
-                                                                    <Badge variant={emp.factors?.skillMatch ? "default" : "secondary"} className="text-[10px] whitespace-nowrap">
-                                                                        {ms.name}
-                                                                    </Badge>
-                                                                    <span className="text-[10px] text-gray-500 font-medium">{ms.level}</span>
-                                                                </div>
-                                                            ))
-                                                        ) : (
-                                                            <div className="flex items-center gap-2">
-                                                                <Badge variant={emp.factors?.skillMatch ? "default" : "secondary"} className="text-[10px] whitespace-nowrap">
-                                                                    {emp.primarySkill}
-                                                                </Badge>
-                                                                <span className="text-[10px] text-gray-500 font-medium">{emp.skillLevel}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-wrap gap-1 max-w-[200px]">
-                                                        {emp.currentAllocations?.length > 0 ? (
-                                                            emp.currentAllocations.map((alloc, i) => (
-                                                                <Badge key={i} variant="outline" className="text-[10px] bg-gray-50 border-gray-200 py-0.5 px-1.5 h-auto leading-tight flex flex-col items-start gap-0.5">
-                                                                    <span className="font-semibold text-gray-700">{alloc.projectName} ({alloc.percentage}%)</span>
-                                                                    <span className="text-[9px] text-gray-400 tabular-nums font-normal">{alloc.startDate} to {alloc.endDate}</span>
-                                                                </Badge>
-                                                            ))
-                                                        ) : (
-                                                            <span className="text-xs text-gray-400">Not allocated</span>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2 w-32">
-                                                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                                                            <div
-                                                                className={`h-full rounded-full ${emp.availability === 100 ? "bg-green-500" :
-                                                                    emp.availability > 0 ? "bg-yellow-500" : "bg-red-500"
-                                                                    }`}
-                                                                style={{ width: `${emp.availability}%` }}
-                                                            />
-                                                        </div>
-                                                        <span className="text-xs font-medium w-8">{emp.availability}%</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-sm text-gray-600">{emp.experienceYears} yrs</TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-col gap-1">
-                                                        <span className="text-sm font-medium">{Math.round((emp.matchScore ?? 0) * 100)}%</span>
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="h-7 text-xs justify-start px-1"
-                                                            onClick={() => handleExplain(emp.id)}
-                                                        >
-                                                            <HelpCircle className="w-3 h-3 mr-1" />
-                                                            Why?
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <RoleGuard allowedRoles={["Admin"]}>
-                                                        {emp.isAllocatedToProject ? (
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => handleEdit(emp)}
-                                                                className="text-xs"
-                                                            >
-                                                                Edit
-                                                            </Button>
-                                                        ) : (
-                                                            <Button
-                                                                size="sm"
-                                                                disabled={emp.availability === 0}
-                                                                onClick={() => handleAllocate(emp)}
-                                                                className={emp.availability === 0 ? "opacity-50" : ""}
-                                                            >
-                                                                <UserPlus className="w-4 h-4 mr-1.5" />
-                                                                Allocate
-                                                            </Button>
-                                                        )}
-                                                    </RoleGuard>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
-                        </div>
+                    {/* Available Resources */}
+                    <Section
+                        title={`Available Resources (${employeesToShow.length})`}
+                        description={
+                            detailProject?.skillRequirements?.length
+                                ? selectedSkillFilter
+                                    ? `Employees matching "${selectedSkillFilter}", ranked by best fit.`
+                                    : 'Employees matching at least one required skill, ranked by best fit.'
+                                : 'Ranked by best match. Peak load = busiest day across all overlapping projects.'
+                        }
+                    >
+                        {rankLoading ? (
+                            <div className="flex items-center justify-center p-8 bg-white border border-gray-200 rounded-xl">
+                                <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
+                                <span className="ml-2 text-gray-500">Loading ranked employees...</span>
+                            </div>
+                        ) : rankError ? (
+                            <div className="p-8 text-center text-red-600 bg-white border border-gray-200 rounded-xl">
+                                <p>Error: {rankError}</p>
+                            </div>
+                        ) : employeesToShow.length === 0 ? (
+                            <div className="p-8 text-center text-gray-500 bg-white border border-gray-200 rounded-xl">
+                                <p className="text-sm font-medium text-gray-700">No matching resources found</p>
+                                <p className="text-xs mt-1">
+                                    {detailProject?.skillRequirements?.length
+                                        ? 'No employees match the selected skill requirements. Try another skill or update project requirements.'
+                                        : 'Select a project with skill requirements to see ranked matches.'}
+                                </p>
+                            </div>
+                        ) : (
+                            <AvailableResourceCards
+                                employees={employeesToShow}
+                                selectedProjectId={selectedProjectId}
+                                onAllocate={handleAllocate}
+                                onEdit={handleEdit}
+                            />
+                        )}
                     </Section>
                 </div>
-            </div>
-
-            <AllocationExplainPanel
-                explanation={explanation}
-                loading={explainLoading}
-                onClose={() => setExplanation(null)}
-            />
+            )}
 
             <AllocationDialog
                 open={isDialogOpen}
@@ -392,15 +354,18 @@ export function Allocation() {
                 employeeName={selectedEmployee?.name || ""}
                 projectId={selectedProjectId || ""}
                 projectName={selectedProjectName}
-                skillRequirements={selectedProject?.skillRequirements}
-                roleEfforts={selectedProject?.roleEfforts}
+                skillRequirements={detailProject?.skillRequirements}
+                roleEfforts={detailProject?.roleEfforts}
                 suggestedAllocationRoleId={selectedEmployee?.suggestedAllocationRoleId}
                 suggestedAllocationRoleName={selectedEmployee?.suggestedAllocationRoleName}
+                projectStartDate={activeProject?.startDate}
+                projectEndDate={activeProject?.endDate}
                 allocationId={editingAllocation?.id}
                 initialPercentage={editingAllocation?.percentage}
                 initialStartDate={editingAllocation?.startDate}
                 initialEndDate={editingAllocation?.endDate}
                 initialSkillId={editingAllocation?.skillId}
+                initialSkillIds={editingAllocation?.skillIds}
                 initialRoleId={editingAllocation?.roleId}
                 onSuccess={handleAllocationSuccess}
             />

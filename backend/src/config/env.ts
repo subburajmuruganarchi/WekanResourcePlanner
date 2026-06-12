@@ -40,6 +40,49 @@ const envSchema = z.object({
             required_error: 'FRONTEND_URL is required for CORS',
         })
         .url('FRONTEND_URL must be a valid URL (e.g. https://app.example.com)'),
+    /** Phase 1 weekly planning APIs (default off for safe rollout). */
+    FEATURE_WEEKLY_ALLOCATIONS_ENABLED: z
+        .enum(['true', 'false', '1', '0'])
+        .optional()
+        .default('false')
+        .transform((v) => v === 'true' || v === '1'),
+    /** When true, grid reads merge legacy project_allocations into planned hours. */
+    FEATURE_WEEKLY_ALLOCATIONS_LEGACY_READ: z
+        .enum(['true', 'false', '1', '0'])
+        .optional()
+        .default('true')
+        .transform((v) => v === 'true' || v === '1'),
+    /** When true, PUT /grid enforces 40h/week capacity unless admin override. */
+    FEATURE_WEEKLY_ALLOCATIONS_VALIDATE_CAPACITY: z
+        .enum(['true', 'false', '1', '0'])
+        .optional()
+        .default('true')
+        .transform((v) => v === 'true' || v === '1'),
+    /** Standard hours per employee per week (enterprise default 40). */
+    WEEKLY_CAPACITY_HOURS: z
+        .string()
+        .optional()
+        .default('40')
+        .transform((v) => {
+            const n = parseInt(v, 10);
+            return Number.isFinite(n) && n > 0 && n <= 168 ? n : 40;
+        }),
+    FEATURE_UTILIZATION_API_ENABLED: z
+        .enum(['true', 'false', '1', '0'])
+        .optional()
+        .default('true')
+        .transform((v) => v === 'true' || v === '1'),
+    /** Auto-sync actual_hours from PM-approved time entries on approval + manual sync API. */
+    FEATURE_WEEKLY_ACTUALS_SYNC_ENABLED: z
+        .enum(['true', 'false', '1', '0'])
+        .optional()
+        .default('true')
+        .transform((v) => v === 'true' || v === '1'),
+    FEATURE_WEEKLY_UTILIZATION_SNAPSHOTS: z
+        .enum(['true', 'false', '1', '0'])
+        .optional()
+        .default('true')
+        .transform((v) => v === 'true' || v === '1'),
 });
 
 const parsedEnv = envSchema.safeParse({

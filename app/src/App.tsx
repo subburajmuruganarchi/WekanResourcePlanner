@@ -13,7 +13,9 @@ import { LoginPage } from "@/app/login/page"
 import InsightsCenterPage from "@/app/insights/page"
 import ReportsPage from "@/app/reports/page"
 import UserControlPage from "@/app/user-control/page"
+import InputsPage from "@/app/inputs/page"
 import SystemHealthPage from "@/app/system-health/page"
+import WeeklyPlannerPage from "@/app/weekly-planner/page"
 
 import { AuthProvider, useAuth } from "@/lib/auth-context"
 import { getHomeRoute } from "@/lib/home-route"
@@ -104,6 +106,7 @@ function AppRoutes() {
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/allocation" element={<Allocation />} />
+        <Route path="/weekly-planner" element={<WeeklyPlannerPage />} />
         <Route path="/time-entry" element={<TimeEntry />} />
         <Route path="/pm-approvals" element={<PmApprovalsPage />} />
         <Route path="/skills" element={<SkillsPage />} />
@@ -112,6 +115,7 @@ function AppRoutes() {
         <Route path="/ai-analytics" element={<Navigate to="/insights" replace />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/user-control" element={<UserControlPage />} />
+        <Route path="/inputs" element={<InputsPage />} />
         <Route path="/system-health" element={<SystemHealthPage />} />
       </Route>
 

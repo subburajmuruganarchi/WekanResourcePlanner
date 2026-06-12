@@ -1,0 +1,24 @@
+# Local / demo production-like stack (MongoDB must be Atlas or add a mongo service)
+services:
+  api:
+    build:
+      context: ./backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      FRONTEND_URL: http://localhost:8080
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./app
+      args:
+        VITE_API_URL: http://localhost:3000/api
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped

@@ -12,6 +12,9 @@
         "test": "jest",
         "migrate:roles": "ts-node src/scripts/normalize-role-names.ts",
         "seed:dev": "ts-node scripts/seed-dev-data.ts",
+        "seed:planner": "ts-node scripts/seed-from-planner-sheet.ts",
+        "seed:resource": "ts-node scripts/seed-from-planner-sheet.ts --resource-only",
+        "sync:weekly-legacy": "ts-node scripts/sync-weekly-from-legacy-allocations.ts",
         "verify:seed": "ts-node scripts/verify-seed.ts"
     },
     "keywords": [],
@@ -35,6 +38,7 @@
         "jsonwebtoken": "^9.0.3",
         "lodash": "^4.17.23",
         "mongoose": "^8.2.0",
+        "multer": "^2.1.1",
         "uuid": "^13.0.0",
         "winston": "^3.11.0",
         "zod": "^3.22.4"
@@ -48,6 +52,7 @@
         "@types/jest": "^30.0.0",
         "@types/jsonwebtoken": "^9.0.10",
         "@types/lodash": "^4.17.24",
+        "@types/multer": "^2.1.0",
         "@types/node": "^20.11.19",
         "@typescript-eslint/eslint-plugin": "^7.0.1",
         "@typescript-eslint/parser": "^7.0.1",

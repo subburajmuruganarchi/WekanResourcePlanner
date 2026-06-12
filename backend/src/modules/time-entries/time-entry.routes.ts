@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { TimeCode } from './time-code.model';
+import { ensureDefaultTimeCodes, mapTimeCodeResponse, sortTimeCodesForEntry } from './time-code.bootstrap';
 import { timeEntryController } from './time-entry.controller';
 import { requireRole } from '../../common/middleware/role.middleware';
 
@@ -9,15 +10,16 @@ const router = Router();
 router.use(requireRole());
 
 // GET /api/time-entries/codes - Get all time codes
-router.get('/codes', async (req, res, next) => {
+router.get('/codes', async (_req, res, next) => {
     try {
-        const timeCodes = await TimeCode.find({}).lean();
-        const response = timeCodes.map((tc) => ({
-            id: tc._id.toString(),
-            code: tc.code,
-            description: tc.description,
-            isBillable: tc.isBillable,
-        }));
+        await ensureDefaultTimeCodes();
+        const timeCodes = await TimeCode.find({
+            $or: [
+                { status: { $exists: false } },
+                { status: { $nin: ['Inactive', 'inactive'] } },
+            ],
+        }).lean();
+        const response = sortTimeCodesForEntry(timeCodes.map(mapTimeCodeResponse));
         res.json({ status: 'success', data: response });
     } catch (error) {
         next(error);

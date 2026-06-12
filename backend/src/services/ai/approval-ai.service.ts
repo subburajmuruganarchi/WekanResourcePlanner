@@ -5,8 +5,11 @@ const DAILY_HOURS_WARNING = 10;
 const WEEKLY_HOURS_WARNING = 40;
 
 /** Flags anomalies for PM review — never auto-approves. */
-export async function analyzePendingApprovals(pmUserId: string): Promise<ApprovalInsightSummary> {
-    const pending = await timeEntryService.getPendingApprovalForPM(pmUserId);
+export async function analyzePendingApprovals(
+    pmUserId: string,
+    options?: { includeAll?: boolean }
+): Promise<ApprovalInsightSummary> {
+    const pending = await timeEntryService.getPendingApprovalForPM(pmUserId, options);
     const anomalies: ApprovalAnomaly[] = [];
 
     const byDayEmployee = new Map<string, typeof pending>();

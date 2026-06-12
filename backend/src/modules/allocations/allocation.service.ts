@@ -5,6 +5,7 @@ import { Project } from '../projects/project.model';
 import { ProjectSkillRequirement } from '../projects/project-skill-requirement.model';
 import { ProjectRoleEffort } from '../projects/project-role-effort.model';
 import { Types, startSession } from 'mongoose';
+import { computeAvailabilityInPeriod } from './allocation-availability.util';
 
 export interface RankingRequest {
     projectId: string;
@@ -32,7 +33,9 @@ export interface RankedEmployee {
     primarySkill: string;
     matchingSkills: { name: string; level: string }[];
     skillLevel: string;
-    availability: number; // average availability over period
+    availability: number; // average free % over project window
+    peakCommittedPercent: number; // max combined % on any day (all other projects)
+    minFreePercent: number; // 100 − peakCommitted (capacity left on busiest day)
     experienceYears: number;
     matchScore: number;
     factors: {
@@ -50,8 +53,20 @@ export interface RankedEmployee {
         startDate: string;
         endDate: string;
         skillId?: string;
+        skillIds?: string[];
     }[];
     isAllocatedToProject: boolean;
+    /** Active allocation on the project being ranked, if any. */
+    projectAllocation?: {
+        id: string;
+        percentage: number;
+        startDate: string;
+        endDate: string;
+        roleId?: string;
+        roleName?: string;
+        skillId?: string;
+        skillIds?: string[];
+    };
 }
 
 export interface CreateAllocationRequest {
@@ -59,6 +74,7 @@ export interface CreateAllocationRequest {
     employeeId: string;
     roleId: string;
     skillId?: string;
+    skillIds?: string[];
     startDate: string;
     endDate: string;
     percentage: number;
@@ -73,6 +89,7 @@ export interface AllocationResponse {
     employeeId: string;
     roleId: string;
     skillId?: string;
+    skillIds?: string[];
     startDate: string;
     endDate: string;
     percentage: number;
@@ -86,6 +103,7 @@ export interface UpdateAllocationRequest {
     startDate?: string;
     endDate?: string;
     skillId?: string;
+    skillIds?: string[];
     isAdminOverride: boolean;
     overrideReason: string;
     authorizedById: string;
@@ -120,6 +138,22 @@ interface PopulatedEmployeeSkill {
     skill_level: string;
     experience_years: number;
     is_primary: boolean;
+}
+
+function resolveSkillObjectIds(skillId?: string, skillIds?: string[]): Types.ObjectId[] {
+    const raw = skillIds?.length ? skillIds : skillId ? [skillId] : [];
+    const unique = [...new Set(raw.filter((id) => Types.ObjectId.isValid(id)))];
+    return unique.map((id) => new Types.ObjectId(id));
+}
+
+function mapStoredSkillIds(allocation: IProjectAllocation): string[] {
+    if (allocation.skill_ids?.length) {
+        return allocation.skill_ids.map((id) => id.toString());
+    }
+    if (allocation.skill_id) {
+        return [allocation.skill_id.toString()];
+    }
+    return [];
 }
 
 export class AllocationService {
@@ -235,12 +269,15 @@ export class AllocationService {
                 }
             }
 
+            const skillObjectIds = resolveSkillObjectIds(request.skillId, request.skillIds);
+
             // Create the allocation
             const [allocation] = await ProjectAllocation.create([{
                 project_id: new Types.ObjectId(request.projectId),
                 employee_id: new Types.ObjectId(request.employeeId),
                 role_id: new Types.ObjectId(request.roleId),
-                skill_id: request.skillId ? new Types.ObjectId(request.skillId) : undefined,
+                skill_id: skillObjectIds[0],
+                skill_ids: skillObjectIds.length > 0 ? skillObjectIds : undefined,
                 start_date: startDate,
                 end_date: endDate,
                 allocation_percent: request.percentage,
@@ -316,8 +353,10 @@ export class AllocationService {
                 allocation.end_date = endDate;
             }
 
-            if (request.skillId) {
-                allocation.skill_id = new Types.ObjectId(request.skillId);
+            if (request.skillId !== undefined || request.skillIds !== undefined) {
+                const skillObjectIds = resolveSkillObjectIds(request.skillId, request.skillIds);
+                allocation.skill_id = skillObjectIds[0];
+                allocation.skill_ids = skillObjectIds.length > 0 ? skillObjectIds : undefined;
             }
 
             // Validate dates
@@ -408,12 +447,14 @@ export class AllocationService {
     }
 
     private mapAllocationToResponse(allocation: IProjectAllocation): AllocationResponse {
+        const skillIds = mapStoredSkillIds(allocation);
         return {
             id: allocation._id.toString(),
             projectId: allocation.project_id.toString(),
             employeeId: allocation.employee_id.toString(),
             roleId: allocation.role_id.toString(),
-            skillId: allocation.skill_id?.toString(),
+            skillId: skillIds[0],
+            skillIds: skillIds.length > 0 ? skillIds : undefined,
             startDate: allocation.start_date.toISOString().split('T')[0],
             endDate: allocation.end_date.toISOString().split('T')[0],
             percentage: allocation.allocation_percent,
@@ -447,7 +488,14 @@ export class AllocationService {
         // Fetch project skill requirements if projectId is provided
         let projectRequirements: any[] = [];
         let roleEffortGaps: RoleEffortGap[] = [];
-        let projectAllocations: IProjectAllocation[] = [];
+        let projectAllocations: Array<{
+            employee_id: Types.ObjectId;
+            role_id?: Types.ObjectId;
+            start_date: Date;
+            end_date: Date;
+            allocation_percent: number;
+            project_id: Types.ObjectId;
+        }> = [];
 
         if (request.projectId && Types.ObjectId.isValid(request.projectId)) {
             const projectOid = new Types.ObjectId(request.projectId);
@@ -459,10 +507,10 @@ export class AllocationService {
             const roleEfforts = await ProjectRoleEffort.find({ project_id: projectOid })
                 .populate('role_id', 'role_name')
                 .lean();
-            projectAllocations = await ProjectAllocation.find({
+            projectAllocations = (await ProjectAllocation.find({
                 project_id: projectOid,
                 is_active: true,
-            }).lean();
+            }).lean()) as typeof projectAllocations;
             roleEffortGaps = this.computeRoleEffortGaps(roleEfforts, projectAllocations);
         }
 
@@ -479,7 +527,19 @@ export class AllocationService {
         );
 
         // Sort by match score (higher is better)
-        return rankedEmployees.sort((a, b) => b.matchScore - a.matchScore);
+        const sorted = rankedEmployees.sort((a, b) => b.matchScore - a.matchScore);
+
+        // When the project defines skill requirements, only surface employees who match
+        // at least one required skill (or are already allocated for edit).
+        const shouldFilterBySkills =
+            projectRequirements.length > 0 || Boolean(request.skillName?.trim());
+        if (shouldFilterBySkills) {
+            return sorted.filter(
+                (emp) => emp.isAllocatedToProject || emp.factors?.skillMatch === true
+            );
+        }
+
+        return sorted;
     }
 
     private computeRoleEffortGaps(
@@ -489,7 +549,12 @@ export class AllocationService {
             start_date: Date;
             end_date: Date;
         }>,
-        allocations: IProjectAllocation[]
+        allocations: Array<{
+            role_id?: Types.ObjectId;
+            start_date: Date;
+            end_date: Date;
+            allocation_percent: number;
+        }>
     ): RoleEffortGap[] {
         return roleEfforts.map((effort) => {
             const role = effort.role_id as { _id: Types.ObjectId; role_name: string };
@@ -532,7 +597,7 @@ export class AllocationService {
         emp: PopulatedEmployee,
         roleEffortGaps: RoleEffortGap[],
         projectRequirements: Array<{ role_id?: Types.ObjectId | { _id: Types.ObjectId } }>,
-        existingProjectAlloc?: IProjectAllocation
+        existingProjectAlloc?: { role_id?: Types.ObjectId }
     ): { roleId?: string; roleName?: string; matching: RankedEmployee['matchingRoleEfforts'] } {
         if (existingProjectAlloc?.role_id) {
             const rid = existingProjectAlloc.role_id.toString();
@@ -600,13 +665,87 @@ export class AllocationService {
         return { matching: [] };
     }
 
+    private findEmployeeSkillForRequirement(
+        skills: PopulatedEmployeeSkill[],
+        req: { skill_id?: { _id?: Types.ObjectId; name?: string } | Types.ObjectId }
+    ): PopulatedEmployeeSkill | undefined {
+        const skillRef = req.skill_id as { _id?: Types.ObjectId; name?: string } | Types.ObjectId | undefined;
+        const reqSkillId =
+            skillRef && typeof skillRef === 'object' && '_id' in skillRef && skillRef._id
+                ? skillRef._id.toString()
+                : skillRef?.toString?.();
+        const reqSkillName =
+            skillRef && typeof skillRef === 'object' && 'name' in skillRef
+                ? skillRef.name?.toLowerCase()
+                : undefined;
+
+        return skills.find((s) => {
+            const empSkillRef = s.skill_id as { _id?: Types.ObjectId; name?: string };
+            const empSkillId = empSkillRef?._id?.toString();
+            const empSkillName = empSkillRef?.name?.toLowerCase();
+            if (reqSkillId && empSkillId && reqSkillId === empSkillId) return true;
+            if (reqSkillName && empSkillName && reqSkillName === empSkillName) return true;
+            return false;
+        });
+    }
+
+    private fillDisplaySkills(
+        skills: PopulatedEmployeeSkill[],
+        matchingSkills: { name: string; level: string }[],
+        matchedSkill?: PopulatedEmployeeSkill
+    ): { matchingSkills: { name: string; level: string }[]; matchedSkill?: PopulatedEmployeeSkill } {
+        if (matchingSkills.length > 0 || skills.length === 0) {
+            return { matchingSkills, matchedSkill };
+        }
+
+        const sorted = [...skills].sort((a, b) => {
+            if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
+            return (b.experience_years || 0) - (a.experience_years || 0);
+        });
+
+        const displaySkills: { name: string; level: string }[] = [];
+        for (const s of sorted.slice(0, 6)) {
+            const name = (s.skill_id as { name: string })?.name;
+            if (name && !displaySkills.some((d) => d.name === name)) {
+                displaySkills.push({ name, level: s.skill_level });
+            }
+        }
+
+        return {
+            matchingSkills: displaySkills,
+            matchedSkill: matchedSkill || sorted[0],
+        };
+    }
+
+    private resolveExperienceYears(
+        skills: PopulatedEmployeeSkill[],
+        matchingSkills: { name: string; level: string }[],
+        matchedSkill?: PopulatedEmployeeSkill
+    ): number {
+        const names = new Set(matchingSkills.map((s) => s.name));
+        const relevant =
+            names.size > 0
+                ? skills.filter((s) => names.has((s.skill_id as { name: string })?.name))
+                : skills;
+
+        const fromSkills = relevant.reduce(
+            (max, s) => Math.max(max, s.experience_years || 0),
+            0
+        );
+        if (fromSkills > 0) return fromSkills;
+        return matchedSkill?.experience_years || 0;
+    }
+
     private async calculateRanking(
         emp: PopulatedEmployee,
         request: RankingRequest,
         skills: PopulatedEmployeeSkill[],
         projectRequirements: any[] = [],
         roleEffortGaps: RoleEffortGap[] = [],
-        projectAllocations: IProjectAllocation[] = []
+        projectAllocations: Array<{
+            employee_id: Types.ObjectId;
+            role_id?: Types.ObjectId;
+        }> = []
     ): Promise<RankedEmployee> {
         const accessRoleName = emp.role_id?.role_name || emp.department || 'Employee';
         const jobRoleName = emp.job_role_id?.role_name;
@@ -657,10 +796,7 @@ export class AllocationService {
             let matchesFound = 0;
 
             projectRequirements.forEach(req => {
-                const reqSkillName = (req.skill_id as { name: string })?.name?.toLowerCase();
-                const empSkill = skills.find(s =>
-                    (s.skill_id as { name: string })?.name?.toLowerCase() === reqSkillName
-                );
+                const empSkill = this.findEmployeeSkillForRequirement(skills, req);
 
                 if (empSkill) {
                     matchesFound++;
@@ -701,14 +837,19 @@ export class AllocationService {
             skillMatchScore = 20; // Lower base score if no requirement matched
         }
 
-        const skillName = (matchedSkill?.skill_id as { name: string })?.name || 'N/A';
-        const skillLevel = matchedSkill?.skill_level || 'Beginner';
-        const empExpYears = matchedSkill?.experience_years || 0;
+        ({ matchingSkills, matchedSkill } = this.fillDisplaySkills(skills, matchingSkills, matchedSkill));
+
+        const skillName = (matchedSkill?.skill_id as { name: string })?.name || 'No skills on profile';
+        const skillLevel = matchedSkill?.skill_level || '—';
+        const empExpYears = this.resolveExperienceYears(skills, matchingSkills, matchedSkill);
 
         // Calculate availability over the requested period
-        const analysisStart = request.startDate ? new Date(request.startDate) : new Date();
-        const analysisEnd = request.endDate ? new Date(request.endDate) : new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000);
-        const totalPeriodDays = Math.max(1, Math.ceil((analysisEnd.getTime() - analysisStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        const analysisStart = request.startDate
+            ? new Date(request.startDate + 'T00:00:00.000Z')
+            : new Date();
+        const analysisEnd = request.endDate
+            ? new Date(request.endDate + 'T00:00:00.000Z')
+            : new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000);
 
         const allocations = await ProjectAllocation.find({
             employee_id: emp._id,
@@ -721,21 +862,23 @@ export class AllocationService {
             .populate('role_id', 'role_name')
             .lean();
 
-        let weightedBusyDays = 0;
+        const capacitySlices = allocations.map((a) => ({
+            start_date: new Date(a.start_date),
+            end_date: new Date(a.end_date),
+            allocation_percent: a.allocation_percent || 0,
+        }));
+
+        const periodCapacity = computeAvailabilityInPeriod(
+            capacitySlices,
+            analysisStart,
+            analysisEnd
+        );
+
         const currentAllocations = allocations.map(a => {
             const proj = a.project_id as unknown as { _id: Types.ObjectId; project_name: string; project_code: string };
             const allocRole = a.role_id as unknown as { _id: Types.ObjectId; role_name: string } | undefined;
             const allocStart = new Date(a.start_date);
             const allocEnd = new Date(a.end_date);
-
-            // Calculate overlap with analysis period
-            const overlapStart = new Date(Math.max(allocStart.getTime(), analysisStart.getTime()));
-            const overlapEnd = new Date(Math.min(allocEnd.getTime(), analysisEnd.getTime()));
-
-            if (overlapStart <= overlapEnd) {
-                const overlapDays = Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                weightedBusyDays += overlapDays * ((a.allocation_percent || 0) / 100);
-            }
 
             return {
                 id: a._id.toString(),
@@ -746,16 +889,23 @@ export class AllocationService {
                 percentage: a.allocation_percent,
                 startDate: allocStart.toISOString().split('T')[0],
                 endDate: allocEnd.toISOString().split('T')[0],
-                skillId: a.skill_id?.toString()
+                skillId: a.skill_id?.toString(),
+                skillIds: a.skill_ids?.length
+                    ? a.skill_ids.map((id) => id.toString())
+                    : a.skill_id
+                      ? [a.skill_id.toString()]
+                      : undefined,
             };
         });
 
-        const availability = Math.round(Math.max(0, (1 - (weightedBusyDays / totalPeriodDays)) * 100));
+        const availability = periodCapacity.availability;
 
-        // Check if already allocated to the target project (ever)
-        const isAllocatedToProject = request.projectId
-            ? allocations.some(a => a.project_id && (a.project_id as any)._id?.toString() === request.projectId)
-            : false;
+        const projectAllocationEntry = request.projectId
+            ? currentAllocations.find((a) => a.projectId === request.projectId)
+            : undefined;
+
+        // Check if already allocated to the target project in this period
+        const isAllocatedToProject = !!projectAllocationEntry;
 
         // Role effort fit (up to 20 pts when project defines role efforts)
         let roleEffortScore = 0;
@@ -812,6 +962,8 @@ export class AllocationService {
             matchingSkills,
             skillLevel,
             availability,
+            peakCommittedPercent: periodCapacity.peakCommittedPercent,
+            minFreePercent: periodCapacity.minFreePercent,
             experienceYears: empExpYears,
             matchScore: Math.round(matchScoreValue * 100) / 100,
             factors: {
@@ -821,6 +973,18 @@ export class AllocationService {
             },
             currentAllocations,
             isAllocatedToProject,
+            projectAllocation: projectAllocationEntry
+                ? {
+                      id: projectAllocationEntry.id,
+                      percentage: projectAllocationEntry.percentage,
+                      startDate: projectAllocationEntry.startDate,
+                      endDate: projectAllocationEntry.endDate,
+                      roleId: projectAllocationEntry.roleId,
+                      roleName: projectAllocationEntry.roleName,
+                      skillId: projectAllocationEntry.skillId,
+                      skillIds: projectAllocationEntry.skillIds,
+                  }
+                : undefined,
         };
     }
 }

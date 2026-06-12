@@ -1,5 +1,7 @@
 import { ProjectAllocation } from '../modules/allocations/allocation.model';
 import { Project } from '../modules/projects/project.model';
+import { computePeakCommittedPercent } from '../modules/allocations/allocation-availability.util';
+import type { DashboardPeriodRange } from '../modules/dashboard/dashboard-period.util';
 
 export interface HeatmapCell {
     employeeId: string;
@@ -16,9 +18,17 @@ export interface AllocationHeatmapData {
 const MAX_EMPLOYEES = 14;
 const MAX_PROJECTS = 10;
 
-/** Read-only snapshot for dashboard heatmap (active allocations). */
-export async function buildAllocationHeatmap(): Promise<AllocationHeatmapData> {
-    const allocations = await ProjectAllocation.find({ is_active: true })
+/** Read-only snapshot for dashboard heatmap (active allocations in period). */
+export async function buildAllocationHeatmap(
+    period?: DashboardPeriodRange
+): Promise<AllocationHeatmapData> {
+    const allocationFilter: Record<string, unknown> = { is_active: true };
+    if (period) {
+        allocationFilter.start_date = { $lte: period.periodEnd };
+        allocationFilter.end_date = { $gte: period.periodStart };
+    }
+
+    const allocations = await ProjectAllocation.find(allocationFilter)
         .populate<{ project_id: { _id: unknown; project_name: string; project_code: string } }>(
             'project_id',
             'project_name project_code'
@@ -30,7 +40,10 @@ export async function buildAllocationHeatmap(): Promise<AllocationHeatmapData> {
         .lean();
 
     const projectTotals = new Map<string, { id: string; name: string; code: string; headcount: number }>();
-    const employeeTotals = new Map<string, { id: string; name: string; totalPercent: number }>();
+    const employeeTotals = new Map<
+        string,
+        { id: string; name: string; totalPercent: number; slices: { start_date: Date; end_date: Date; allocation_percent: number }[] }
+    >();
     const cells: HeatmapCell[] = [];
 
     for (const alloc of allocations) {
@@ -45,8 +58,17 @@ export async function buildAllocationHeatmap(): Promise<AllocationHeatmapData> {
 
         cells.push({ employeeId, projectId, percent: pct });
 
-        const et = employeeTotals.get(employeeId) ?? { id: employeeId, name: empName, totalPercent: 0 };
-        et.totalPercent += pct;
+        const et = employeeTotals.get(employeeId) ?? {
+            id: employeeId,
+            name: empName,
+            totalPercent: 0,
+            slices: [],
+        };
+        et.slices.push({
+            start_date: new Date(alloc.start_date),
+            end_date: new Date(alloc.end_date),
+            allocation_percent: pct,
+        });
         employeeTotals.set(employeeId, et);
 
         const pt = projectTotals.get(projectId) ?? {
@@ -60,6 +82,11 @@ export async function buildAllocationHeatmap(): Promise<AllocationHeatmapData> {
     }
 
     const employees = [...employeeTotals.values()]
+        .map((e) => ({
+            id: e.id,
+            name: e.name,
+            totalPercent: computePeakCommittedPercent(e.slices),
+        }))
         .sort((a, b) => b.totalPercent - a.totalPercent)
         .slice(0, MAX_EMPLOYEES);
 

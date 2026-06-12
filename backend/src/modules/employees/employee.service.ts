@@ -2,13 +2,20 @@ import { Employee, IEmployee } from './employee.model';
 import { EmployeeSkill, IEmployeeSkill } from './employee-skill.model';
 import { Skill } from '../skills/skill.model';
 import { Role } from '../roles/role.model';
+import { ProjectAllocation } from '../allocations/allocation.model';
+import {
+    computeEmployeeAvailabilityPercent,
+    type AllocationCapacitySlice,
+} from '../allocations/allocation-availability.util';
 import { Types } from 'mongoose';
 import { AppError } from '../../common/errors/app-error';
+import { getEmployeesAllocatedToManagedProjects } from '../../common/utils/pm-scope.util';
 
 export interface EmployeeListParams {
     skill?: string;
     minLevel?: string;
     isActive?: boolean;
+    employeeIds?: string[];
 }
 
 export interface EmployeeResponse {
@@ -61,8 +68,20 @@ interface PopulatedEmployeeSkill {
 }
 
 export class EmployeeService {
+    async findAllocatedToProjectManager(pmEmployeeId: string, params: EmployeeListParams = {}): Promise<EmployeeResponse[]> {
+        const employeeIds = await getEmployeesAllocatedToManagedProjects(pmEmployeeId);
+        return this.findAll({ ...params, employeeIds });
+    }
+
     async findAll(params: EmployeeListParams = {}): Promise<EmployeeResponse[]> {
         const query: Record<string, unknown> = {};
+
+        if (params.employeeIds !== undefined) {
+            if (params.employeeIds.length === 0) {
+                return [];
+            }
+            query._id = { $in: params.employeeIds.map((id) => new Types.ObjectId(id)) };
+        }
 
         if (typeof params.isActive === 'boolean') {
             if (params.isActive) {
@@ -93,7 +112,15 @@ export class EmployeeService {
             skillsByEmployee.get(empId)!.push(skill);
         });
 
-        return employees.map(emp => this.mapToResponse(emp, skillsByEmployee.get(emp._id.toString()) || []));
+        const availabilityByEmployee = await this.loadAvailabilityByEmployee(employeeIds);
+
+        return employees.map(emp =>
+            this.mapToResponse(
+                emp,
+                skillsByEmployee.get(emp._id.toString()) || [],
+                availabilityByEmployee.get(emp._id.toString()) ?? 100
+            )
+        );
     }
 
     async findById(id: string): Promise<EmployeeResponse | null> {
@@ -115,7 +142,13 @@ export class EmployeeService {
             .populate('skill_id', 'name')
             .lean() as unknown as PopulatedEmployeeSkill[];
 
-        return this.mapToResponse(employee, skills);
+        const availabilityByEmployee = await this.loadAvailabilityByEmployee([new Types.ObjectId(id)]);
+
+        return this.mapToResponse(
+            employee,
+            skills,
+            availabilityByEmployee.get(id) ?? 100
+        );
     }
 
     async update(id: string, data: any): Promise<EmployeeResponse> {
@@ -174,10 +207,56 @@ export class EmployeeService {
             .populate('job_role_id', 'role_name')
             .lean() as unknown as PopulatedEmployee;
 
-        return this.mapToResponse(populated, []);
+        return this.mapToResponse(populated, [], 100);
     }
 
-    private mapToResponse(emp: PopulatedEmployee, skills: PopulatedEmployeeSkill[]): EmployeeResponse {
+    private async loadAvailabilityByEmployee(
+        employeeIds: Types.ObjectId[]
+    ): Promise<Map<string, number>> {
+        const result = new Map<string, number>();
+        if (employeeIds.length === 0) return result;
+
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        const horizonEnd = new Date(today);
+        horizonEnd.setUTCDate(horizonEnd.getUTCDate() + 90);
+
+        const allocations = await ProjectAllocation.find({
+            employee_id: { $in: employeeIds },
+            is_active: true,
+            end_date: { $gte: today },
+            start_date: { $lte: horizonEnd },
+        })
+            .select('employee_id start_date end_date allocation_percent')
+            .lean();
+
+        const slicesByEmployee = new Map<string, AllocationCapacitySlice[]>();
+        for (const alloc of allocations) {
+            const empId = alloc.employee_id.toString();
+            if (!slicesByEmployee.has(empId)) {
+                slicesByEmployee.set(empId, []);
+            }
+            slicesByEmployee.get(empId)!.push({
+                start_date: new Date(alloc.start_date),
+                end_date: new Date(alloc.end_date),
+                allocation_percent: alloc.allocation_percent || 0,
+            });
+        }
+
+        for (const empId of employeeIds) {
+            const id = empId.toString();
+            const slices = slicesByEmployee.get(id) ?? [];
+            result.set(id, computeEmployeeAvailabilityPercent(slices));
+        }
+
+        return result;
+    }
+
+    private mapToResponse(
+        emp: PopulatedEmployee,
+        skills: PopulatedEmployeeSkill[],
+        availability: number
+    ): EmployeeResponse {
         const role = emp.role_id as { _id: Types.ObjectId; role_name: string } | undefined;
         const jobRole = emp.job_role_id as { _id: Types.ObjectId; role_name: string } | undefined;
 
@@ -205,7 +284,7 @@ export class EmployeeService {
                 yearsOfExperience: s.experience_years || 0,
                 isPrimary: s.is_primary || false
             })),
-            availability: 100, // TODO: Compute from allocations
+            availability,
             maxAllocationPercent: emp.max_allocation_percent || 100,
             profileImage: emp.profile_image,
             joinDate: formatDate(emp.join_date)

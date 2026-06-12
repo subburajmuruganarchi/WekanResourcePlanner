@@ -8,6 +8,9 @@ import { structuredLogger } from '../../common/logger';
 import { NotificationType } from '../notifications/notification.model';
 import { Types, startSession } from 'mongoose';
 import { TimeEntryStatus } from '../../common/types/enums';
+import { features } from '../../config/features';
+import { weeklyActualsSyncService } from '../../services/weekly-actuals/weekly-actuals-sync.service';
+import { isFutureUtcWeek } from '../../common/utils/week.util';
 
 export interface CreateTimeEntryRequest {
     employeeId: string;
@@ -57,8 +60,8 @@ export class TimeEntryService {
                 throw new Error('Invalid time code ID');
             }
 
-            // Validate date
-            const entryDate = new Date(request.date);
+            // Validate date (UTC date-only to match week queries)
+            const entryDate = new Date(request.date + 'T00:00:00.000Z');
             if (isNaN(entryDate.getTime())) {
                 throw new Error('Invalid date format');
             }
@@ -78,7 +81,7 @@ export class TimeEntryService {
             const existingEntry = await TimeEntry.findOne({
                 employeeId: new Types.ObjectId(request.employeeId),
                 projectId: new Types.ObjectId(request.projectId),
-                date: new Date(request.date)
+                date: entryDate
             }).session(session);
 
             if (existingEntry && existingEntry.status !== TimeEntryStatus.DRAFT && !userIsAdmin) {
@@ -121,9 +124,10 @@ export class TimeEntryService {
                 weekStartDate
             }).session(session);
 
-            const currentWeeklyHours = existingWeeklyEntries.reduce(
-                (sum, entry) => sum + entry.hours, 0
-            );
+            const currentWeeklyHours = existingWeeklyEntries.reduce((sum, entry) => {
+                if (existingEntry && entry._id.equals(existingEntry._id)) return sum;
+                return sum + entry.hours;
+            }, 0);
             const newTotalHours = currentWeeklyHours + request.hours;
 
             if (newTotalHours > WEEKLY_HOUR_CAP) {
@@ -140,9 +144,10 @@ export class TimeEntryService {
                 date: entryDate
             }).session(session);
 
-            const currentDailyHours = existingDailyEntries.reduce(
-                (sum, entry) => sum + entry.hours, 0
-            );
+            const currentDailyHours = existingDailyEntries.reduce((sum, entry) => {
+                if (existingEntry && entry._id.equals(existingEntry._id)) return sum;
+                return sum + entry.hours;
+            }, 0);
 
             if (currentDailyHours + request.hours > 24) {
                 throw new Error(
@@ -451,10 +456,19 @@ export class TimeEntryService {
             throw new Error('Invalid week start date');
         }
 
+        if (isFutureUtcWeek(weekStartDate)) {
+            throw new Error('Cannot submit timesheets for future weeks.');
+        }
+
+        const dayBefore = new Date(weekStartDate);
+        dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+        const dayAfter = new Date(weekStartDate);
+        dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+
         // Fetch ALL entries for this employee & week (DRAFT and any already-submitted)
         const allEntries = await TimeEntry.find({
             employeeId: new Types.ObjectId(employeeId),
-            weekStartDate
+            weekStartDate: { $gte: dayBefore, $lte: dayAfter },
         });
 
         const draftEntries = allEntries.filter(e => e.status === TimeEntryStatus.DRAFT);
@@ -465,6 +479,26 @@ export class TimeEntryService {
 
         // ---- Pre-submission Validation ----
         const warnings: string[] = [];
+
+        // 0. Each weekday (Mon–Fri) must have at least one entry with hours
+        const weekdayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+        const missingWeekdays: string[] = [];
+        for (let i = 0; i < 5; i++) {
+            const dayDate = new Date(weekStartDate);
+            dayDate.setUTCDate(dayDate.getUTCDate() + i);
+            const dayKey = dayDate.toISOString().split('T')[0];
+            const hasHours = allEntries.some(
+                (e) => e.date.toISOString().split('T')[0] === dayKey && e.hours > 0
+            );
+            if (!hasHours) {
+                missingWeekdays.push(weekdayNames[i]);
+            }
+        }
+        if (missingWeekdays.length > 0) {
+            throw new Error(
+                `Complete all weekdays before submitting. Missing time entries for: ${missingWeekdays.join(', ')}.`
+            );
+        }
 
         // 1. Daily hours check (no single day > 24h)
         const hoursByDay = new Map<string, number>();
@@ -502,7 +536,7 @@ export class TimeEntryService {
         const result = await TimeEntry.updateMany(
             {
                 employeeId: new Types.ObjectId(employeeId),
-                weekStartDate,
+                weekStartDate: { $gte: dayBefore, $lte: dayAfter },
                 status: TimeEntryStatus.DRAFT
             },
             { $set: { status: TimeEntryStatus.SUBMITTED } }
@@ -647,6 +681,17 @@ export class TimeEntryService {
             });
         }
 
+        if (features.weeklyActualsSyncEnabled) {
+            void weeklyActualsSyncService
+                .syncForApprovedEntryIds(entryIds, new Types.ObjectId(pmUserId))
+                .catch((syncErr: Error) => {
+                    structuredLogger.error('Weekly actuals sync after approval failed', {
+                        module: 'time-entries',
+                        error: syncErr.message,
+                    });
+                });
+        }
+
         return { approved: entries.length };
     }
 
@@ -763,15 +808,22 @@ export class TimeEntryService {
      * Get all SUBMITTED entries for projects managed by a specific PM.
      * Returns rich data with employee name, project name, and time code for the dashboard.
      */
-    async getPendingApprovalForPM(pmUserId: string): Promise<any[]> {
-        if (!Types.ObjectId.isValid(pmUserId)) {
+    async getPendingApprovalForPM(
+        pmUserId: string,
+        options?: { includeAll?: boolean }
+    ): Promise<any[]> {
+        if (!options?.includeAll && !Types.ObjectId.isValid(pmUserId)) {
             throw new Error('Invalid PM user ID');
         }
 
-        const entries = await TimeEntry.find({
-            projectManagerUserId: new Types.ObjectId(pmUserId),
-            status: TimeEntryStatus.SUBMITTED
-        })
+        const filter: Record<string, unknown> = {
+            status: TimeEntryStatus.SUBMITTED,
+        };
+        if (!options?.includeAll) {
+            filter.projectManagerUserId = new Types.ObjectId(pmUserId);
+        }
+
+        const entries = await TimeEntry.find(filter)
             .populate('projectId', 'project_name project_code')
             .populate('employeeId', 'first_name last_name email')
             .populate('timeCodeId', 'code description isBillable')

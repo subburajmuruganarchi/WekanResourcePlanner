@@ -1,12 +1,27 @@
-import { Bell, CheckCircle2, AlertCircle, Info, Check } from "lucide-react"
-import { GlobalSearch } from "./global-search"
+import { Bell, CheckCircle2, AlertCircle, Info, Check, LogOut } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 import { useNotifications } from "@/lib/use-notifications"
+import { useAuth } from "@/lib/auth-context"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import { formatDistanceToNow } from "date-fns"
 
 export function Header() {
     const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications()
+    const { user, logout } = useAuth()
+    const navigate = useNavigate()
+
+    const handleSignOut = () => {
+        logout()
+        navigate("/login", { replace: true })
+    }
+
+    const initials = user?.name
+        ?.split(" ")
+        .map((n) => n[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
 
     const getIcon = (type: string, read: boolean) => {
         const props = { className: `w-5 h-5 ${read ? 'text-gray-400' : ''}` }
@@ -19,13 +34,7 @@ export function Header() {
     }
 
     return (
-        <header className="h-20 border-b border-gray-200 bg-white px-8 flex items-center justify-between sticky top-0 z-10">
-            {/* Left: Search / Breadcrumbs placeholder */}
-            <div className="flex items-center gap-4 w-96">
-                <GlobalSearch />
-            </div>
-
-            {/* Right: Actions */}
+        <header className="h-20 border-b border-gray-200 bg-white px-8 flex items-center justify-end sticky top-0 z-10">
             <div className="flex items-center gap-4">
                 <Popover>
                     <PopoverTrigger asChild>
@@ -88,6 +97,26 @@ export function Header() {
                         </div>
                     </PopoverContent>
                 </Popover>
+
+                <div className="h-8 w-px bg-gray-200" aria-hidden />
+
+                <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center text-xs font-semibold text-gray-700 shrink-0">
+                        {initials || "?"}
+                    </div>
+                    <div className="hidden sm:block text-right min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate max-w-[10rem]">{user?.name}</p>
+                        <p className="text-xs text-gray-500 truncate">{user?.role}</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleSignOut}
+                        aria-label="Sign out"
+                        className="inline-flex items-center justify-center p-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors shrink-0"
+                    >
+                        <LogOut className="w-4 h-4" />
+                    </button>
+                </div>
             </div>
         </header>
     )

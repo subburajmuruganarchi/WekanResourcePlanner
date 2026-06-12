@@ -2,9 +2,11 @@ export interface DashboardStatsSnapshot {
     activeProjects: number;
     totalEmployees: number;
     avgUtilization: number;
+    plannedHours: number;
     hoursThisWeek: number;
     pendingApprovals: number;
     approvedHours: number;
+    planDeliveryPercent: number;
     rejectedHours: number;
 }
 

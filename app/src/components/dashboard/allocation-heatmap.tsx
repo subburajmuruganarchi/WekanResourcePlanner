@@ -62,7 +62,7 @@ export function AllocationHeatmap({ projects, employees, cells, loading }: Alloc
                         <tr key={emp.id} className="border-b border-gray-100">
                             <td className="p-2 sticky left-0 bg-white font-medium text-gray-800 truncate max-w-[140px]">
                                 {emp.name}
-                                <span className="text-gray-400 ml-1">({emp.totalPercent}%)</span>
+                                <span className="text-gray-400 ml-1" title="Peak combined allocation on busiest day">(peak {emp.totalPercent}%)</span>
                             </td>
                             {projects.map((p) => {
                                 const pct = cellMap.get(`${emp.id}:${p.id}`) ?? 0;

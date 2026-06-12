@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { timeEntryService, CreateTimeEntryRequest } from './time-entry.service';
-import { getAuthEmployeeId, assertEmployeeScope } from '../../common/utils/auth-user.util';
+import { getAuthEmployeeId, assertTimeEntryEmployeeScope } from '../../common/utils/auth-user.util';
+import { getManagedProjectIds } from '../../common/utils/pm-scope.util';
 
 function requireAuthEmployeeId(req: Request, res: Response): string | null {
     const id = getAuthEmployeeId(req.user);
@@ -11,11 +12,23 @@ function requireAuthEmployeeId(req: Request, res: Response): string | null {
     return id;
 }
 
+async function getPmManagedProjectIdSet(req: Request): Promise<Set<string> | null> {
+    if (req.user?.role !== 'Project Manager') {
+        return null;
+    }
+    const pmId = getAuthEmployeeId(req.user);
+    if (!pmId) {
+        return new Set();
+    }
+    const ids = await getManagedProjectIds(pmId);
+    return new Set(ids);
+}
+
 export class TimeEntryController {
     async create(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const targetEmployeeId = req.body.employeeId as string;
-            const scope = assertEmployeeScope(req.user, targetEmployeeId);
+            const scope = await assertTimeEntryEmployeeScope(req.user, targetEmployeeId);
             if (!scope.ok) {
                 res.status(403).json({ status: 'error', message: scope.message });
                 return;
@@ -64,23 +77,22 @@ export class TimeEntryController {
 
             const user = req.user;
             const targetEmployeeId = employeeId as string;
-            const authEmployeeId = getAuthEmployeeId(user);
 
-            // RBAC: Employees can ONLY see their own entries
-            if (user && authEmployeeId && !['Admin', 'Project Manager'].includes(user.role)) {
-                if (targetEmployeeId !== authEmployeeId) {
-                    res.status(403).json({
-                        status: 'error',
-                        message: 'Access denied. You can only view your own time entries.'
-                    });
-                    return;
-                }
+            const scope = await assertTimeEntryEmployeeScope(user, targetEmployeeId);
+            if (!scope.ok) {
+                res.status(403).json({ status: 'error', message: scope.message });
+                return;
             }
 
-            const entries = await timeEntryService.getByEmployee(
+            let entries = await timeEntryService.getByEmployee(
                 targetEmployeeId,
                 week as string
             );
+
+            const managedProjectIds = await getPmManagedProjectIdSet(req);
+            if (managedProjectIds) {
+                entries = entries.filter((e) => managedProjectIds.has(e.projectId));
+            }
 
             res.json({
                 status: 'success',
@@ -107,16 +119,27 @@ export class TimeEntryController {
                 return;
             }
 
-            const scope = assertEmployeeScope(req.user, employeeId as string);
+            const scope = await assertTimeEntryEmployeeScope(req.user, employeeId as string);
             if (!scope.ok) {
                 res.status(403).json({ status: 'error', message: scope.message });
                 return;
             }
 
-            const estimates = await timeEntryService.getEstimatedHours(
+            let estimates = await timeEntryService.getEstimatedHours(
                 employeeId as string,
                 week as string
             );
+
+            const managedProjectIds = await getPmManagedProjectIdSet(req);
+            if (managedProjectIds) {
+                const byProject = estimates.byProject.filter((p) => managedProjectIds.has(p.projectId));
+                estimates = {
+                    byProject,
+                    totalEstimated: Math.round(
+                        byProject.reduce((sum, p) => sum + p.estimatedHours, 0) * 10
+                    ) / 10,
+                };
+            }
 
             res.json({
                 status: 'success',
@@ -144,7 +167,7 @@ export class TimeEntryController {
                 return;
             }
 
-            const scope = assertEmployeeScope(req.user, targetEmployeeId);
+            const scope = await assertTimeEntryEmployeeScope(req.user, targetEmployeeId);
             if (!scope.ok) {
                 res.status(403).json({ status: 'error', message: scope.message });
                 return;
@@ -177,16 +200,33 @@ export class TimeEntryController {
                 return;
             }
 
-            const scope = assertEmployeeScope(req.user, employeeId as string);
+            const scope = await assertTimeEntryEmployeeScope(req.user, employeeId as string);
             if (!scope.ok) {
                 res.status(403).json({ status: 'error', message: scope.message });
                 return;
             }
 
-            const forecast = await timeEntryService.getDailyForecast(
+            let forecast = await timeEntryService.getDailyForecast(
                 employeeId as string,
                 week as string
             );
+
+            const managedProjectIds = await getPmManagedProjectIdSet(req);
+            if (managedProjectIds) {
+                const days = forecast.days.map((day) => {
+                    const byProject = day.byProject.filter((p) => managedProjectIds.has(p.projectId));
+                    const totalForecast = Math.round(
+                        byProject.reduce((sum, p) => sum + p.forecastHours, 0) * 10
+                    ) / 10;
+                    return { ...day, byProject, totalForecast };
+                });
+                forecast = {
+                    days,
+                    weekTotal: Math.round(
+                        days.reduce((sum, day) => sum + day.totalForecast, 0) * 10
+                    ) / 10,
+                };
+            }
 
             res.json({
                 status: 'success',
@@ -217,7 +257,7 @@ export class TimeEntryController {
                 return;
             }
 
-            const scope = assertEmployeeScope(req.user, employeeId);
+            const scope = await assertTimeEntryEmployeeScope(req.user, employeeId);
             if (!scope.ok) {
                 res.status(403).json({ status: 'error', message: scope.message });
                 return;
@@ -328,7 +368,8 @@ export class TimeEntryController {
             const pmUserId = requireAuthEmployeeId(req, res);
             if (!pmUserId) return;
 
-            const entries = await timeEntryService.getPendingApprovalForPM(pmUserId);
+            const includeAll = req.user?.role === 'Admin';
+            const entries = await timeEntryService.getPendingApprovalForPM(pmUserId, { includeAll });
 
             res.json({
                 status: 'success',

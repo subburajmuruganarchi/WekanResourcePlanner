@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -25,6 +25,7 @@ import { useSkills } from "@/lib/use-skills"
 import { useRoles } from "@/lib/use-roles"
 import { Loader2, Plus, Trash2, AlertCircle } from "lucide-react"
 import type { CreateProjectRequest, SkillRequirement, RoleEffort, SkillLevel, ProjectStatus, BillingType, DeliveryModel, Project } from "@/types/api"
+import { normalizeRoleName } from "@/lib/role-utils"
 
 interface ProjectDialogProps {
     project?: Project;
@@ -42,6 +43,15 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
     const { employees } = useEmployees()
     const { skills } = useSkills()
     const { roles } = useRoles()
+
+    const projectManagerOptions = useMemo(
+        () =>
+            (employees || []).filter((emp) => {
+                const accessRole = normalizeRoleName(emp.role || '')
+                return accessRole === 'Project Manager' || accessRole === 'Admin'
+            }),
+        [employees]
+    )
 
     const isEdit = !!project
 
@@ -268,9 +278,15 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                     >
                                         <SelectTrigger><SelectValue placeholder="Select Project Manager" /></SelectTrigger>
                                         <SelectContent>
-                                            {(employees || []).map(emp => (
-                                                <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                                            ))}
+                                            {projectManagerOptions.length > 0 ? (
+                                                projectManagerOptions.map((emp) => (
+                                                    <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                                                ))
+                                            ) : (
+                                                (employees || []).map(emp => (
+                                                    <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                                                ))
+                                            )}
                                         </SelectContent>
                                     </Select>
                                 </div>
