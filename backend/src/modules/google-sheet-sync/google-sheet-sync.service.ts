@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
+import { env } from '../../config/env';
+import { AppError } from '../../common/errors/app-error';
 import { runPlannerSheetImport } from '../../services/planner-import/planner-import.service';
 import {
     GoogleSheetWebhookBody,
@@ -17,6 +19,54 @@ import { Project } from '../projects/project.model';
 export type SupportedSheet = 'Resource' | 'Project' | 'Project_Allocation';
 
 const SHEET_ORDER: SupportedSheet[] = ['Resource', 'Project', 'Project_Allocation'];
+const APPS_SCRIPT_SYNC_TIMEOUT_MS = 300_000;
+
+/** Trigger full Resource → Project → Project_Allocation sync via Google Apps Script web app. */
+export async function triggerFullGoogleSheetSync(): Promise<unknown> {
+    const url = env.GOOGLE_APPS_SCRIPT_WEB_APP_URL;
+    if (!url) {
+        throw new AppError(
+            'Google Apps Script web app URL is not configured (GOOGLE_APPS_SCRIPT_WEB_APP_URL).',
+            503
+        );
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), APPS_SCRIPT_SYNC_TIMEOUT_MS);
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+            signal: controller.signal,
+            redirect: 'follow',
+        });
+
+        const text = await response.text();
+        if (!response.ok) {
+            throw new AppError(
+                `Google Apps Script sync failed (${response.status}): ${text.slice(0, 500)}`,
+                502
+            );
+        }
+
+        try {
+            return JSON.parse(text) as unknown;
+        } catch {
+            return { raw: text };
+        }
+    } catch (err) {
+        if (err instanceof AppError) throw err;
+        if (err instanceof Error && err.name === 'AbortError') {
+            throw new AppError('Google Apps Script sync timed out after 5 minutes.', 504);
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        throw new AppError(`Failed to trigger Google Apps Script sync: ${message}`, 502);
+    } finally {
+        clearTimeout(timeout);
+    }
+}
 
 export async function processGoogleSheetWebhook(
     body: GoogleSheetWebhookBody

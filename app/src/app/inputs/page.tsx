@@ -145,13 +145,17 @@ export default function InputsPage() {
         setSyncMessage(null)
         setSyncLoading(true)
         try {
-            const res = await api.post<{ message: string }>("/google-sheet-sync/manual")
-            setSyncMessage(res.data?.message ?? "Status refreshed.")
+            const res = await api.post<{ message: string }>(
+                "/google-sheet-sync/sync-all",
+                {},
+                { timeout: 300_000 }
+            )
+            setSyncMessage(res.data?.message ?? "Full sync completed.")
             await loadSyncStatus()
         } catch (err: unknown) {
             const msg =
                 (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-                (err instanceof Error ? err.message : "Could not refresh sync status")
+                (err instanceof Error ? err.message : "Full sync failed")
             setSyncMessage(msg)
         } finally {
             setSyncLoading(false)
@@ -191,12 +195,12 @@ export default function InputsPage() {
                         ) : (
                             <RefreshCw className="w-4 h-4" />
                         )}
-                        Sync Now
+                        {syncLoading ? "Syncing…" : "Full Sync"}
                     </button>
                 </div>
                 <p className="text-sm text-gray-600 mb-4">
-                    Sync is push-based from Google Apps Script. Order: Resource → Project →
-                    Project_Allocation. Use Sync Now to refresh status from the server.
+                    Pulls Resource, Project, and Project_Allocation from Google Sheets into MongoDB.
+                    Order: Resource → Project → Project_Allocation. This may take a few minutes.
                 </p>
                 {syncMessage && (
                     <p className="text-sm text-gray-700 mb-3 p-3 bg-gray-50 rounded-lg">{syncMessage}</p>

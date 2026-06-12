@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import {
     processGoogleSheetWebhook,
     getLatestSyncStatus,
+    triggerFullGoogleSheetSync,
 } from './google-sheet-sync.service';
 import { GoogleSheetWebhookBody } from '../../services/planner-import/types/import-result.types';
 
@@ -41,6 +42,19 @@ export const googleSheetSyncController = {
                 message:
                     'Google Sheet sync is push-based. Trigger sync from Google Apps Script webhook, or upload Excel files below.',
                 data: status,
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    async syncAll(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const appsScriptResponse = await triggerFullGoogleSheetSync();
+            res.status(200).json({
+                status: 'success',
+                message: 'Full Google Sheet sync triggered',
+                data: appsScriptResponse,
             });
         } catch (error) {
             next(error);

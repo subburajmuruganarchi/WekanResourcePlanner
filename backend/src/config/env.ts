@@ -39,6 +39,8 @@ const envSchema = z.object({
     GOOGLE_SHEET_SYNC_SECRET: z.string().min(16).optional(),
     /** Optional Google Sheet document id for future pull-based sync */
     GOOGLE_SHEET_ID: z.string().optional(),
+    /** Google Apps Script web app URL — Admin "Full Sync" triggers POST {} here */
+    GOOGLE_APPS_SCRIPT_WEB_APP_URL: z.string().url().optional(),
     FRONTEND_URL: z
         .string({
             required_error: 'FRONTEND_URL is required for CORS',

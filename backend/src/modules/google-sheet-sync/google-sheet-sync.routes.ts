@@ -23,4 +23,10 @@ router.post(
     (req, res, next) => googleSheetSyncController.manual(req, res, next)
 );
 
+router.post(
+    '/sync-all',
+    requireRole('Admin'),
+    (req, res, next) => googleSheetSyncController.syncAll(req, res, next)
+);
+
 export { router as googleSheetSyncRouter };
