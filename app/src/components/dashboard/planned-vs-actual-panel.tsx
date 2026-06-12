@@ -272,9 +272,11 @@ export function PlannedVsActualPanel({
 
                                                 }
 
-                                                formatter={(value: number, name: string, item) => {
+                                                formatter={(_value, name, item) => {
 
-                                                    const row = item?.payload;
+                                                    const row = item?.payload as
+                                                        | { plannedLabel?: number; actualLabel?: number }
+                                                        | undefined;
 
                                                     const label =
 
@@ -284,7 +286,7 @@ export function PlannedVsActualPanel({
 
                                                             : row?.actualLabel;
 
-                                                    return [`${label}h`, name];
+                                                    return [`${label ?? 0}h`, name];
 
                                                 }}
 

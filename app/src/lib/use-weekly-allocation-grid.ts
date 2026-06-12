@@ -10,19 +10,13 @@ import type {
     WeeklyAllocationGridResponse,
     WeeklyGridBulkSaveResult,
     WeeklyGridFetchParams,
+    WeeklyGridFilters,
     WeeklyGridUpdateItem,
     WeeklyPlannerGridRow,
     WeeklyCapacitySummary,
-    UtilizationFilterState,
 } from '@/types/weekly-allocation';
 
-export interface WeeklyGridFilters {
-    weekStartFrom: string;
-    weekStartTo: string;
-    employeeId?: string;
-    projectId?: string;
-    utilization: UtilizationFilterState;
-}
+export type { WeeklyGridFilters };
 
 interface UseWeeklyAllocationGridOptions {
     /** Planner rows (employee × project) per API page (max 500). */

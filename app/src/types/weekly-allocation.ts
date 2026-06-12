@@ -123,6 +123,14 @@ export interface WeeklyPlannerGridRow {
 
 export type UtilizationFilterState = 'all' | 'over_allocated' | 'bench' | 'high_utilization';
 
+export interface WeeklyGridFilters {
+    weekStartFrom: string;
+    weekStartTo: string;
+    employeeId?: string;
+    projectId?: string;
+    utilization: UtilizationFilterState;
+}
+
 export interface WeeklyGridFetchParams {
     weekStartFrom: string;
     weekStartTo: string;

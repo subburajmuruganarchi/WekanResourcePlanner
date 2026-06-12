@@ -1,6 +1,5 @@
 import type {
     WeeklyAllocationGridRow,
-    WeeklyAllocationCell,
     WeeklyPlannerGridRow,
     WeeklyCapacitySummary,
 } from '@/types/weekly-allocation';

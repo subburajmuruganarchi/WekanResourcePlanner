@@ -228,14 +228,14 @@ export default function Dashboard() {
                   value: `${stats.planDeliveryPercent}%`,
                   change: `Allocation util. ${stats.avgUtilization}%`,
                   icon: TrendingUp,
-                  color: stats.planDeliveryPercent >= 50 ? 'green' : 'amber',
+                  color: stats.planDeliveryPercent >= 50 ? ('green' as const) : ('amber' as const),
               },
               {
                   label: 'Pending Approvals',
                   value: stats.pendingApprovals.toString(),
                   change: 'Open timesheets (all periods)',
                   icon: ClipboardList,
-                  color: stats.pendingApprovals > 0 ? 'amber' : 'orange',
+                  color: stats.pendingApprovals > 0 ? ('amber' as const) : ('orange' as const),
               },
           ]
         : [];
