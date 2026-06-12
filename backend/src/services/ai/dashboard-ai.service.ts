@@ -6,14 +6,14 @@ import { projectService } from '../../modules/projects/project.service';
 import { DashboardInsight, DashboardStatsSnapshot } from './types';
 
 export async function collectDashboardStats(
-    period?: DashboardPeriodRange
+    period: DashboardPeriodRange
 ): Promise<DashboardStatsSnapshot> {
     return collectDashboardMetrics(period);
 }
 
 /** Deterministic narrative from live stats — read-only, no LLM required. */
 export async function buildDashboardInsight(
-    period?: DashboardPeriodRange
+    period: DashboardPeriodRange
 ): Promise<DashboardInsight> {
     const metrics = await collectDashboardStats(period);
 
