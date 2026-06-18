@@ -24,6 +24,11 @@ import { SyncInProgressError } from './sync-errors';
 import { validateSheetResult, assertFullSyncSummary } from './sheet-sync.validation';
 import { acquireSyncRun, syncResponseFromRun } from './sync-run-idempotency';
 import {
+    persistSyncRunFailure,
+    persistSyncRunSuccess,
+} from './sync-run-persistence';
+import { waitForBatchSheetRuns } from './sync-batch-wait';
+import {
     waitForSheetPrerequisites,
     markBatchSheetCompleted,
     ensureSyncBatch,
@@ -66,6 +71,28 @@ function syncRequestId(explicit?: string): string {
 function generateBatchId(): string {
     const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     return `FULLSYNC-${ymd}-${uuidv4()}`;
+}
+
+/**
+ * Resolve batch id from webhook header/body, or attach to active FULL_SYNC lock
+ * when Apps Script omitted syncBatchId.
+ */
+export async function resolveSyncBatchId(
+    explicit: string | undefined,
+    requestId: string
+): Promise<string | undefined> {
+    const trimmed = explicit?.trim();
+    if (trimmed) return trimmed;
+
+    const active = await syncLockService.getActiveLock(FULL_SYNC_LOCK);
+    if (active?.batchId) {
+        structuredLogger.warn('WEBHOOK_MISSING_SYNC_BATCH_ID', {
+            requestId,
+            resolvedSyncBatchId: active.batchId,
+        });
+        return active.batchId;
+    }
+    return undefined;
 }
 
 async function assertWebhookAllowed(syncBatchId?: string): Promise<void> {
@@ -126,7 +153,8 @@ export const sheetSyncService = {
         options: SyncSheetOptions = {}
     ): Promise<GoogleSheetSyncResponse> {
         const rid = syncRequestId(options.requestId);
-        return this.syncSheetInternal(body, rid, options.syncBatchId);
+        const syncBatchId = await resolveSyncBatchId(options.syncBatchId, rid);
+        return this.syncSheetInternal(body, rid, syncBatchId);
     },
 
     async syncSheetInternal(
@@ -180,10 +208,11 @@ export const sheetSyncService = {
                 return syncResponseFromRun(syncRun, requestId);
             }
             if (syncRun.status === 'FAILED') {
-                throw new AppError(
-                    syncRun.errorMessages?.[0] ?? `${sheet} import failed`,
-                    422
-                );
+                const reason =
+                    syncRun.errorMessage ??
+                    syncRun.errorMessages?.[0] ??
+                    `${sheet} import failed`;
+                throw new AppError(reason, 422);
             }
         }
 
@@ -242,13 +271,10 @@ export const sheetSyncService = {
                 durationMs,
             };
 
-            await SyncRun.findByIdAndUpdate(syncRun._id, {
-                completedAt: new Date(),
+            await persistSyncRunSuccess(syncRun._id, {
                 rowsProcessed: response.rowsProcessed,
                 rowsSkipped: response.rowsSkipped,
-                errorMessages: [],
                 skippedRows: response.skippedRows,
-                status: 'SUCCESS',
             });
 
             if (syncBatchId) {
@@ -271,12 +297,7 @@ export const sheetSyncService = {
 
             return response;
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            await SyncRun.findByIdAndUpdate(syncRun._id, {
-                completedAt: new Date(),
-                errorMessages: [message],
-                status: 'FAILED',
-            });
+            const { message } = await persistSyncRunFailure(syncRun._id, err);
             if (syncBatchId) {
                 await markBatchSheetFailed(syncBatchId, sheet, message);
                 await SyncBatch.updateOne(
@@ -285,7 +306,7 @@ export const sheetSyncService = {
                         $set: {
                             status: 'FAILED',
                             completedAt: new Date(),
-                            failureMessages: [message],
+                            failureMessages: [`${sheet}: ${message}`],
                         },
                     }
                 );
@@ -431,6 +452,7 @@ async function executeFullSyncJob(batchId: string, requestId: string): Promise<v
         await SyncBatch.updateOne({ batchId }, { $set: { status: 'RUNNING' } });
 
         const appsScriptResponse = await triggerAppsScriptFullSync(requestId, batchId);
+        await waitForBatchSheetRuns(batchId, requestId);
         const summary = await buildBatchSummary(batchId);
         assertFullSyncSummary(summary);
 
@@ -459,13 +481,20 @@ async function executeFullSyncJob(batchId: string, requestId: string): Promise<v
         });
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        const runs = await SyncRun.find({ syncBatchId: batchId }).lean();
+        const runErrors = runs
+            .filter((r) => r.status === 'FAILED' && (r.errorMessage || r.errorMessages?.length))
+            .map((r) => `${r.sheet}: ${r.errorMessage ?? r.errorMessages?.[0]}`);
+        const failureMessages =
+            runErrors.length > 0 ? [message, ...runErrors] : [message];
+
         await SyncBatch.updateOne(
             { batchId },
             {
                 $set: {
                     status: 'FAILED',
                     completedAt: new Date(),
-                    failureMessages: [message],
+                    failureMessages,
                 },
             }
         );
@@ -473,6 +502,7 @@ async function executeFullSyncJob(batchId: string, requestId: string): Promise<v
             requestId,
             syncBatchId: batchId,
             error: message,
+            sheetErrors: runErrors,
         });
     } finally {
         await syncLockService.release(FULL_SYNC_LOCK, requestId);
@@ -500,7 +530,7 @@ async function triggerAppsScriptFullSync(requestId: string, batchId: string): Pr
                 'X-Request-Id': requestId,
                 'X-Sync-Batch-Id': batchId,
             },
-            body: JSON.stringify({ batchId }),
+            body: JSON.stringify({ batchId, syncBatchId: batchId }),
             signal: controller.signal,
             redirect: 'follow',
         });
@@ -536,14 +566,40 @@ async function buildBatchSummary(batchId: string): Promise<FullSyncSummary> {
 
     const build = (sheet: SupportedSheet): SheetSyncSummary => {
         const run = runBySheet.get(sheet);
+        if (!run) {
+            return {
+                received: 0,
+                processed: 0,
+                skipped: 0,
+                upserted: 0,
+                errors: [
+                    'No SyncRun for this batch and sheet — webhook may have omitted syncBatchId or not completed',
+                ],
+                status: 'MISSING',
+                lastSyncAt: null,
+            };
+        }
+
+        const errors: string[] = [];
+        if (run.errorMessage) errors.push(run.errorMessage);
+        for (const msg of run.errorMessages ?? []) {
+            if (msg && !errors.includes(msg)) errors.push(msg);
+        }
+
+        let status: SheetSyncSummary['status'];
+        if (run.status === 'SUCCESS') status = 'SUCCESS';
+        else if (run.status === 'RUNNING') status = 'RUNNING';
+        else if (run.status === 'FAILED') status = 'FAILED';
+        else status = 'PENDING';
+
         return {
-            received: run?.rowsReceived ?? 0,
-            processed: run?.rowsProcessed ?? 0,
-            skipped: run?.rowsSkipped ?? 0,
-            upserted: run?.rowsProcessed ?? 0,
-            errors: run?.errorMessages ?? [],
-            status: run?.status === 'SUCCESS' ? 'SUCCESS' : 'FAILED',
-            lastSyncAt: run?.completedAt?.toISOString() ?? run?.startedAt?.toISOString() ?? null,
+            received: run.rowsReceived ?? 0,
+            processed: run.rowsProcessed ?? 0,
+            skipped: run.rowsSkipped ?? 0,
+            upserted: run.rowsProcessed ?? 0,
+            errors,
+            status,
+            lastSyncAt: run.completedAt?.toISOString() ?? run.startedAt?.toISOString() ?? null,
         };
     };
 

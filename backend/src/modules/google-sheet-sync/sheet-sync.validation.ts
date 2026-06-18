@@ -38,8 +38,21 @@ export function assertFullSyncSummary(summary: FullSyncSummary): void {
     const failures: string[] = [];
 
     for (const [name, s] of Object.entries(summary) as [string, SheetSyncSummary][]) {
+        if (s.status === 'MISSING') {
+            failures.push(
+                `${name}: no SyncRun for batch (webhook may have omitted syncBatchId or not arrived yet)`
+            );
+            continue;
+        }
+        if (s.status === 'RUNNING' || s.status === 'PENDING') {
+            failures.push(`${name}: import still ${s.status}`);
+            continue;
+        }
         if (s.status !== 'SUCCESS') {
-            failures.push(`${name}: batch run status is ${s.status}`);
+            const detail =
+                s.errors[0] ??
+                (s.received === 0 ? 'webhook produced no rows' : `batch run status is ${s.status}`);
+            failures.push(`${name}: ${detail}`);
             continue;
         }
         if (s.errors.length > 0) {

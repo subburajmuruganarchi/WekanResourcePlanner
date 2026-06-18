@@ -9,6 +9,9 @@ export interface ISyncRun extends Document {
     rowsReceived: number;
     rowsProcessed: number;
     rowsSkipped: number;
+    /** Primary failure message for operators. */
+    errorMessage?: string | null;
+    errorStack?: string | null;
     errorMessages: string[];
     skippedRows?: { identifier: string; reason: string }[];
     status: SyncRunStatus;
@@ -24,6 +27,8 @@ const SyncRunSchema = new Schema<ISyncRun>(
         rowsReceived: { type: Number, default: 0 },
         rowsProcessed: { type: Number, default: 0 },
         rowsSkipped: { type: Number, default: 0 },
+        errorMessage: { type: String, default: null },
+        errorStack: { type: String, default: null },
         errorMessages: { type: [String], default: [] },
         skippedRows: [
             {

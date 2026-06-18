@@ -70,7 +70,7 @@ export interface SheetSyncSummary {
     skipped: number;
     upserted: number;
     errors: string[];
-    status: 'SUCCESS' | 'FAILED';
+    status: 'SUCCESS' | 'FAILED' | 'MISSING' | 'RUNNING' | 'PENDING';
     lastSyncAt: string | null;
 }
 

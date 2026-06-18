@@ -1,6 +1,8 @@
 import { AppError } from '../../common/errors/app-error';
 import { GoogleSheetSyncResponse } from '../../services/planner-import/types/import-result.types';
 import { SyncRun, ISyncRun, SyncRunStatus } from './sync-run.model';
+import { FULL_SYNC_LOCK, syncLockService } from './sync-lock.service';
+import { structuredLogger } from '../../common/logger';
 
 const RUN_WAIT_POLL_MS = 1_000;
 const RUN_WAIT_TIMEOUT_MS = 300_000;
@@ -97,11 +99,19 @@ export async function acquireSyncRun(params: {
     }
 
     if (existing?.status === 'FAILED' && !allowRetry) {
-        throw new AppError(
-            `${sheet} import already failed for batch ${syncBatchId}. ` +
-                'Resend with retry:true to retry.',
-            409
-        );
+        const active = await syncLockService.getActiveLock(FULL_SYNC_LOCK);
+        const isActiveFullSyncRetry = active?.batchId === syncBatchId;
+        if (!isActiveFullSyncRetry) {
+            throw new AppError(
+                `${sheet} import already failed for batch ${syncBatchId}. ` +
+                    'Resend with retry:true to retry.',
+                409
+            );
+        }
+        structuredLogger.info('RETRY FAILED SHEET IN ACTIVE FULL SYNC', {
+            syncBatchId,
+            sheet,
+        });
     }
 
     try {
@@ -116,8 +126,11 @@ export async function acquireSyncRun(params: {
                     rowsProcessed: 0,
                     rowsSkipped: 0,
                     errorMessages: [],
+                    errorMessage: null,
+                    errorStack: null,
                     skippedRows: [],
                     syncId,
+                    syncBatchId,
                 },
             },
             { upsert: true, new: true, setDefaultsOnInsert: true }

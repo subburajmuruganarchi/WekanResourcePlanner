@@ -78,11 +78,19 @@ describe('assertFullSyncSummary', () => {
         expect(() => assertFullSyncSummary(successSummary())).not.toThrow();
     });
 
-    it('fails full sync when resource sheet failed (never uses stale success)', () => {
+    it('fails full sync when resource sheet failed with error detail', () => {
         const summary = successSummary();
         summary.resource.status = 'FAILED';
+        summary.resource.errors = ['Resource: transaction aborted'];
         summary.resource.processed = 0;
-        expect(() => assertFullSyncSummary(summary)).toThrow(/resource/);
+        expect(() => assertFullSyncSummary(summary)).toThrow(/Resource: transaction aborted/);
+    });
+
+    it('reports missing batch runs clearly', () => {
+        const summary = successSummary();
+        summary.resource.status = 'MISSING';
+        summary.resource.errors = ['No SyncRun for this batch'];
+        expect(() => assertFullSyncSummary(summary)).toThrow(/omitted syncBatchId/);
     });
 });
 

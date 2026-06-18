@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { sheetSyncService } from './sheet-sync.service';
+import { sheetSyncService, resolveSyncBatchId } from './sheet-sync.service';
 import { GoogleSheetWebhookBody } from '../../services/planner-import/types/import-result.types';
 import { AppError } from '../../common/errors/app-error';
 import { SyncInProgressError } from './sync-errors';
@@ -29,8 +29,12 @@ export const googleSheetSyncController = {
             }
 
             const requestId = requestIdFrom(req);
-            const syncBatchId = syncBatchIdFrom(req, body);
-            const result = await sheetSyncService.syncSheet(body, { requestId, syncBatchId });
+            const explicitBatchId = syncBatchIdFrom(req, body);
+            const syncBatchId = await resolveSyncBatchId(explicitBatchId, requestId);
+            const result = await sheetSyncService.syncSheet(body, {
+                requestId,
+                syncBatchId,
+            });
 
             res.status(200).json({
                 status: 'success',

@@ -6,6 +6,14 @@ import {
 import { SyncRun } from './sync-run.model';
 
 jest.mock('./sync-run.model');
+jest.mock('./sync-lock.service', () => ({
+    FULL_SYNC_LOCK: 'FULL_SYNC',
+    syncLockService: {
+        getActiveLock: jest.fn(),
+    },
+}));
+
+import { syncLockService } from './sync-lock.service';
 
 describe('acquireSyncRun', () => {
     beforeEach(() => {
@@ -64,7 +72,8 @@ describe('acquireSyncRun', () => {
         expect(result.run.status).toBe('SUCCESS');
     });
 
-    it('rejects FAILED batch retry without retry:true', async () => {
+    it('rejects FAILED batch retry without retry:true when not active full sync', async () => {
+        (syncLockService.getActiveLock as jest.Mock).mockResolvedValue(null);
         (SyncRun.findOne as jest.Mock).mockResolvedValue({
             status: 'FAILED',
             errorMessages: ['boom'],
@@ -78,6 +87,32 @@ describe('acquireSyncRun', () => {
                 syncId: 'sync-3',
             })
         ).rejects.toThrow(AppError);
+    });
+
+    it('allows FAILED retry during active full sync batch', async () => {
+        (syncLockService.getActiveLock as jest.Mock).mockResolvedValue({
+            batchId: 'BATCH-3',
+        });
+        (SyncRun.findOne as jest.Mock).mockResolvedValue({
+            status: 'FAILED',
+            errorMessages: ['boom'],
+        });
+        (SyncRun.findOneAndUpdate as jest.Mock).mockResolvedValue({
+            _id: 'id4',
+            sheet: 'Resource',
+            status: 'RUNNING',
+            syncBatchId: 'BATCH-3',
+        });
+
+        const result = await acquireSyncRun({
+            syncBatchId: 'BATCH-3',
+            sheet: 'Resource',
+            received: 1,
+            syncId: 'sync-5',
+        });
+
+        expect(result.mode).toBe('new');
+        expect(SyncRun.findOneAndUpdate).toHaveBeenCalled();
     });
 
     it('builds idempotent response from successful run', () => {
