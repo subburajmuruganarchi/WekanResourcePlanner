@@ -63,6 +63,8 @@ export const googleSheetSyncController = {
                 rowsSkipped: result.rowsSkipped,
                 durationMs: result.durationMs,
                 errors: result.errors,
+                rawRowsReceived: result.rawRowsReceived,
+                rowsFilteredFromSheet: result.rowsFilteredFromSheet,
                 timestamp: new Date().toISOString(),
             });
         } catch (error) {

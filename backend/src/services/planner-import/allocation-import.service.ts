@@ -120,7 +120,6 @@ async function importAllocationRowsBulk(
             continue;
         }
         if (isDummyResource(row.resourceName, row.employeeCode)) {
-            failOrSkipRow(writeOpts, skippedRows, identifier, 'Dummy resource row');
             continue;
         }
 
@@ -384,7 +383,6 @@ async function importAllocationRowsSequential(
             continue;
         }
         if (isDummyResource(row.resourceName, row.employeeCode)) {
-            failOrSkipRow(writeOpts, skippedRows, identifier, 'Dummy resource row');
             continue;
         }
 

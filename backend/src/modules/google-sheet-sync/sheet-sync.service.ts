@@ -15,6 +15,7 @@ import {
 import {
     googleSheetRowsToResourceRows,
     googleSheetRowsToImportableResourceRows,
+    googleSheetRowsToImportableAllocationRows,
     googleSheetRowsToProjectRows,
     googleSheetRowsToAllocationRows,
     extractWeekHeadersFromWebhook,
@@ -233,16 +234,19 @@ export const sheetSyncService = {
         try {
             let result: PlannerImportResult;
             let rowsImported = received;
+            let rawRowsReceived: number | undefined;
+            let rowsFilteredFromSheet: number | undefined;
 
             if (sheet === 'Resource') {
-                const rawRowCount = body.rows?.length ?? 0;
+                rawRowsReceived = body.rows?.length ?? 0;
                 const resourceRows = googleSheetRowsToImportableResourceRows(body.rows ?? []);
-                const skippedRowCount = rawRowCount - resourceRows.length;
+                const skippedRowCount = rawRowsReceived - resourceRows.length;
+                rowsFilteredFromSheet = skippedRowCount;
 
                 structuredLogger.info('RESOURCE ROW FILTER', {
                     requestId,
                     syncBatchId,
-                    rawRowCount,
+                    rawRowCount: rawRowsReceived,
                     importableRowCount: resourceRows.length,
                     skippedRowCount,
                 });
@@ -267,15 +271,31 @@ export const sheetSyncService = {
                 });
                 validateSheetResult(sheet, received, result);
             } else {
+                rawRowsReceived = body.rows?.length ?? 0;
                 const weekHeaders = extractWeekHeadersFromWebhook(body.rows ?? [], body.weekHeaders);
-                const allocationRows = googleSheetRowsToAllocationRows(body.rows ?? [], weekHeaders);
+                const allocationRows = googleSheetRowsToImportableAllocationRows(
+                    body.rows ?? [],
+                    weekHeaders
+                );
+                rowsFilteredFromSheet = rawRowsReceived - allocationRows.length;
+
+                structuredLogger.info('ALLOCATION ROW FILTER', {
+                    requestId,
+                    syncBatchId,
+                    rawRowCount: rawRowsReceived,
+                    importableRowCount: allocationRows.length,
+                    skippedRowCount: rowsFilteredFromSheet,
+                });
+
                 result = await runPlannerSheetImport({
                     allocationRows,
                     syncId,
                     syncBatchId,
                     atomic: true,
                 });
-                validateSheetResult(sheet, received, result);
+
+                rowsImported = allocationRows.length;
+                validateSheetResult(sheet, rowsImported, result);
             }
 
             const durationMs = Date.now() - startedAt;
@@ -292,6 +312,10 @@ export const sheetSyncService = {
                 requestId,
                 durationMs,
             };
+            if (sheet === 'Resource' || sheet === 'Project_Allocation') {
+                response.rawRowsReceived = rawRowsReceived;
+                response.rowsFilteredFromSheet = rowsFilteredFromSheet;
+            }
 
             await persistSyncRunSuccess(syncRun._id, {
                 rowsProcessed: response.rowsProcessed,

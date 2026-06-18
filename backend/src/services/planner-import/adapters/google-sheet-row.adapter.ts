@@ -7,6 +7,7 @@ import {
     parseWeekMonday,
 } from '../planner-import.utils';
 import { filterImportableResourceRows } from '../resource-row.validation';
+import { filterImportableAllocationRows } from '../allocation-row.validation';
 
 function str(row: Record<string, unknown>, ...keys: string[]): string {
     for (const key of keys) {
@@ -50,7 +51,7 @@ export function googleSheetRowToResourceRow(row: Record<string, unknown>): Resou
             'Availablility',
             'availablility'
         ),
-        email: str(row, 'Email', 'email').trim().toLowerCase(),
+        email: str(row, 'Email', 'email', 'eMail', 'EMail').trim().toLowerCase(),
         location: str(row, 'Location', 'location'),
         skills: skillsRaw ? parseSkillList(skillsRaw) : [],
     };
@@ -109,17 +110,44 @@ export function googleSheetRowToAllocationRow(
     }
 
     return {
-        pid: str(row, 'PID', 'pid').toUpperCase(),
-        projectName: str(row, 'Project Name', 'ProjectName', 'project_name', 'Name'),
+        pid: str(row, 'PID', 'pid', 'P-id', 'P-Id', 'P_id').toUpperCase(),
+        projectName: str(
+            row,
+            'Project',
+            'Project Name',
+            'ProjectName',
+            'project_name',
+            'Name'
+        ),
         projectType: str(row, 'Project Type', 'ProjectType', 'project_type', 'Type'),
         projectStatus: str(row, 'Project Status', 'ProjectStatus', 'project_status', 'Status'),
-        employeeCode: str(row, 'EID', 'eid', 'EmployeeCode').toUpperCase(),
-        resourceName: str(row, 'Resource Name', 'ResourceName', 'resource_name', 'Name'),
-        jobRole: str(row, 'Job Role', 'JobRole', 'job_role'),
+        employeeCode: str(row, 'EID', 'eid', 'E-id', 'E-Id', 'EmployeeCode').toUpperCase(),
+        resourceName: str(row, 'Resource', 'Resource Name', 'ResourceName', 'resource_name', 'Name'),
+        jobRole: str(
+            row,
+            'Resource Role',
+            'ResourceRole',
+            'Job Role',
+            'JobRole',
+            'job_role'
+        ),
         resourceType: str(row, 'Resource Type', 'ResourceType', 'resource_type'),
         activeFlag: str(row, 'Active', 'active', 'Availability', 'availability'),
         weeklyHours,
     };
+}
+
+export function googleSheetRowsToImportableAllocationRows(
+    rows: Record<string, unknown>[],
+    weekHeaderKeys: string[] = []
+): AllocationImportRow[] {
+    const headers =
+        weekHeaderKeys.length > 0
+            ? weekHeaderKeys
+            : extractWeekHeadersFromRows(rows);
+    return filterImportableAllocationRows(
+        rows.map((row) => googleSheetRowToAllocationRow(row, headers))
+    );
 }
 
 export function googleSheetRowsToAllocationRows(
@@ -137,8 +165,10 @@ export function googleSheetRowsToAllocationRows(
 function extractWeekHeadersFromRows(rows: Record<string, unknown>[]): string[] {
     if (rows.length === 0) return [];
     const fixed = new Set([
-        'pid', 'eid', 'name', 'email', 'status', 'type', 'projectname', 'project name',
-        'project type', 'project status', 'resource name', 'job role', 'resource type', 'active',
+        'pid', 'p-id', 'p_id', 'eid', 'e-id', 'e_id', 'name', 'email', 'status', 'type',
+        'project', 'projectname', 'project name', 'project type', 'project status',
+        'resource', 'resource name', 'resource role', 'resourcerole', 'resource type',
+        'job role', 'active', 'column 62', 'manager', 'location',
     ]);
     return Object.keys(rows[0]).filter((key) => {
         const lower = key.toLowerCase();

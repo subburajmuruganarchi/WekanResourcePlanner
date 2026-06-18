@@ -64,6 +64,10 @@ export interface GoogleSheetSyncResponse {
     durationMs?: number;
     /** True when returning a prior SUCCESS SyncRun without re-importing. */
     cached?: boolean;
+    /** Total rows in webhook payload before placeholder/dummy filtering (Resource only). */
+    rawRowsReceived?: number;
+    /** Rows excluded as placeholder/dummy/empty before import (Resource only). */
+    rowsFilteredFromSheet?: number;
 }
 
 export interface SheetSyncSummary {
