@@ -18,6 +18,11 @@ import {
 } from './planner-import.utils';
 import { ImportWriteOptions, mongooseSessionOpts, failOrSkipRow, IMPORT_BULK_CHUNK_SIZE } from './types/import-write.options';
 import { structuredLogger } from '../../common/logger';
+import {
+    normalizeResourceEmail,
+    validateResourceRow,
+    ResourceRowValidationIssue,
+} from './resource-row.validation';
 
 const PROTECTED_EMAILS = ['admin@r360.com', 'pm@r360.com'];
 
@@ -134,8 +139,8 @@ export async function prepareResourceImportReferences(
 ): Promise<void> {
     const refOpts: ImportWriteOptions = { atomic: true };
     for (const row of rows) {
-        const email = row.email.trim().toLowerCase();
-        if (!email.includes('@') || isDummyResource(row.name, row.employeeCode)) continue;
+        if (validateResourceRow(row)) continue;
+        const email = normalizeResourceEmail(row.email);
 
         if (!ctx.jobRoleIds.has(row.jobRole)) {
             const jobRoleId = await upsertJobRole(row.jobRole, refOpts);
@@ -179,16 +184,14 @@ async function importResourceRowsBulk(
     const preparedByEmail = new Map<string, PreparedRow>();
 
     for (const row of rows) {
-        const email = row.email.trim().toLowerCase();
-        const identifier = email || row.employeeCode || row.name || 'unknown';
-        if (!email.includes('@')) {
-            failOrSkipRow(writeOpts, skippedRows, identifier, 'Invalid email');
+        const validationIssue = validateResourceRow(row);
+        if (validationIssue) {
+            failOrSkipRow(writeOpts, skippedRows, validationIssue.eid, validationIssue.reason);
             continue;
         }
-        if (isDummyResource(row.name, row.employeeCode)) {
-            failOrSkipRow(writeOpts, skippedRows, identifier, 'Dummy resource row');
-            continue;
-        }
+
+        const email = normalizeResourceEmail(row.email);
+        const identifier = email;
 
         const { first, last } = parseName(row.name);
         const jobRoleId = ctx.jobRoleIds.get(row.jobRole);
@@ -352,16 +355,14 @@ async function importResourceRowsSequential(
     const sessionOpts = mongooseSessionOpts(writeOpts);
 
     for (const row of rows) {
-        const identifier = row.email || row.employeeCode || row.name || 'unknown';
+        const validationIssue = validateResourceRow(row);
+        if (validationIssue) {
+            failOrSkipRow(writeOpts, skippedRows, validationIssue.eid, validationIssue.reason);
+            continue;
+        }
 
-        if (!row.email.includes('@')) {
-            failOrSkipRow(writeOpts, skippedRows, identifier, 'Invalid email');
-            continue;
-        }
-        if (isDummyResource(row.name, row.employeeCode)) {
-            failOrSkipRow(writeOpts, skippedRows, identifier, 'Dummy resource row');
-            continue;
-        }
+        const email = normalizeResourceEmail(row.email);
+        const identifier = email;
 
         try {
             const { first, last } = parseName(row.name);
@@ -371,13 +372,13 @@ async function importResourceRowsSequential(
                 ctx.jobRoleIds.set(row.jobRole, jobRoleId);
             }
 
-            const accessRoleId = ctx.accessByEmail.get(row.email) ?? ctx.employeeRoleId;
+            const accessRoleId = ctx.accessByEmail.get(email) ?? ctx.employeeRoleId;
             const isAvailable = !row.availability.toLowerCase().includes('not');
 
             const setFields: Record<string, unknown> = {
                 first_name: first,
                 last_name: last,
-                email: row.email,
+                email: email,
                 employee_code: row.employeeCode || undefined,
                 role_id: accessRoleId,
                 job_role_id: jobRoleId,
@@ -399,7 +400,7 @@ async function importResourceRowsSequential(
             );
 
             employeesUpserted++;
-            ctx.employeeByEmail.set(row.email, emp!._id);
+            ctx.employeeByEmail.set(email, emp!._id);
             if (row.employeeCode) ctx.employeeByCode.set(row.employeeCode.toUpperCase(), emp!._id);
 
             const skillIdsForEmployee: Types.ObjectId[] = [];

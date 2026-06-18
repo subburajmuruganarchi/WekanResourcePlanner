@@ -3,6 +3,7 @@ import { env } from '../../config/env';
 import { AppError } from '../../common/errors/app-error';
 import { structuredLogger } from '../../common/logger';
 import { runPlannerSheetImport } from '../../services/planner-import/planner-import.service';
+import { ResourceValidationError } from '../../services/planner-import/resource-row.validation';
 import {
     GoogleSheetWebhookBody,
     GoogleSheetSyncResponse,
@@ -305,6 +306,17 @@ export const sheetSyncService = {
             return response;
         } catch (err) {
             const { message } = await persistSyncRunFailure(syncRun._id, err);
+            if (err instanceof ResourceValidationError) {
+                structuredLogger.error('RESOURCE_IMPORT_FAILED', {
+                    event: 'RESOURCE_IMPORT_FAILED',
+                    requestId,
+                    syncBatchId,
+                    syncId,
+                    sheet,
+                    errors: err.errors,
+                    validationReport: err.validationReport,
+                });
+            }
             if (syncBatchId) {
                 await markBatchSheetFailed(syncBatchId, sheet, message);
                 await cascadeBatchSheetFailure(syncBatchId, sheet, message);

@@ -37,6 +37,7 @@ import { startSession, ClientSession } from 'mongoose';
 import { structuredLogger } from '../../common/logger';
 import { unwrapImportError, toError } from './import-error.utils';
 import { inferImportSheet, runPostTransactionCleanup } from './import-post-cleanup';
+import { assertResourceRowsValid } from './resource-row.validation';
 
 /** MongoDB multi-doc transaction limits — bulk imports need extended commit window. */
 const TRANSACTION_OPTIONS = {
@@ -162,6 +163,10 @@ export async function runPlannerSheetImport(params: {
     const atomic = params.atomic ?? !!params.syncId;
     if (!atomic) {
         return executePlannerSheetImport(params);
+    }
+
+    if (params.resourceRows?.length) {
+        assertResourceRowsValid(params.resourceRows);
     }
 
     const sheet = inferImportSheet(params);

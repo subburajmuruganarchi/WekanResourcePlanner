@@ -2,6 +2,7 @@ import { ISyncRun, SyncRun } from './sync-run.model';
 import { Types } from 'mongoose';
 import { unwrapImportError } from '../../services/planner-import/import-error.utils';
 import { structuredLogger } from '../../common/logger';
+import { ResourceValidationError } from '../../services/planner-import/resource-row.validation';
 
 export interface SyncRunFailureDetails {
     message: string;
@@ -51,6 +52,11 @@ export async function persistSyncRunFailure(
     err: unknown
 ): Promise<SyncRunFailureDetails> {
     const { message, stack, code, codeName, errmsg } = extractFailureDetails(err);
+    const errorMessages =
+        err instanceof ResourceValidationError
+            ? err.errors
+            : [message];
+
     const run = await SyncRun.findByIdAndUpdate(
         runId,
         {
@@ -58,7 +64,7 @@ export async function persistSyncRunFailure(
             status: 'FAILED',
             errorMessage: message,
             errorStack: stack ?? null,
-            errorMessages: [message],
+            errorMessages,
         },
         { new: true }
     ).lean();
@@ -73,6 +79,9 @@ export async function persistSyncRunFailure(
         code,
         codeName,
         errmsg,
+        errors: errorMessages,
+        validationReport:
+            err instanceof ResourceValidationError ? err.validationReport : undefined,
     });
 
     return { message, stack, code, codeName, errmsg };

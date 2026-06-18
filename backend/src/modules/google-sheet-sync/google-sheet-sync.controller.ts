@@ -4,6 +4,7 @@ import { GoogleSheetWebhookBody } from '../../services/planner-import/types/impo
 import { AppError } from '../../common/errors/app-error';
 import { SyncInProgressError } from './sync-errors';
 import { extractFailureDetails } from './sync-run-persistence';
+import { ResourceValidationError } from '../../services/planner-import/resource-row.validation';
 
 function requestIdFrom(req: Request): string {
     return req.requestId ?? `SYNC-${Date.now()}`;
@@ -78,11 +79,14 @@ export const googleSheetSyncController = {
             const details = extractFailureDetails(error);
             const httpStatus = webhookFailureStatus(error);
             const sheet = body?.sheet ?? 'unknown';
+            const validationErr = error instanceof ResourceValidationError ? error : null;
 
             res.status(httpStatus).json({
                 status: 'FAILED',
                 sheet,
                 error: details.message,
+                errors: validationErr?.errors ?? [details.message],
+                validationReport: validationErr?.validationReport ?? [],
                 code: details.code,
                 codeName: details.codeName,
                 errmsg: details.errmsg,
