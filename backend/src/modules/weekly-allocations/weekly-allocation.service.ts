@@ -210,7 +210,7 @@ export class WeeklyAllocationService {
         }
 
         // Include active employees with no allocation in the selected range (bench row).
-        if (!query.projectIds?.length) {
+        if (!query.projectIds?.length && !query.excludeBench) {
             const activeEmployeeFilter: Record<string, unknown> = {
                 $or: [{ is_active: true }, { status: 'Active' }],
                 status: { $nin: ['Terminated', 'Inactive'] },

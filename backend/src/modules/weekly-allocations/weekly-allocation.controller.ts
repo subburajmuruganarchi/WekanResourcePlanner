@@ -30,6 +30,7 @@ export class WeeklyAllocationController {
                 page: parsed.page,
                 limit: parsed.limit,
                 includeCapacitySummary: parsed.includeCapacitySummary ?? false,
+                excludeBench: parsed.excludeBench ?? false,
             });
 
             res.json({ status: 'success', data });

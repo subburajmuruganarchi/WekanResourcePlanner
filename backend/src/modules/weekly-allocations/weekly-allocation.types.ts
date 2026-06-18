@@ -88,4 +88,5 @@ export interface WeeklyGridQuery {
     page: number;
     limit: number;
     includeCapacitySummary: boolean;
+    excludeBench?: boolean;
 }

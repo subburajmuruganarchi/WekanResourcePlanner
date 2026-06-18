@@ -8,10 +8,13 @@ import { useEmployees } from '@/lib/use-employees';
 import { useProjects } from '@/lib/use-projects';
 import { useWeeklyAllocationGrid } from '@/lib/use-weekly-allocation-grid';
 import { buildCapacitySummariesFromRows, filterPlannerRowsByUtilization } from '@/lib/weekly-grid-pivot';
+import { matchesPlannerGridSearch } from '@/lib/planner-grid-search';
+import { subscribeWeeklyGridUpdated } from '@/lib/weekly-grid-sync';
 import type { WeeklyGridFilters } from '@/types/weekly-allocation';
 import type { WeeklyPlannerGridRow } from '@/types/weekly-allocation';
 import { WeeklyPlannerFilters } from './components/weekly-planner-filters';
 import { WeeklyPlannerGrid } from './components/weekly-planner-grid';
+import { PlannerGridSearchBar } from '@/components/weekly-planner/planner-grid-search-bar';
 import { CapacitySummaryPanel } from './components/capacity-summary-panel';
 import { RoleGuard } from '@/components/shared/role-guard';
 import './weekly-planner-grid.css';
@@ -37,6 +40,14 @@ function defaultFilterDraft(): WeeklyGridFilters {
     };
 }
 
+function employeeRoleLabel(emp: {
+    jobRole?: string;
+    position?: string;
+    role?: string;
+}): string {
+    return emp.jobRole || emp.position || (typeof emp.role === 'string' ? emp.role : '') || '—';
+}
+
 export default function WeeklyPlannerPage() {
     const { user } = useAuth();
     const canEdit = user?.role === 'Admin';
@@ -48,6 +59,9 @@ export default function WeeklyPlannerPage() {
     const [filterDraft, setFilterDraft] = useState<WeeklyGridFilters>(defaultFilterDraft);
     const [selectedRow, setSelectedRow] = useState<WeeklyPlannerGridRow | null>(null);
     const [selectedWeek, setSelectedWeek] = useState<string | undefined>();
+    const [searchProject, setSearchProject] = useState('');
+    const [searchResource, setSearchResource] = useState('');
+    const [searchRole, setSearchRole] = useState('');
 
     const grid = useWeeklyAllocationGrid({ canEdit, pageSize: 500 });
     const utilization = useUtilizationDashboardSummary();
@@ -63,6 +77,38 @@ export default function WeeklyPlannerPage() {
             ),
         [grid.plannerRows, grid.weeks, filterDraft.utilization]
     );
+
+    const employeeRoleMap = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const emp of employees) {
+            map.set(emp.id, employeeRoleLabel(emp));
+        }
+        return map;
+    }, [employees]);
+
+    const gridDisplayRows = useMemo(() => {
+        return visibleRows
+            .map((row) => ({
+                ...row,
+                employeeRole: employeeRoleMap.get(row.employeeId) || '—',
+            }))
+            .filter((row) =>
+                matchesPlannerGridSearch(row, {
+                    project: searchProject,
+                    resource: searchResource,
+                    role: searchRole,
+                })
+            )
+            .sort((a, b) => {
+                const byProject = a.projectName.localeCompare(b.projectName, undefined, {
+                    sensitivity: 'base',
+                });
+                if (byProject !== 0) return byProject;
+                return a.employeeName.localeCompare(b.employeeName, undefined, {
+                    sensitivity: 'base',
+                });
+            });
+    }, [visibleRows, employeeRoleMap, searchProject, searchResource, searchRole]);
     const effectiveCapacity = useMemo(() => {
         if (grid.capacitySummary.length > 0) return grid.capacitySummary;
         if (grid.weeks.length === 0) return [];
@@ -78,6 +124,12 @@ export default function WeeklyPlannerPage() {
         // Initial load only
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    useEffect(() => {
+        return subscribeWeeklyGridUpdated(() => {
+            void grid.fetchGrid(filterDraft, grid.pagination.page);
+        });
+    }, [filterDraft, grid]);
 
     const resetFilters = () => {
         const d = defaultFilterDraft();
@@ -224,7 +276,7 @@ export default function WeeklyPlannerPage() {
                 <div className="space-y-3 min-w-0">
                     <div className="flex items-center justify-between text-sm text-gray-600">
                         <span>
-                            {visibleRows.length} row(s) · {grid.weeks.length} week(s)
+                            {gridDisplayRows.length} row(s) · {grid.weeks.length} week(s)
                             {grid.pagination.totalPages > 1 &&
                                 ` · page ${grid.pagination.page} / ${grid.pagination.totalPages}`}
                         </span>
@@ -253,8 +305,18 @@ export default function WeeklyPlannerPage() {
                         )}
                     </div>
 
+                    <PlannerGridSearchBar
+                        projectSearch={searchProject}
+                        resourceSearch={searchResource}
+                        roleSearch={searchRole}
+                        onProjectSearchChange={setSearchProject}
+                        onResourceSearchChange={setSearchResource}
+                        onRoleSearchChange={setSearchRole}
+                        showRole
+                    />
+
                     <WeeklyPlannerGrid
-                        rows={visibleRows}
+                        rows={gridDisplayRows}
                         weeks={grid.weeks}
                         canEdit={canEdit}
                         dirtyKeys={grid.dirtyKeys}

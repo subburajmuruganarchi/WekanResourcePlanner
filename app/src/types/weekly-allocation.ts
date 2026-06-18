@@ -129,6 +129,7 @@ export interface WeeklyGridFilters {
     employeeId?: string;
     projectId?: string;
     utilization: UtilizationFilterState;
+    excludeBench?: boolean;
 }
 
 export interface WeeklyGridFetchParams {
@@ -139,4 +140,5 @@ export interface WeeklyGridFetchParams {
     page?: number;
     limit?: number;
     includeCapacitySummary?: boolean;
+    excludeBench?: boolean;
 }

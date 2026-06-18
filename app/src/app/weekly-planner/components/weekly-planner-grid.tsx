@@ -22,6 +22,10 @@ import '../weekly-planner-grid.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
+export interface WeeklyPlannerDisplayRow extends WeeklyPlannerGridRow {
+    employeeRole?: string;
+}
+
 function formatHours(n: number): string {
     if (n === 0) return '—';
     const rounded = Math.round(n * 10) / 10;
@@ -52,7 +56,7 @@ function cellTooltip(cell: WeeklyAllocationCell | undefined): string {
 }
 
 interface WeeklyPlannerGridProps {
-    rows: WeeklyPlannerGridRow[];
+    rows: WeeklyPlannerDisplayRow[];
     weeks: string[];
     canEdit: boolean;
     dirtyKeys: Set<string>;
@@ -70,7 +74,7 @@ export function WeeklyPlannerGrid({
     onSelectionChange,
     loading,
 }: WeeklyPlannerGridProps) {
-    const gridRef = useRef<AgGridReact<WeeklyPlannerGridRow>>(null);
+    const gridRef = useRef<AgGridReact<WeeklyPlannerDisplayRow>>(null);
 
     const employeeWeekTotals = useMemo(
         () => computeEmployeeWeekTotals(rows, weeks),
@@ -208,19 +212,8 @@ export function WeeklyPlannerGrid({
         employeeWeekTotals,
     ]);
 
-    const columnDefs = useMemo((): (ColDef<WeeklyPlannerGridRow> | ColGroupDef<WeeklyPlannerGridRow>)[] => {
-        const pinned: ColDef<WeeklyPlannerGridRow>[] = [
-            {
-                field: 'employeeName',
-                headerName: 'Resource',
-                pinned: 'left',
-                width: 160,
-                minWidth: 140,
-                lockPinned: true,
-                suppressMovable: true,
-                cellClass: 'wp-pinned-cell',
-                filter: 'agTextColumnFilter',
-            },
+    const columnDefs = useMemo((): (ColDef<WeeklyPlannerDisplayRow> | ColGroupDef<WeeklyPlannerDisplayRow>)[] => {
+        const pinned: ColDef<WeeklyPlannerDisplayRow>[] = [
             {
                 field: 'projectName',
                 headerName: 'Project',
@@ -230,17 +223,32 @@ export function WeeklyPlannerGrid({
                 lockPinned: true,
                 suppressMovable: true,
                 cellClass: 'wp-pinned-cell',
-                filter: 'agTextColumnFilter',
+                filter: false,
+                sort: 'asc',
+                sortIndex: 0,
             },
             {
-                field: 'projectCode',
-                headerName: 'Code',
+                field: 'employeeName',
+                headerName: 'Resource',
                 pinned: 'left',
-                width: 100,
-                minWidth: 80,
+                width: 160,
+                minWidth: 140,
                 lockPinned: true,
                 suppressMovable: true,
                 cellClass: 'wp-pinned-cell',
+                filter: false,
+            },
+            {
+                field: 'employeeRole',
+                headerName: 'Resource Role',
+                pinned: 'left',
+                width: 160,
+                minWidth: 130,
+                lockPinned: true,
+                suppressMovable: true,
+                cellClass: 'wp-pinned-cell',
+                filter: false,
+                valueFormatter: (p) => p.value || '—',
             },
         ];
         return [...pinned, ...weekColumnDefs];
@@ -265,7 +273,7 @@ export function WeeklyPlannerGrid({
             className="wp-grid ag-theme-quartz w-full rounded-xl border border-gray-200 overflow-hidden"
             style={{ height: 'min(70vh, 640px)', width: '100%' }}
         >
-            <AgGridReact<WeeklyPlannerGridRow>
+            <AgGridReact<WeeklyPlannerDisplayRow>
                 ref={gridRef}
                 rowData={rows}
                 columnDefs={columnDefs}

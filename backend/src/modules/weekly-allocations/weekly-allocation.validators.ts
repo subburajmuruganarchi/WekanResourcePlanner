@@ -27,6 +27,11 @@ export const weeklyGridQuerySchema = z
             .optional()
             .default('false')
             .transform((v) => v === 'true' || v === '1'),
+        excludeBench: z
+            .enum(['true', 'false', '1', '0'])
+            .optional()
+            .default('false')
+            .transform((v) => v === 'true' || v === '1'),
     })
     .superRefine((data, ctx) => {
         const from = new Date(data.weekStartFrom);

@@ -16,6 +16,7 @@ import type {
     WeeklyPlannerGridRow,
     WeeklyCapacitySummary,
 } from '@/types/weekly-allocation';
+import { notifyWeeklyGridUpdated } from './weekly-grid-sync';
 
 export type { WeeklyGridFilters };
 
@@ -23,6 +24,8 @@ interface UseWeeklyAllocationGridOptions {
     /** Planner rows (employee × project) per API page (max 500). */
     pageSize?: number;
     canEdit: boolean;
+    /** When true, loads every page and merges rows (for allocation matrix). */
+    fetchAllPages?: boolean;
 }
 
 function buildQueryString(params: WeeklyGridFetchParams): string {
@@ -32,9 +35,18 @@ function buildQueryString(params: WeeklyGridFetchParams): string {
     q.set('page', String(params.page ?? 1));
     q.set('limit', String(params.limit ?? 500));
     q.set('includeCapacitySummary', params.includeCapacitySummary ? 'true' : 'false');
+    if (params.excludeBench) q.set('excludeBench', 'true');
     if (params.employeeId) q.set('employeeId', params.employeeId);
     if (params.projectId) q.set('projectId', params.projectId);
     return q.toString();
+}
+
+const BENCH_PROJECT_CODE = 'BENCH';
+
+function withoutBenchRows(rows: WeeklyPlannerGridRow[]): WeeklyPlannerGridRow[] {
+    return rows.filter(
+        (r) => r.projectCode !== BENCH_PROJECT_CODE && r.projectName !== 'Available / Bench'
+    );
 }
 
 export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions) {
@@ -77,25 +89,45 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
             setError(null);
             setSaveMessage(null);
             try {
-                const qs = buildQueryString({
+                const baseParams: WeeklyGridFetchParams = {
                     weekStartFrom: nextFilters.weekStartFrom,
                     weekStartTo: nextFilters.weekStartTo,
                     employeeId: nextFilters.employeeId,
                     projectId: nextFilters.projectId,
-                    page,
                     limit: pageSize,
                     includeCapacitySummary: true,
-                });
+                    excludeBench: nextFilters.excludeBench,
+                };
 
-                const data = await api.get<WeeklyAllocationGridResponse>(
-                    `/weekly-allocations/grid?${qs}`
-                );
+                const fetchPage = (p: number) =>
+                    api.get<WeeklyAllocationGridResponse>(
+                        `/weekly-allocations/grid?${buildQueryString({ ...baseParams, page: p })}`
+                    );
+
+                const first = await fetchPage(page);
+                let allFlatRows = [...first.rows];
+
+                if (options.fetchAllPages && first.pagination.totalPages > 1) {
+                    for (let p = 2; p <= first.pagination.totalPages; p++) {
+                        const next = await fetchPage(p);
+                        allFlatRows = allFlatRows.concat(next.rows);
+                    }
+                }
 
                 setFilters(nextFilters);
-                setWeeks(data.weeks);
-                setPlannerRows(pivotGridRows(data.rows));
-                setCapacitySummary(data.capacityByEmployeeWeek ?? []);
-                setPagination(data.pagination);
+                setWeeks(first.weeks);
+                setPlannerRows(withoutBenchRows(pivotGridRows(allFlatRows)));
+                setCapacitySummary(first.capacityByEmployeeWeek ?? []);
+                setPagination(
+                    options.fetchAllPages
+                        ? {
+                              ...first.pagination,
+                              page: 1,
+                              total: withoutBenchRows(pivotGridRows(allFlatRows)).length,
+                              totalPages: 1,
+                          }
+                        : first.pagination
+                );
                 dirtyRef.current.clear();
                 syncDirtyCount();
                 rollbackSnapshotRef.current = null;
@@ -105,7 +137,7 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
                 setLoading(false);
             }
         },
-        [pageSize]
+        [pageSize, options.fetchAllPages]
     );
 
     const displayRows = useMemo(() => {
@@ -208,6 +240,7 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
                 }`
             );
             invalidateCache();
+            notifyWeeklyGridUpdated();
             if (filters) {
                 await fetchGrid(filters, pagination.page);
             }
@@ -298,6 +331,67 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
         [plannerRows]
     );
 
+    const changeRowProject = useCallback(
+        (
+            currentRowKey: string,
+            projectId: string,
+            projectName: string,
+            projectCode: string
+        ) => {
+            setPlannerRows((prev) => {
+                const idx = prev.findIndex((r) => r.rowKey === currentRowKey);
+                if (idx < 0) return prev;
+
+                const old = prev[idx];
+                const newRowKey = old.employeeId
+                    ? rowKey(old.employeeId, projectId)
+                    : currentRowKey;
+
+                if (
+                    old.employeeId &&
+                    prev.some((r) => r.rowKey === newRowKey && r.rowKey !== currentRowKey)
+                ) {
+                    return prev;
+                }
+
+                const newWeekCells = Object.fromEntries(
+                    Object.entries(old.weekCells).map(([week, cell]) => [
+                        week,
+                        { ...cell, projectId },
+                    ])
+                );
+
+                const next = [...prev];
+                next[idx] = {
+                    ...old,
+                    rowKey: newRowKey,
+                    projectId,
+                    projectName,
+                    projectCode,
+                    weekCells: newWeekCells,
+                };
+                return next;
+            });
+
+            const oldRow = plannerRows.find((r) => r.rowKey === currentRowKey);
+            if (oldRow?.employeeId) {
+                for (const week of Object.keys(oldRow.weekCells)) {
+                    const oldKey = cellKey(oldRow.employeeId, oldRow.projectId, week);
+                    const dirty = dirtyRef.current.get(oldKey);
+                    if (dirty) {
+                        dirtyRef.current.delete(oldKey);
+                        dirtyRef.current.set(cellKey(oldRow.employeeId, projectId, week), {
+                            ...dirty,
+                            projectId,
+                        });
+                    }
+                }
+                syncDirtyCount();
+            }
+        },
+        [plannerRows]
+    );
+
     const removePlannerRow = useCallback((rowKeyToRemove: string) => {
         setPlannerRows((prev) => prev.filter((r) => r.rowKey !== rowKeyToRemove));
     }, []);
@@ -327,6 +421,7 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
         dirtyKeys,
         appendPlannerRow,
         changeRowEmployee,
+        changeRowProject,
         removePlannerRow,
     };
 }
