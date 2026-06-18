@@ -32,10 +32,10 @@ export interface ProjectOption {
     isAllocated?: boolean
 }
 
-export interface DailyForecastDay {
-    date: string
-    dayName: string
-    isWeekday: boolean
-    totalForecast: number
-    byProject: { projectId: string; projectName: string; percentage: number; forecastHours: number }[]
+export const TIME_ENTRY_DRAG_TYPE = "application/x-r360-time-entry-project"
+
+export interface DraggedProjectPayload {
+    code: string
+    id: string
+    name: string
 }

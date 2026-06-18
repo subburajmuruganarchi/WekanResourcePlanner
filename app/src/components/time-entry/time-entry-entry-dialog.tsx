@@ -34,6 +34,7 @@ interface TimeEntryEntryDialogProps {
     leaveTypes: CodeOption[]
     otherCodes: CodeOption[]
     isLocked: boolean
+    projectReadOnly?: boolean
     isSaving: boolean
     canSave: boolean
     onClose: () => void
@@ -51,6 +52,7 @@ export function TimeEntryEntryDialog({
     leaveTypes,
     otherCodes,
     isLocked,
+    projectReadOnly = false,
     isSaving,
     canSave,
     onClose,
@@ -75,7 +77,7 @@ export function TimeEntryEntryDialog({
                         <label className="text-sm font-medium text-gray-700">Project</label>
                         <Select
                             value={entry?.projectCode || ""}
-                            disabled={isLocked}
+                            disabled={isLocked || projectReadOnly}
                             onValueChange={(val) => onChange("projectCode", val)}
                         >
                             <SelectTrigger>

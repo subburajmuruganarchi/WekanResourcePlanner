@@ -1,9 +1,16 @@
+import { useState, useCallback } from "react"
 import { Plus, Target } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { projectChipColor } from "./project-color"
-import type { DayData, DailyForecastDay, ProjectOption } from "./time-entry-types"
+import {
+    TIME_ENTRY_DRAG_TYPE,
+    type DayData,
+    type DailyForecastDay,
+    type DraggedProjectPayload,
+    type ProjectOption,
+} from "./time-entry-types"
 
 interface TimeEntryWeekCalendarProps {
     weekData: DayData[]
@@ -12,6 +19,7 @@ interface TimeEntryWeekCalendarProps {
     isTimesheetLocked: boolean
     onAddEntry: (dayIndex: number) => void
     onEditEntry: (dayIndex: number, tempId: string) => void
+    onDropProject: (dayIndex: number, project: DraggedProjectPayload) => void
 }
 
 function projectNameForCode(code: string, projects: ProjectOption[]): string {
@@ -21,6 +29,18 @@ function projectNameForCode(code: string, projects: ProjectOption[]): string {
     return code
 }
 
+function parseDraggedProject(e: React.DragEvent): DraggedProjectPayload | null {
+    const raw = e.dataTransfer.getData(TIME_ENTRY_DRAG_TYPE)
+    if (!raw) return null
+    try {
+        const parsed = JSON.parse(raw) as DraggedProjectPayload
+        if (parsed?.code && parsed?.id) return parsed
+    } catch {
+        return null
+    }
+    return null
+}
+
 export function TimeEntryWeekCalendar({
     weekData,
     dailyForecastDays,
@@ -28,9 +48,40 @@ export function TimeEntryWeekCalendar({
     isTimesheetLocked,
     onAddEntry,
     onEditEntry,
+    onDropProject,
 }: TimeEntryWeekCalendarProps) {
+    const [dragOverDayIndex, setDragOverDayIndex] = useState<number | null>(null)
+
+    const handleDragOver = useCallback(
+        (e: React.DragEvent, dayIndex: number) => {
+            if (isTimesheetLocked) return
+            if (!e.dataTransfer.types.includes(TIME_ENTRY_DRAG_TYPE)) return
+            e.preventDefault()
+            e.dataTransfer.dropEffect = "copy"
+            setDragOverDayIndex(dayIndex)
+        },
+        [isTimesheetLocked]
+    )
+
+    const handleDragLeave = useCallback((e: React.DragEvent, dayIndex: number) => {
+        const related = e.relatedTarget as Node | null
+        if (related && e.currentTarget.contains(related)) return
+        setDragOverDayIndex((prev) => (prev === dayIndex ? null : prev))
+    }, [])
+
+    const handleDrop = useCallback(
+        (e: React.DragEvent, dayIndex: number) => {
+            e.preventDefault()
+            setDragOverDayIndex(null)
+            if (isTimesheetLocked) return
+            const project = parseDraggedProject(e)
+            if (project) onDropProject(dayIndex, project)
+        },
+        [isTimesheetLocked, onDropProject]
+    )
+
     return (
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 flex-1 min-w-0">
             {weekData.map((day, dayIndex) => {
                 const dayTotal = day.entries.reduce(
                     (sum, e) => sum + (Number(e.hours) || 0),
@@ -38,20 +89,26 @@ export function TimeEntryWeekCalendar({
                 )
                 const forecast = dailyForecastDays?.find((d) => d.date === day.fullDate)
                 const isWeekend = !day.isWeekday
+                const isDropTarget = dragOverDayIndex === dayIndex
 
                 return (
                     <div
                         key={day.fullDate}
+                        onDragOver={(e) => handleDragOver(e, dayIndex)}
+                        onDragLeave={(e) => handleDragLeave(e, dayIndex)}
+                        onDrop={(e) => handleDrop(e, dayIndex)}
                         className={cn(
-                            "flex flex-col rounded-xl border min-h-[200px] overflow-hidden transition-shadow",
+                            "flex flex-col rounded-xl border min-h-[200px] overflow-hidden transition-all",
                             isWeekend ? "bg-gray-50/80 border-gray-200" : "bg-white border-gray-200",
-                            "hover:shadow-sm"
+                            isDropTarget && "ring-2 ring-brand-500 ring-offset-1 border-brand-300 shadow-md scale-[1.01]",
+                            !isTimesheetLocked && !isDropTarget && "hover:shadow-sm"
                         )}
                     >
                         <div
                             className={cn(
                                 "px-3 py-2 border-b flex items-start justify-between gap-1",
-                                isWeekend ? "bg-gray-100/80" : "bg-gray-50"
+                                isWeekend ? "bg-gray-100/80" : "bg-gray-50",
+                                isDropTarget && "bg-brand-50"
                             )}
                         >
                             <div>
@@ -71,10 +128,22 @@ export function TimeEntryWeekCalendar({
                             </div>
                         </div>
 
-                        <div className="flex-1 p-2 space-y-1.5 overflow-y-auto max-h-[220px]">
+                        <div
+                            className={cn(
+                                "flex-1 p-2 space-y-1.5 overflow-y-auto max-h-[220px] min-h-[120px]",
+                                isDropTarget && "bg-brand-50/40"
+                            )}
+                        >
                             {day.entries.length === 0 ? (
-                                <p className="text-[11px] text-gray-400 text-center py-6 px-1">
-                                    No time logged
+                                <p
+                                    className={cn(
+                                        "text-[11px] text-center py-6 px-1",
+                                        isDropTarget
+                                            ? "text-brand-600 font-medium"
+                                            : "text-gray-400"
+                                    )}
+                                >
+                                    {isDropTarget ? "Drop project here" : "No time logged"}
                                 </p>
                             ) : (
                                 day.entries.map((entry) => {
@@ -99,7 +168,10 @@ export function TimeEntryWeekCalendar({
                                             <p className="flex items-center justify-between mt-0.5">
                                                 <span>{entry.hours}h</span>
                                                 {entry.status && entry.status !== "Draft" && (
-                                                    <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="text-[9px] px-1 py-0 h-4"
+                                                    >
                                                         {entry.status === "PM_Approved"
                                                             ? "OK"
                                                             : entry.status.slice(0, 4)}

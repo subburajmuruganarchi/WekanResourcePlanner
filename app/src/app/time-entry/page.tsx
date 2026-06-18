@@ -25,7 +25,8 @@ import { useAuth } from "@/lib/auth-context"
 import { api } from "@/lib/api-client"
 import { TimeEntryWeekCalendar } from "@/components/time-entry/time-entry-week-calendar"
 import { TimeEntryEntryDialog } from "@/components/time-entry/time-entry-entry-dialog"
-import type { DayData, DayEntry, ProjectOption, DailyForecastDay } from "@/components/time-entry/time-entry-types"
+import { TimeEntryProjectPalette } from "@/components/time-entry/time-entry-project-palette"
+import type { DayData, DayEntry, ProjectOption, DailyForecastDay, DraggedProjectPayload } from "@/components/time-entry/time-entry-types"
 
 interface TimeCodeResponse {
     id: string
@@ -76,6 +77,7 @@ export function TimeEntry() {
     const [savingEntryId, setSavingEntryId] = useState<string | null>(null)
     const [rowSaveMessage, setRowSaveMessage] = useState<string | null>(null)
     const [entryDialog, setEntryDialog] = useState<{ dayIndex: number; tempId: string } | null>(null)
+    const [dialogProjectLocked, setDialogProjectLocked] = useState(false)
 
     const { user } = useAuth()
     const isSelfOnly = user?.role === 'Employee' || user?.role === 'User'
@@ -380,7 +382,7 @@ export function TimeEntry() {
                     )
                 )
                 setRowSaveMessage('Entry saved.')
-                await fetchDailyForecast()
+                await Promise.all([fetchSavedEntries(), fetchDailyForecast()])
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to save entry'
                 setSubmitError(message)
@@ -389,7 +391,7 @@ export function TimeEntry() {
                 setSavingEntryId(null)
             }
         },
-        [selectedEmployee, timeCodeId, weekData, selectableProjects, submitTimeEntry, fetchDailyForecast]
+        [selectedEmployee, timeCodeId, weekData, selectableProjects, submitTimeEntry, fetchSavedEntries, fetchDailyForecast]
     )
 
     const handleEmployeeChange = useCallback((newId: string) => {
@@ -419,6 +421,7 @@ export function TimeEntry() {
 
     const addEntry = useCallback((dayIndex: number) => {
         const tempId = generateTempId()
+        setDialogProjectLocked(false)
         setWeekData((prev) =>
             prev.map((day, i) =>
                 i === dayIndex
@@ -442,7 +445,39 @@ export function TimeEntry() {
         setEntryDialog({ dayIndex, tempId })
     }, [])
 
+    const handleDropProject = useCallback(
+        (dayIndex: number, project: DraggedProjectPayload) => {
+            const tempId = generateTempId()
+            const day = weekDates[dayIndex]
+            const defaultHours = day?.isWeekday ? 8 : 0
+            setDialogProjectLocked(true)
+            setWeekData((prev) =>
+                prev.map((d, i) =>
+                    i === dayIndex
+                        ? {
+                              ...d,
+                              entries: [
+                                  ...d.entries,
+                                  {
+                                      tempId,
+                                      projectCode: project.code,
+                                      hours: defaultHours,
+                                      comments: "",
+                                      isDirty: true,
+                                      isEditing: true,
+                                  },
+                              ],
+                          }
+                        : d
+                )
+            )
+            setEntryDialog({ dayIndex, tempId })
+        },
+        [weekDates]
+    )
+
     const openEditEntry = useCallback((dayIndex: number, tempId: string) => {
+        setDialogProjectLocked(false)
         setEntryDialog({ dayIndex, tempId })
     }, [])
 
@@ -467,6 +502,7 @@ export function TimeEntry() {
             }
         }
         setEntryDialog(null)
+        setDialogProjectLocked(false)
     }, [entryDialog, weekData])
 
     const removeEntry = useCallback(async (dayIndex: number, tempId: string) => {
@@ -948,16 +984,23 @@ export function TimeEntry() {
 
             <Card className="p-4">
                 <p className="text-sm text-gray-600 mb-4">
-                    Click a day to add time, or click an entry to edit. Allocated projects are listed first; employees may also log time to any active project.
+                    Drag a project from the sidebar onto a day, then enter hours and save. You can also click a day or entry to add or edit time. Week totals update automatically when entries are saved.
                 </p>
-                <TimeEntryWeekCalendar
-                    weekData={weekData}
-                    dailyForecastDays={dailyForecast?.days}
-                    projects={selectableProjects}
-                    isTimesheetLocked={isTimesheetLocked}
-                    onAddEntry={addEntry}
-                    onEditEntry={openEditEntry}
-                />
+                <div className="flex flex-col lg:flex-row gap-4">
+                    <TimeEntryProjectPalette
+                        projects={selectableProjects}
+                        disabled={isTimesheetLocked || !selectedEmployeeId}
+                    />
+                    <TimeEntryWeekCalendar
+                        weekData={weekData}
+                        dailyForecastDays={dailyForecast?.days}
+                        projects={selectableProjects}
+                        isTimesheetLocked={isTimesheetLocked}
+                        onAddEntry={addEntry}
+                        onEditEntry={openEditEntry}
+                        onDropProject={handleDropProject}
+                    />
+                </div>
             </Card>
 
             {entryDialog && dialogEntry && (
@@ -974,6 +1017,7 @@ export function TimeEntry() {
                         dialogEntry.status === "PM_Approved" ||
                         isTimesheetLocked
                     }
+                    projectReadOnly={dialogProjectLocked}
                     isSaving={savingEntryId === entryDialog.tempId}
                     canSave={
                         !!timeCodeId &&
