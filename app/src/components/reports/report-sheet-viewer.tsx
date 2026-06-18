@@ -22,7 +22,13 @@ function cellStyle(cell: ReportSheetCell): CSSProperties {
     return style
 }
 
-function ReportSheetTable({ sheet }: { sheet: ReportSheetPreview }) {
+export function ReportSheetTable({
+    sheet,
+    compact = false,
+}: {
+    sheet: ReportSheetPreview
+    compact?: boolean
+}) {
     const colCount = sheet.headers.length
 
     const monthRow = useMemo(() => {
@@ -37,8 +43,12 @@ function ReportSheetTable({ sheet }: { sheet: ReportSheetPreview }) {
     }, [sheet.monthBands, colCount])
 
     return (
-        <div className="overflow-auto max-h-[min(65vh,640px)] border border-gray-200 rounded-lg">
-            <table className="min-w-full border-collapse text-xs">
+        <div
+            className={`overflow-auto border border-gray-200 rounded-lg ${
+                compact ? 'max-h-80' : 'max-h-[min(65vh,640px)]'
+            }`}
+        >
+            <table className={`min-w-full border-collapse ${compact ? 'text-[10px]' : 'text-xs'}`}>
                 {monthRow && (
                     <thead className="sticky top-0 z-20">
                         <tr>
@@ -53,7 +63,7 @@ function ReportSheetTable({ sheet }: { sheet: ReportSheetPreview }) {
                                     <th
                                         key={`month-${i}`}
                                         colSpan={isStart ? span : 1}
-                                        className="border border-gray-300 px-2 py-1 text-center text-white font-semibold"
+                                        className="border border-gray-300 px-1.5 py-0.5 text-center text-white font-semibold"
                                         style={{ backgroundColor: '#434343' }}
                                     >
                                         {isStart ? label : ''}
@@ -63,12 +73,12 @@ function ReportSheetTable({ sheet }: { sheet: ReportSheetPreview }) {
                         </tr>
                     </thead>
                 )}
-                <thead className={`sticky ${monthRow ? 'top-[29px]' : 'top-0'} z-10 bg-gray-100`}>
+                <thead className={`sticky ${monthRow ? 'top-[25px]' : 'top-0'} z-10 bg-gray-100`}>
                     <tr>
                         {sheet.headers.map((header, i) => (
                             <th
                                 key={`h-${i}`}
-                                className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-800 whitespace-nowrap"
+                                className="border border-gray-300 px-1.5 py-1.5 text-left font-semibold text-gray-800 whitespace-nowrap"
                             >
                                 {header}
                             </th>
@@ -80,7 +90,7 @@ function ReportSheetTable({ sheet }: { sheet: ReportSheetPreview }) {
                         <tr>
                             <td
                                 colSpan={colCount}
-                                className="border border-gray-200 px-3 py-8 text-center text-gray-500"
+                                className="border border-gray-200 px-3 py-6 text-center text-gray-500"
                             >
                                 No data for this report.
                             </td>
@@ -102,7 +112,7 @@ function ReportSheetTable({ sheet }: { sheet: ReportSheetPreview }) {
                                         return (
                                             <td
                                                 key={`c-${rowIndex}-${colIndex}`}
-                                                className="border border-gray-200 px-2 py-1 whitespace-nowrap tabular-nums"
+                                                className="border border-gray-200 px-1.5 py-0.5 whitespace-nowrap tabular-nums"
                                                 style={cellStyle(cell)}
                                             >
                                                 {formatCellValue(cell)}
@@ -123,18 +133,41 @@ interface ReportSheetViewerProps {
     report: ReportPreviewPayload | null
     activeSheetIndex?: number
     onSheetIndexChange?: (index: number) => void
+    embedded?: boolean
+    loading?: boolean
 }
 
 export function ReportSheetViewer({
     report,
     activeSheetIndex = 0,
     onSheetIndexChange,
+    embedded = false,
+    loading = false,
 }: ReportSheetViewerProps) {
+    if (loading) {
+        return (
+            <div
+                className={`flex items-center justify-center text-sm text-gray-500 gap-2 ${
+                    embedded ? 'py-10' : 'py-16'
+                }`}
+            >
+                <span className="inline-block w-4 h-4 border-2 border-gray-300 border-t-brand-500 rounded-full animate-spin" />
+                Loading…
+            </div>
+        )
+    }
+
     if (!report) {
+        if (embedded) {
+            return (
+                <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 py-10 text-center text-sm text-gray-500">
+                    No preview data yet.
+                </div>
+            )
+        }
         return (
             <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-12 text-center text-sm text-gray-500">
-                Click <strong>Refresh</strong> to load live report sheets, or select a report card
-                below.
+                Click <strong>Refresh</strong> to load live report sheets.
             </div>
         )
     }
@@ -142,35 +175,62 @@ export function ReportSheetViewer({
     const sheet = report.sheets[activeSheetIndex] ?? report.sheets[0]
 
     return (
-        <div className="space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
-                    <h2 className="text-lg font-semibold text-gray-900">{report.title}</h2>
-                    <p className="text-xs text-gray-500">
-                        {report.weekLabels.length} week(s) · Updated{' '}
-                        {new Date(report.generatedAt).toLocaleString()}
-                    </p>
-                </div>
-                {report.sheets.length > 1 && (
-                    <div className="flex flex-wrap gap-1">
-                        {report.sheets.map((s, i) => (
-                            <button
-                                key={s.name}
-                                type="button"
-                                onClick={() => onSheetIndexChange?.(i)}
-                                className={`px-3 py-1 rounded-md text-xs font-medium border transition-colors ${
-                                    i === activeSheetIndex
-                                        ? 'bg-brand-500 text-white border-brand-500'
-                                        : 'bg-white text-gray-600 border-gray-200 hover:border-brand-300'
-                                }`}
-                            >
-                                {s.name}
-                            </button>
-                        ))}
+        <div className={embedded ? 'space-y-2' : 'space-y-3'}>
+            {!embedded && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                        <h2 className="text-lg font-semibold text-gray-900">{report.title}</h2>
+                        <p className="text-xs text-gray-500">
+                            {report.weekLabels.length} week(s) · Updated{' '}
+                            {new Date(report.generatedAt).toLocaleString()}
+                        </p>
                     </div>
-                )}
-            </div>
-            {sheet && <ReportSheetTable sheet={sheet} />}
+                    {report.sheets.length > 1 && (
+                        <SheetTabs
+                            sheets={report.sheets}
+                            activeSheetIndex={activeSheetIndex}
+                            onSheetIndexChange={onSheetIndexChange}
+                        />
+                    )}
+                </div>
+            )}
+            {embedded && report.sheets.length > 1 && (
+                <SheetTabs
+                    sheets={report.sheets}
+                    activeSheetIndex={activeSheetIndex}
+                    onSheetIndexChange={onSheetIndexChange}
+                />
+            )}
+            {sheet && <ReportSheetTable sheet={sheet} compact={embedded} />}
+        </div>
+    )
+}
+
+function SheetTabs({
+    sheets,
+    activeSheetIndex,
+    onSheetIndexChange,
+}: {
+    sheets: ReportSheetPreview[]
+    activeSheetIndex: number
+    onSheetIndexChange?: (index: number) => void
+}) {
+    return (
+        <div className="flex flex-wrap gap-1">
+            {sheets.map((s, i) => (
+                <button
+                    key={s.name}
+                    type="button"
+                    onClick={() => onSheetIndexChange?.(i)}
+                    className={`px-2.5 py-0.5 rounded-md text-[10px] font-medium border transition-colors ${
+                        i === activeSheetIndex
+                            ? 'bg-brand-500 text-white border-brand-500'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-brand-300'
+                    }`}
+                >
+                    {s.name}
+                </button>
+            ))}
         </div>
     )
 }
