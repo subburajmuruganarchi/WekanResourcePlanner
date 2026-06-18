@@ -242,6 +242,13 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
         [filters, fetchGrid]
     );
 
+    const appendPlannerRow = useCallback((row: WeeklyPlannerGridRow) => {
+        setPlannerRows((prev) => {
+            if (prev.some((r) => r.rowKey === row.rowKey)) return prev;
+            return [...prev, row];
+        });
+    }, []);
+
     return {
         filters,
         setFilters,
@@ -265,5 +272,6 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
         invalidateCache,
         hasDirty: dirtyCount > 0,
         dirtyKeys,
+        appendPlannerRow,
     };
 }

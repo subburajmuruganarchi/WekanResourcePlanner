@@ -1,108 +1,164 @@
-import { useState, useMemo, useEffect } from "react"
-import { Loader2 } from "lucide-react"
-import { PageContainer } from "@/components/layout/page-container"
-import { Section } from "@/components/layout/section"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { AllocationDialog } from "./components/allocation-dialog"
-import { AvailableResourceCards } from "./components/available-resource-cards"
-import { ProjectManagerAssignment } from "./components/project-manager-assignment"
-import { useRankedEmployees, type RankedEmployee } from "@/lib/use-ranked-employees"
-import { useProjects, useProject } from "@/lib/use-projects"
-import { useAuth } from "@/lib/auth-context"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { format, parseISO, startOfWeek, addWeeks } from 'date-fns';
+import { Loader2, Save, Undo2, AlertCircle, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { PageContainer } from '@/components/layout/page-container';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useProjects, useProject } from '@/lib/use-projects';
+import { useAuth } from '@/lib/auth-context';
+import { useEmployees } from '@/lib/use-employees';
+import { useWeeklyAllocationGrid } from '@/lib/use-weekly-allocation-grid';
+import { rowKey } from '@/lib/weekly-grid-pivot';
+import { ProjectManagerAssignment } from './components/project-manager-assignment';
+import { AllocationWeeklyGrid, type AllocationGridRow } from './components/allocation-weekly-grid';
+import type { WeeklyGridFilters } from '@/types/weekly-allocation';
+import './allocation-grid.css';
+
+function buildWeekRange(project: { startDate: string; endDate?: string } | null): {
+    weekStartFrom: string;
+    weekStartTo: string;
+} {
+    const todayStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+    let from = todayStart;
+    let to = addWeeks(todayStart, 11);
+
+    if (project?.startDate) {
+        from = startOfWeek(parseISO(project.startDate), { weekStartsOn: 1 });
+    }
+    if (project?.endDate) {
+        const projectEnd = startOfWeek(parseISO(project.endDate), { weekStartsOn: 1 });
+        to = projectEnd;
+    }
+
+    if (to < from) {
+        to = addWeeks(from, 11);
+    }
+
+    const maxEnd = addWeeks(from, 51);
+    if (to > maxEnd) {
+        to = maxEnd;
+    }
+
+    return {
+        weekStartFrom: format(from, 'yyyy-MM-dd'),
+        weekStartTo: format(to, 'yyyy-MM-dd'),
+    };
+}
 
 export function Allocation() {
-    const { user } = useAuth()
-    const canEditPm = user?.role === 'Admin'
-    const { projects, loading: projLoading, refetch: refetchProjects } = useProjects()
-    const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>()
-    const { project: selectedProject, loading: projectDetailsLoading, refetch: refetchProject } = useProject(selectedProjectId)
-    const [isDialogOpen, setIsDialogOpen] = useState(false)
-    const [selectedEmployee, setSelectedEmployee] = useState<RankedEmployee | null>(null)
-    const [editingAllocation, setEditingAllocation] = useState<{
-        id: string; percentage: number; startDate: string; endDate: string; skillId?: string; skillIds?: string[]; roleId?: string
-    } | null>(null)
-    const [selectedSkillFilter, setSelectedSkillFilter] = useState<string | undefined>()
+    const { user } = useAuth();
+    const canEditPm = user?.role === 'Admin';
+    const canEditGrid = user?.role === 'Admin';
 
-    useEffect(() => {
-        setSelectedSkillFilter(undefined)
-    }, [selectedProjectId])
+    const { projects, loading: projLoading, refetch: refetchProjects } = useProjects();
+    const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
+    const { project: selectedProject, refetch: refetchProject } = useProject(selectedProjectId);
+    const { employees } = useEmployees();
+
+    const [addEmployeeId, setAddEmployeeId] = useState('');
+    const [weekWindowStart, setWeekWindowStart] = useState(0);
+    const WEEKS_VISIBLE = 8;
+
+    const grid = useWeeklyAllocationGrid({ canEdit: canEditGrid, pageSize: 500 });
 
     const listProject = useMemo(
         () => projects.find((p) => p.id === selectedProjectId),
         [projects, selectedProjectId]
-    )
+    );
 
     const activeProject = useMemo(() => {
-        if (selectedProject?.id === selectedProjectId) return selectedProject
-        return listProject ?? null
-    }, [selectedProject, selectedProjectId, listProject])
+        if (selectedProject?.id === selectedProjectId) return selectedProject;
+        return listProject ?? null;
+    }, [selectedProject, selectedProjectId, listProject]);
 
-    const detailProject = selectedProject?.id === selectedProjectId ? selectedProject : null
+    const employeeRoleMap = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const emp of employees) {
+            map.set(
+                emp.id,
+                emp.jobRole || emp.position || (typeof emp.role === 'string' ? emp.role : '') || '—'
+            );
+        }
+        return map;
+    }, [employees]);
 
-    const rankedParams = useMemo(() => ({
-        projectId: selectedProjectId,
-        skill: selectedSkillFilter,
-        startDate: activeProject?.startDate,
-        endDate: activeProject?.endDate,
-    }), [selectedProjectId, selectedSkillFilter, activeProject?.startDate, activeProject?.endDate])
+    const gridFilters = useMemo((): WeeklyGridFilters | null => {
+        if (!selectedProjectId || !activeProject) return null;
+        const range = buildWeekRange(activeProject);
+        return {
+            ...range,
+            projectId: selectedProjectId,
+            utilization: 'all',
+        };
+    }, [selectedProjectId, activeProject]);
 
-    const { rankedEmployees, loading: rankLoading, error: rankError, refetch: refetchRanked } = useRankedEmployees(rankedParams)
+    useEffect(() => {
+        if (!gridFilters) return;
+        setWeekWindowStart(0);
+        void grid.fetchGrid(gridFilters, 1);
+    }, [gridFilters]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const handleAllocationSuccess = () => {
-        refetchRanked()
-        refetchProject()
-    }
+    const visibleWeeks = useMemo(() => {
+        if (grid.weeks.length === 0) return [];
+        const start = Math.min(weekWindowStart, Math.max(0, grid.weeks.length - WEEKS_VISIBLE));
+        return grid.weeks.slice(start, start + WEEKS_VISIBLE);
+    }, [grid.weeks, weekWindowStart]);
+
+    const canScrollWeeksBack = weekWindowStart > 0;
+    const canScrollWeeksForward = weekWindowStart + WEEKS_VISIBLE < grid.weeks.length;
+
+    const displayRows = useMemo((): AllocationGridRow[] => {
+        return grid.plannerRows.map((row) => ({
+            ...row,
+            employeeRole: employeeRoleMap.get(row.employeeId) || '—',
+        }));
+    }, [grid.plannerRows, employeeRoleMap]);
+
+    const employeesNotOnGrid = useMemo(() => {
+        const onGrid = new Set(grid.plannerRows.map((r) => r.employeeId));
+        return employees
+            .filter((e) => e.status === 'Active' && !onGrid.has(e.id))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [employees, grid.plannerRows]);
 
     const handlePmUpdated = () => {
-        refetchProject()
-        refetchProjects()
-    }
+        refetchProject();
+        refetchProjects();
+    };
 
-    const handleAllocate = (employee: RankedEmployee) => {
-        setSelectedEmployee(employee)
-        setEditingAllocation(null) // New allocation
-        setIsDialogOpen(true)
-    }
+    const handleAddResource = useCallback(() => {
+        if (!addEmployeeId || !selectedProjectId || !activeProject) return;
+        const emp = employees.find((e) => e.id === addEmployeeId);
+        if (!emp) return;
 
-    const handleEdit = (employee: RankedEmployee) => {
-        // Find the allocation for the current project
-        const projectAlloc = employee.currentAllocations?.find(
-            a => a.projectId === selectedProjectId
-        )
-        if (projectAlloc) {
-            setSelectedEmployee(employee)
-            setEditingAllocation({
-                id: projectAlloc.id,
-                percentage: projectAlloc.percentage,
-                startDate: projectAlloc.startDate,
-                endDate: projectAlloc.endDate,
-                skillId: projectAlloc.skillId,
-                skillIds: projectAlloc.skillIds?.length
-                    ? projectAlloc.skillIds
-                    : projectAlloc.skillId
-                      ? [projectAlloc.skillId]
-                      : undefined,
-                roleId: projectAlloc.roleId,
-            })
-            setIsDialogOpen(true)
-        }
-    }
+        const key = rowKey(addEmployeeId, selectedProjectId);
+        if (grid.plannerRows.some((r) => r.rowKey === key)) return;
 
-    // List of ranked employees
-    const employeesToShow = rankedEmployees || []
+        grid.appendPlannerRow({
+            rowKey: key,
+            employeeId: addEmployeeId,
+            employeeName: emp.name,
+            projectId: selectedProjectId,
+            projectName: activeProject.name,
+            projectCode: activeProject.code,
+            weekCells: {},
+        });
+        setAddEmployeeId('');
+    }, [addEmployeeId, selectedProjectId, activeProject, employees, grid]);
 
-    const selectedProjectName = projects.find(p => p.id === selectedProjectId)?.name || "Project"
+    const handleSave = async () => {
+        await grid.saveBulk();
+    };
 
     return (
         <PageContainer className="space-y-6">
             <div>
                 <h1 className="text-2xl font-semibold text-gray-900">Resource Allocation</h1>
-                <p className="text-sm text-gray-600 mt-1">Allocate resources to projects based on skills, availability, and experience.</p>
+                <p className="text-sm text-gray-600 mt-1">
+                    Allocate resources to projects based on skills, availability, and experience.
+                </p>
             </div>
 
-            {/* Project + PM toolbar */}
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div
                     className={
@@ -174,201 +230,157 @@ export function Allocation() {
                 </div>
             </div>
 
-            {selectedProjectId && (
-                <div className="space-y-6">
-                    {/* Project Requirements */}
-                    <Section title="Project Requirements">
-                        {projectDetailsLoading ? (
-                            <div className="flex items-center justify-center p-8 bg-white border border-gray-200 rounded-xl">
-                                <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
-                            </div>
-                        ) : detailProject ? (
-                            <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-6">
-                                {(detailProject.businessGoal || detailProject.staffingStrategy) && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-gray-100">
-                                        {detailProject.businessGoal && (
-                                            <div>
-                                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Business Goal</label>
-                                                <p className="text-sm text-gray-700">{detailProject.businessGoal}</p>
-                                            </div>
-                                        )}
-                                        {detailProject.staffingStrategy && (
-                                            <div>
-                                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Staffing Strategy</label>
-                                                <Badge variant="outline" className="text-xs">{detailProject.staffingStrategy}</Badge>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+            {!selectedProjectId ? (
+                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-12 text-center text-sm text-gray-500">
+                    Select a project above to view and edit weekly resource allocations.
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                            {canEditGrid && (
+                                <>
+                                    <Select value={addEmployeeId} onValueChange={setAddEmployeeId}>
+                                        <SelectTrigger className="h-9 w-[220px] rounded-lg">
+                                            <SelectValue placeholder="Add resource…" />
+                                        </SelectTrigger>
+                                        <SelectContent className="max-h-64">
+                                            {employeesNotOnGrid.length === 0 ? (
+                                                <SelectItem value="__none__" disabled>
+                                                    All active employees are on the grid
+                                                </SelectItem>
+                                            ) : (
+                                                employeesNotOnGrid.map((emp) => (
+                                                    <SelectItem key={emp.id} value={emp.id}>
+                                                        {emp.name}
+                                                    </SelectItem>
+                                                ))
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-9 gap-1"
+                                        disabled={!addEmployeeId}
+                                        onClick={handleAddResource}
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        Add row
+                                    </Button>
+                                </>
+                            )}
+                            <span className="text-sm text-gray-500">
+                                {displayRows.length} resource{displayRows.length === 1 ? '' : 's'}
+                                {grid.weeks.length > 0 &&
+                                    ` · ${format(parseISO(grid.weeks[0]), 'd MMM yyyy')} – ${format(parseISO(grid.weeks[grid.weeks.length - 1]), 'd MMM yyyy')}`}
+                            </span>
+                        </div>
 
-                                {/* Required Skills — primary driver for resource matching */}
-                                <div>
-                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Required Skills</label>
-                                        {selectedSkillFilter && (
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-7 text-xs"
-                                                onClick={() => setSelectedSkillFilter(undefined)}
-                                            >
-                                                Show all matching skills
-                                            </Button>
-                                        )}
-                                    </div>
-                                    {detailProject.skillRequirements && detailProject.skillRequirements.length > 0 ? (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                            {detailProject.skillRequirements.map((req) => {
-                                                const skillLabel = req.skillName || 'Skill';
-                                                const isActive = selectedSkillFilter === skillLabel;
-                                                return (
-                                                    <button
-                                                        key={req.skillId}
-                                                        type="button"
-                                                        onClick={() => setSelectedSkillFilter(isActive ? undefined : skillLabel)}
-                                                        className={`text-left bg-gray-50 rounded-lg p-3 border transition-colors ${
-                                                            isActive
-                                                                ? 'border-brand-500 ring-2 ring-brand-100 bg-brand-50/50'
-                                                                : 'border-gray-100 hover:border-gray-200 hover:bg-gray-100/80'
-                                                        }`}
-                                                    >
-                                                        <div className="flex items-center justify-between mb-1">
-                                                            <Badge variant="default" className="text-[10px] bg-brand-600 hover:bg-brand-700 border-none">
-                                                                {skillLabel}
-                                                            </Badge>
-                                                            <span className="text-xs text-gray-400 font-medium">{req.minSkillLevel}+</span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between text-[10px] text-gray-500">
-                                                            <span>{req.originalHeadcount} needed · {req.fulfilledPercent}% filled</span>
-                                                            {req.roleName && <span>{req.roleName}</span>}
-                                                        </div>
-                                                        <div className="text-[10px] text-gray-400 tabular-nums mt-1">
-                                                            {req.startDate} to {req.endDate}
-                                                        </div>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
+                        {canEditGrid && (
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => grid.discardChanges()}
+                                    disabled={!grid.hasDirty || grid.saving}
+                                >
+                                    <Undo2 className="w-4 h-4 mr-1" />
+                                    Discard
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    onClick={() => void handleSave()}
+                                    disabled={!grid.hasDirty || grid.saving}
+                                    className="bg-brand-500 hover:bg-brand-600"
+                                >
+                                    {grid.saving ? (
+                                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                                     ) : (
-                                        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-3">
-                                            No skill requirements defined for this project. Add tech skills under Projects to filter available resources by skill match.
-                                        </p>
+                                        <Save className="w-4 h-4 mr-1" />
                                     )}
-                                    {detailProject.skillRequirements && detailProject.skillRequirements.length > 0 && (
-                                        <p className="text-xs text-gray-500 mt-2">
-                                            {selectedSkillFilter
-                                                ? `Showing resources matching "${selectedSkillFilter}". Click the skill again or use "Show all matching skills" to reset.`
-                                                : 'Available resources below are filtered to employees who match at least one required skill. Click a skill to narrow the list.'}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {/* Role Efforts — headcount by job role */}
-                                {detailProject.roleEfforts && detailProject.roleEfforts.length > 0 && (
-                                    <div>
-                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 block">Role Headcount</label>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                            {detailProject.roleEfforts.map((effort) => (
-                                                <div key={effort.roleId} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                                                    <div className="flex items-center justify-between mb-1">
-                                                        <Badge variant="secondary" className="text-[10px] bg-gray-200 text-gray-800 border-none">
-                                                            {effort.roleName || 'Role'}
-                                                        </Badge>
-                                                        <span className="text-xs font-bold text-gray-900">{effort.fulfilledPercent}% filled</span>
-                                                    </div>
-                                                    <div className="text-[10px] text-gray-500 tabular-nums flex justify-between">
-                                                        <span>{effort.originalHeadcount} required</span>
-                                                        <span>{effort.hoursPerDay}h/day · {effort.startDate} to {effort.endDate}</span>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
+                                    Save changes
+                                </Button>
                             </div>
-                        ) : null}
-                    </Section>
-
-                    {/* Ranking Logic hint */}
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                        <h4 className="text-sm font-semibold text-blue-900 mb-2">Ranking Logic</h4>
-                        <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
-                            <li>Skill match (project skill requirements)</li>
-                            <li>Role effort gaps (unfilled job roles on project)</li>
-                            <li>Free capacity over project dates (all active projects)</li>
-                            <li>Experience on matched skills</li>
-                        </ol>
-                        <p className="text-xs text-blue-800/90 mt-3 pt-3 border-t border-blue-200 leading-relaxed">
-                            <strong>Free capacity</strong> includes every <strong>active</strong> allocation on
-                            other projects whose dates overlap this project&apos;s window. When someone is
-                            released from another project (end date passed or allocation updated), refresh
-                            the list or re-select the project to see updated availability.
-                        </p>
+                        )}
                     </div>
 
-                    {/* Available Resources */}
-                    <Section
-                        title={`Available Resources (${employeesToShow.length})`}
-                        description={
-                            detailProject?.skillRequirements?.length
-                                ? selectedSkillFilter
-                                    ? `Employees matching "${selectedSkillFilter}", ranked by best fit.`
-                                    : 'Employees matching at least one required skill, ranked by best fit.'
-                                : 'Ranked by best match. Peak load = busiest day across all overlapping projects.'
-                        }
-                    >
-                        {rankLoading ? (
-                            <div className="flex items-center justify-center p-8 bg-white border border-gray-200 rounded-xl">
-                                <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
-                                <span className="ml-2 text-gray-500">Loading ranked employees...</span>
+                    {grid.error && (
+                        <div className="flex items-start gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm">
+                            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                            <div>
+                                <p className="font-medium">Could not load allocation grid</p>
+                                <p>{grid.error}</p>
+                                {grid.error.includes('disabled') && (
+                                    <p className="mt-1 text-xs">
+                                        Enable{' '}
+                                        <code className="bg-red-100 px-1 rounded">
+                                            FEATURE_WEEKLY_ALLOCATIONS_ENABLED=true
+                                        </code>{' '}
+                                        on the backend and restart.
+                                    </p>
+                                )}
                             </div>
-                        ) : rankError ? (
-                            <div className="p-8 text-center text-red-600 bg-white border border-gray-200 rounded-xl">
-                                <p>Error: {rankError}</p>
-                            </div>
-                        ) : employeesToShow.length === 0 ? (
-                            <div className="p-8 text-center text-gray-500 bg-white border border-gray-200 rounded-xl">
-                                <p className="text-sm font-medium text-gray-700">No matching resources found</p>
-                                <p className="text-xs mt-1">
-                                    {detailProject?.skillRequirements?.length
-                                        ? 'No employees match the selected skill requirements. Try another skill or update project requirements.'
-                                        : 'Select a project with skill requirements to see ranked matches.'}
-                                </p>
-                            </div>
-                        ) : (
-                            <AvailableResourceCards
-                                employees={employeesToShow}
-                                selectedProjectId={selectedProjectId}
-                                onAllocate={handleAllocate}
-                                onEdit={handleEdit}
-                            />
-                        )}
-                    </Section>
+                        </div>
+                    )}
+
+                    {grid.saveMessage && (
+                        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
+                            {grid.saveMessage}
+                        </p>
+                    )}
+
+                    {grid.weeks.length > WEEKS_VISIBLE && (
+                        <div className="flex items-center justify-end gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                disabled={!canScrollWeeksBack}
+                                onClick={() => setWeekWindowStart((s) => Math.max(0, s - WEEKS_VISIBLE))}
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </Button>
+                            <span className="text-xs text-gray-500">
+                                Weeks {weekWindowStart + 1}–
+                                {Math.min(weekWindowStart + WEEKS_VISIBLE, grid.weeks.length)} of{' '}
+                                {grid.weeks.length}
+                            </span>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                disabled={!canScrollWeeksForward}
+                                onClick={() =>
+                                    setWeekWindowStart((s) =>
+                                        Math.min(s + WEEKS_VISIBLE, grid.weeks.length - WEEKS_VISIBLE)
+                                    )
+                                }
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </Button>
+                        </div>
+                    )}
+
+                    <AllocationWeeklyGrid
+                        rows={displayRows}
+                        weeks={visibleWeeks.length > 0 ? visibleWeeks : grid.weeks}
+                        canEdit={canEditGrid}
+                        dirtyKeys={grid.dirtyKeys}
+                        onPlannedHoursChange={grid.updatePlannedHours}
+                        loading={grid.loading}
+                    />
+
+                    <p className="text-xs text-gray-500">
+                        Enter planned hours per week for each resource. Click a cell to edit; use{' '}
+                        <strong>Save changes</strong> to persist. Project Managers can view this grid in
+                        read-only mode.
+                    </p>
                 </div>
             )}
-
-            <AllocationDialog
-                open={isDialogOpen}
-                onOpenChange={setIsDialogOpen}
-                employeeId={selectedEmployee?.id || ""}
-                employeeName={selectedEmployee?.name || ""}
-                projectId={selectedProjectId || ""}
-                projectName={selectedProjectName}
-                skillRequirements={detailProject?.skillRequirements}
-                roleEfforts={detailProject?.roleEfforts}
-                suggestedAllocationRoleId={selectedEmployee?.suggestedAllocationRoleId}
-                suggestedAllocationRoleName={selectedEmployee?.suggestedAllocationRoleName}
-                projectStartDate={activeProject?.startDate}
-                projectEndDate={activeProject?.endDate}
-                allocationId={editingAllocation?.id}
-                initialPercentage={editingAllocation?.percentage}
-                initialStartDate={editingAllocation?.startDate}
-                initialEndDate={editingAllocation?.endDate}
-                initialSkillId={editingAllocation?.skillId}
-                initialSkillIds={editingAllocation?.skillIds}
-                initialRoleId={editingAllocation?.roleId}
-                onSuccess={handleAllocationSuccess}
-            />
         </PageContainer>
-    )
+    );
 }
