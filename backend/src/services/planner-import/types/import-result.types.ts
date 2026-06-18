@@ -41,7 +41,9 @@ export interface PlannerImportResult {
 
 export interface GoogleSheetWebhookBody {
     sheet: 'Resource' | 'Project' | 'Project_Allocation';
-    rows: Record<string, unknown>[];
+    rows: Record<string, unknown>[] | unknown[][] | { header: string; value: unknown }[][];
+    /** When rows are value arrays, header labels in sheet column order (first duplicate wins). */
+    headers?: string[];
     weekHeaders?: Record<string, string>[];
     /** Shared across all sheets in a full sync (header or body). */
     syncBatchId?: string;

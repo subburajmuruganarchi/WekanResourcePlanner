@@ -2,6 +2,7 @@ import { Project } from '../../modules/projects/project.model';
 import { Types } from 'mongoose';
 import { ProjectSkillRequirement } from '../../modules/projects/project-skill-requirement.model';
 import { ProjectRoleEffort } from '../../modules/projects/project-role-effort.model';
+import { AllocationImportRow } from './types/allocation-row.dto';
 import { ProjectImportRow } from './types/project-row.dto';
 import { ImportContext } from './types/import-context.types';
 import { SheetImportResult, SkippedRow } from './types/import-result.types';
@@ -459,4 +460,59 @@ export async function deactivateStaleProjects(
         { $set: { is_active: false, status: ProjectStatus.ON_HOLD } },
         mongooseSessionOpts(writeOpts)
     );
+}
+
+const PROJECT_STATUS_RANK: Record<ProjectStatus, number> = {
+    [ProjectStatus.ACTIVE]: 4,
+    [ProjectStatus.PLANNING]: 3,
+    [ProjectStatus.ON_HOLD]: 2,
+    [ProjectStatus.COMPLETED]: 1,
+};
+
+/**
+ * Project sheet webhooks can lose Status when the sheet has duplicate "Status" columns.
+ * Allocation rows carry a reliable "Project Status" field — use it to repair project.status.
+ */
+export async function applyProjectStatusFromAllocationRows(
+    rows: AllocationImportRow[],
+    writeOpts?: ImportWriteOptions
+): Promise<number> {
+    const statusByPid = new Map<string, ProjectStatus>();
+
+    for (const row of rows) {
+        if (!row.pid || !row.projectStatus?.trim()) continue;
+        const pid = row.pid.toUpperCase();
+        const status = mapProjectStatus(row.projectStatus);
+        const existing = statusByPid.get(pid);
+        if (!existing || PROJECT_STATUS_RANK[status] > PROJECT_STATUS_RANK[existing]) {
+            statusByPid.set(pid, status);
+        }
+    }
+
+    let updated = 0;
+    for (const [pid, status] of statusByPid) {
+        const code = projectCodeFromRow(pid, '');
+        const res = await Project.updateMany(
+            { project_code: code },
+            {
+                $set: {
+                    status,
+                    is_active:
+                        status === ProjectStatus.ACTIVE || status === ProjectStatus.PLANNING,
+                    priority: mapPriority('', status),
+                },
+            },
+            mongooseSessionOpts(writeOpts)
+        );
+        updated += res.modifiedCount;
+    }
+
+    if (updated > 0) {
+        structuredLogger.info('PROJECT STATUS REPAIRED FROM ALLOCATION', {
+            projectsUpdated: updated,
+            distinctPids: statusByPid.size,
+        });
+    }
+
+    return updated;
 }

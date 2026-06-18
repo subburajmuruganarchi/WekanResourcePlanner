@@ -27,7 +27,7 @@ import {
     importResourceRows,
     prepareResourceImportReferences,
 } from './resource-import.service';
-import { importProjectRows, prepareProjectImportReferences } from './project-import.service';
+import { importProjectRows, prepareProjectImportReferences, applyProjectStatusFromAllocationRows } from './project-import.service';
 import { importAllocationRows, prepareAllocationImportReferences } from './allocation-import.service';
 import { cleanupJunkSkills, PASSWORD_PLAIN } from './planner-import.utils';
 import { ImportContext } from './types/import-context.types';
@@ -359,6 +359,7 @@ async function executePlannerSheetImport(params: {
         sheetResults.push(allocResult);
         allocationsUpserted = allocResult.allocationsUpserted;
         weeklyEntriesUpserted = allocResult.weeklyEntriesUpserted;
+        await applyProjectStatusFromAllocationRows(params.allocationRows, writeOpts);
     }
 
     if (!writeOpts.deferJunkSkillCleanup) {

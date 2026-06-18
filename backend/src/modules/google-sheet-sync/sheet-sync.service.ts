@@ -19,6 +19,7 @@ import {
     googleSheetRowsToProjectRows,
     googleSheetRowsToAllocationRows,
     extractWeekHeadersFromWebhook,
+    coerceWebhookRows,
 } from '../../services/planner-import/adapters/google-sheet-row.adapter';
 import { SyncRun } from './sync-run.model';
 import { SyncBatch } from './sync-batch.model';
@@ -236,10 +237,11 @@ export const sheetSyncService = {
             let rowsImported = received;
             let rawRowsReceived: number | undefined;
             let rowsFilteredFromSheet: number | undefined;
+            const normalizedRows = coerceWebhookRows(body.rows, body.headers);
 
             if (sheet === 'Resource') {
                 rawRowsReceived = body.rows?.length ?? 0;
-                const resourceRows = googleSheetRowsToImportableResourceRows(body.rows ?? []);
+                const resourceRows = googleSheetRowsToImportableResourceRows(normalizedRows);
                 const skippedRowCount = rawRowsReceived - resourceRows.length;
                 rowsFilteredFromSheet = skippedRowCount;
 
@@ -262,19 +264,20 @@ export const sheetSyncService = {
                 rowsImported = resourceRows.length;
                 validateSheetResult(sheet, rowsImported, result);
             } else if (sheet === 'Project') {
-                const projectRows = googleSheetRowsToProjectRows(body.rows ?? []);
+                const projectRows = googleSheetRowsToProjectRows(normalizedRows);
                 result = await runPlannerSheetImport({
                     projectRows,
                     syncId,
                     syncBatchId,
                     atomic: true,
                 });
-                validateSheetResult(sheet, received, result);
+                rowsImported = projectRows.length;
+                validateSheetResult(sheet, rowsImported, result);
             } else {
                 rawRowsReceived = body.rows?.length ?? 0;
-                const weekHeaders = extractWeekHeadersFromWebhook(body.rows ?? [], body.weekHeaders);
+                const weekHeaders = extractWeekHeadersFromWebhook(normalizedRows, body.weekHeaders);
                 const allocationRows = googleSheetRowsToImportableAllocationRows(
-                    body.rows ?? [],
+                    normalizedRows,
                     weekHeaders
                 );
                 rowsFilteredFromSheet = rawRowsReceived - allocationRows.length;
@@ -317,9 +320,11 @@ export const sheetSyncService = {
                 response.rowsFilteredFromSheet = rowsFilteredFromSheet;
             }
 
+            const rowsFilteredFromSheetCount = rowsFilteredFromSheet ?? 0;
             await persistSyncRunSuccess(syncRun._id, {
+                rowsReceived: rowsImported,
                 rowsProcessed: response.rowsProcessed,
-                rowsSkipped: response.rowsSkipped,
+                rowsSkipped: rowsFilteredFromSheetCount + (response.rowsSkipped ?? 0),
                 skippedRows: response.skippedRows,
             });
 

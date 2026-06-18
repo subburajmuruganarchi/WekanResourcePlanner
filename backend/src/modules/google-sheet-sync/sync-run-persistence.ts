@@ -30,6 +30,7 @@ export function extractFailureDetails(err: unknown): SyncRunFailureDetails {
 export async function persistSyncRunSuccess(
     runId: Types.ObjectId | string,
     fields: {
+        rowsReceived: number;
         rowsProcessed: number;
         rowsSkipped: number;
         skippedRows?: ISyncRun['skippedRows'];
@@ -37,6 +38,7 @@ export async function persistSyncRunSuccess(
 ): Promise<void> {
     await SyncRun.findByIdAndUpdate(runId, {
         completedAt: new Date(),
+        rowsReceived: fields.rowsReceived,
         rowsProcessed: fields.rowsProcessed,
         rowsSkipped: fields.rowsSkipped,
         skippedRows: fields.skippedRows,

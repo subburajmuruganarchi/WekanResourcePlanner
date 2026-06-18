@@ -78,6 +78,17 @@ describe('assertFullSyncSummary', () => {
         expect(() => assertFullSyncSummary(successSummary())).not.toThrow();
     });
 
+    it('accepts success when placeholder rows were filtered before import', () => {
+        const summary = successSummary();
+        summary.resource.received = 70;
+        summary.resource.processed = 70;
+        summary.resource.skipped = 56;
+        summary.allocation.received = 108;
+        summary.allocation.processed = 108;
+        summary.allocation.skipped = 12;
+        expect(() => assertFullSyncSummary(summary)).not.toThrow();
+    });
+
     it('fails full sync when resource sheet failed with error detail', () => {
         const summary = successSummary();
         summary.resource.status = 'FAILED';

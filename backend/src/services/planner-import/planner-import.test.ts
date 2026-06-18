@@ -2,6 +2,7 @@ import {
     googleSheetRowToResourceRow,
     googleSheetRowsToProjectRows,
     googleSheetRowToAllocationRow,
+    coerceWebhookRows,
 } from './adapters/google-sheet-row.adapter';
 import { isDummyResource, projectCodeFromRow, parseWeekMonday } from './planner-import.utils';
 
@@ -44,6 +45,80 @@ describe('google-sheet-row.adapter', () => {
             expect(row.name).toBe('Alpha Project');
             expect(row.beRequired).toBe(2);
             expect(row.tech).toBe('React');
+            expect(row.statusRaw).toBe('Active');
+        });
+
+        it('maps WeKan Project sheet column names (Project, 2mo, Project Tech Req)', () => {
+            const [row] = googleSheetRowsToProjectRows([
+                {
+                    '2mo': 'P05',
+                    Project: 'Allianz',
+                    Type: 'Customer',
+                    Status: 'Active',
+                    'Project Tech Req': 'Java, Oracle, MongoDB',
+                },
+            ]);
+            expect(row.pid).toBe('P05');
+            expect(row.name).toBe('Allianz');
+            expect(row.statusRaw).toBe('Active');
+            expect(row.tech).toBe('Java, Oracle, MongoDB');
+        });
+
+        it('coerceWebhookRows keeps first Status when headers are duplicated', () => {
+            const rows = coerceWebhookRows(
+                [
+                    ['P05', 'Allianz', 'Customer', 'Active', '', '', '', '', '', '', '', '', '', 'Java', ''],
+                ],
+                [
+                    '2mo',
+                    'Project',
+                    'Type',
+                    'Status',
+                    'Confirmed Starting Date',
+                    'Certainlty',
+                    'Estimated Starting Date',
+                    'Duration',
+                    'Achitect name/ type',
+                    'BE Resources Required',
+                    'Mobile Required',
+                    'FE Required',
+                    'QA',
+                    'Project Tech Req',
+                    'Status',
+                ]
+            );
+            const [mapped] = googleSheetRowsToProjectRows(rows);
+            expect(mapped.statusRaw).toBe('Active');
+            expect(mapped.name).toBe('Allianz');
+        });
+
+        it('reads status from column 4 when Status key was wiped by duplicate header', () => {
+            const [mapped] = googleSheetRowsToProjectRows([
+                {
+                    __statusCol4: 'Active',
+                    Status: '',
+                    Project: 'Allianz',
+                    '2mo': 'P05',
+                },
+            ]);
+            expect(mapped.statusRaw).toBe('Active');
+        });
+
+        it('reads status from column index key 4', () => {
+            const [mapped] = googleSheetRowsToProjectRows([
+                {
+                    '4': 'Active',
+                    Status: '',
+                    Project: 'Allianz',
+                },
+            ]);
+            expect(mapped.statusRaw).toBe('Active');
+        });
+
+        it('coerceWebhookRows pins column 4 from value arrays without headers', () => {
+            const rows = coerceWebhookRows([['P05', 'Allianz', 'Customer', 'Active']]);
+            const [mapped] = googleSheetRowsToProjectRows(rows);
+            expect(mapped.statusRaw).toBe('Active');
         });
     });
 

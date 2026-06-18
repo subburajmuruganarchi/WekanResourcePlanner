@@ -59,10 +59,6 @@ export function assertFullSyncSummary(summary: FullSyncSummary): void {
             failures.push(`${name}: ${s.errors[0]}`);
             continue;
         }
-        if (s.skipped > 0) {
-            failures.push(`${name}: ${s.skipped} rows skipped`);
-            continue;
-        }
         if (s.received > 0 && s.processed !== s.received) {
             failures.push(`${name}: received ${s.received} but processed ${s.processed}`);
         }
