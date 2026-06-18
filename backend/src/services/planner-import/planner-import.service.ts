@@ -30,7 +30,9 @@ import { importProjectRows } from './project-import.service';
 import { importAllocationRows } from './allocation-import.service';
 import { cleanupJunkSkills, PASSWORD_PLAIN } from './planner-import.utils';
 import { ImportContext } from './types/import-context.types';
+import { ImportWriteOptions } from './types/import-write.options';
 import { hydrateContextFromDatabase } from './context-hydration.service';
+import { startSession, ClientSession } from 'mongoose';
 
 export type { PlannerImportOptions, PlannerImportResult } from './types/import-result.types';
 
@@ -139,14 +141,54 @@ export async function runPlannerSheetImport(params: {
     r360AccessRows?: { email: string; roles: string[] }[];
     resourceOnly?: boolean;
     syncId?: string;
+    syncBatchId?: string;
     existingContext?: ImportContext;
+    /** Google Sheet webhook: all writes commit or roll back together. */
+    atomic?: boolean;
 }): Promise<PlannerImportResult> {
+    const atomic = params.atomic ?? !!params.syncId;
+    if (!atomic) {
+        return executePlannerSheetImport(params);
+    }
+
+    const session = await startSession();
+    try {
+        let result!: PlannerImportResult;
+        await session.withTransaction(async () => {
+            result = await executePlannerSheetImport({ ...params, atomic: true, session });
+        });
+        return result;
+    } finally {
+        await session.endSession();
+    }
+}
+
+async function executePlannerSheetImport(params: {
+    resourceRows?: ResourceImportRow[];
+    projectRows?: ProjectImportRow[];
+    allocationRows?: AllocationImportRow[];
+    r360AccessRows?: { email: string; roles: string[] }[];
+    resourceOnly?: boolean;
+    syncId?: string;
+    syncBatchId?: string;
+    existingContext?: ImportContext;
+    atomic?: boolean;
+    session?: ClientSession;
+}): Promise<PlannerImportResult> {
+    const writeOpts = {
+        session: params.session,
+        atomic: params.atomic,
+    };
     const resourceOnly = params.resourceOnly ?? false;
-    let ctx = params.existingContext ?? (await bootstrapImportContext(params.syncId));
+    let ctx =
+        params.existingContext ?? (await bootstrapImportContext(params.syncId, writeOpts));
+    if (params.syncBatchId) {
+        ctx.syncBatchId = params.syncBatchId;
+    }
 
     if (params.r360AccessRows?.length) {
         applyR360AccessRows(ctx, params.r360AccessRows);
-        await resolvePmFallback(ctx);
+        await resolvePmFallback(ctx, writeOpts);
     }
 
     const sheetResults: SheetImportResult[] = [];
@@ -156,7 +198,7 @@ export async function runPlannerSheetImport(params: {
     let weeklyEntriesUpserted = 0;
 
     if (params.resourceRows) {
-        const resourceResult = await importResourceRows(params.resourceRows, ctx);
+        const resourceResult = await importResourceRows(params.resourceRows, ctx, writeOpts);
         sheetResults.push(resourceResult);
         employeesUpserted = resourceResult.employeesUpserted;
     }
@@ -178,30 +220,30 @@ export async function runPlannerSheetImport(params: {
 
     if (params.projectRows) {
         if (!params.resourceRows) {
-            await hydrateContextFromDatabase(ctx);
-            await resolvePmFallback(ctx);
+            await hydrateContextFromDatabase(ctx, writeOpts);
+            await resolvePmFallback(ctx, writeOpts);
         }
-        const projectResult = await importProjectRows(params.projectRows, ctx);
+        const projectResult = await importProjectRows(params.projectRows, ctx, writeOpts);
         sheetResults.push(projectResult);
         projectsUpserted = projectResult.projectsUpserted;
     }
 
     if (params.allocationRows) {
         if (!params.resourceRows && !params.projectRows) {
-            await hydrateContextFromDatabase(ctx);
+            await hydrateContextFromDatabase(ctx, writeOpts);
         }
         if (ctx.employeeByEmail.size === 0 || ctx.projectByCode.size === 0) {
             throw new Error(
                 'Allocation import requires employees and projects in the database. Sync Resource and Project sheets first.'
             );
         }
-        const allocResult = await importAllocationRows(params.allocationRows, ctx);
+        const allocResult = await importAllocationRows(params.allocationRows, ctx, writeOpts);
         sheetResults.push(allocResult);
         allocationsUpserted = allocResult.allocationsUpserted;
         weeklyEntriesUpserted = allocResult.weeklyEntriesUpserted;
     }
 
-    await cleanupJunkSkills();
+    await cleanupJunkSkills(writeOpts);
 
     const merged = mergeSheetResults(...sheetResults);
     return {

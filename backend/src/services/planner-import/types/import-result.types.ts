@@ -43,6 +43,11 @@ export interface GoogleSheetWebhookBody {
     sheet: 'Resource' | 'Project' | 'Project_Allocation';
     rows: Record<string, unknown>[];
     weekHeaders?: Record<string, string>[];
+    /** Shared across all sheets in a full sync (header or body). */
+    syncBatchId?: string;
+    batchId?: string;
+    /** When true, allows re-processing a FAILED batched sheet import. */
+    retry?: boolean;
 }
 
 export interface GoogleSheetSyncResponse {
@@ -54,4 +59,58 @@ export interface GoogleSheetSyncResponse {
     errors: string[];
     skippedRows?: SkippedRow[];
     syncRunId?: string;
+    syncId?: string;
+    requestId?: string;
+    durationMs?: number;
+}
+
+export interface SheetSyncSummary {
+    received: number;
+    processed: number;
+    skipped: number;
+    upserted: number;
+    errors: string[];
+    status: 'SUCCESS' | 'FAILED';
+    lastSyncAt: string | null;
+}
+
+export interface FullSyncSummary {
+    resource: SheetSyncSummary;
+    project: SheetSyncSummary;
+    allocation: SheetSyncSummary;
+}
+
+export interface FullSyncResponse {
+    status: 'success' | 'running' | 'failed' | 'STARTED' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+    message: string;
+    syncId: string;
+    requestId: string;
+    summary?: FullSyncSummary;
+    durationMs?: number;
+    errors: string[];
+    syncCompleted: boolean;
+    timestamp: string;
+    version: string;
+    data?: unknown;
+    currentSheet?: string;
+    progress?: number;
+}
+
+export interface FullSyncJobStatusResponse {
+    status: 'STARTED' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+    syncId: string;
+    syncBatchId: string;
+    requestId?: string;
+    currentSheet?: string;
+    progress: number;
+    sheets?: {
+        Resource: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+        Project: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+        Project_Allocation: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+    };
+    summary?: FullSyncSummary;
+    errors: string[];
+    syncCompleted: boolean;
+    durationMs?: number;
+    timestamp: string;
 }

@@ -1,6 +1,6 @@
 import { Document, Schema, model } from 'mongoose';
 
-export type SyncRunStatus = 'SUCCESS' | 'FAILED';
+export type SyncRunStatus = 'RUNNING' | 'SUCCESS' | 'FAILED';
 
 export interface ISyncRun extends Document {
     sheet: string;
@@ -13,6 +13,7 @@ export interface ISyncRun extends Document {
     skippedRows?: { identifier: string; reason: string }[];
     status: SyncRunStatus;
     syncId?: string;
+    syncBatchId?: string;
 }
 
 const SyncRunSchema = new Schema<ISyncRun>(
@@ -30,8 +31,9 @@ const SyncRunSchema = new Schema<ISyncRun>(
                 reason: String,
             },
         ],
-        status: { type: String, enum: ['SUCCESS', 'FAILED'], required: true },
+        status: { type: String, enum: ['RUNNING', 'SUCCESS', 'FAILED'], required: true },
         syncId: { type: String, index: true },
+        syncBatchId: { type: String, index: true, sparse: true },
     },
     {
         timestamps: false,
@@ -40,5 +42,12 @@ const SyncRunSchema = new Schema<ISyncRun>(
 );
 
 SyncRunSchema.index({ sheet: 1, startedAt: -1 });
+SyncRunSchema.index(
+    { syncBatchId: 1, sheet: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { syncBatchId: { $exists: true, $type: 'string' } },
+    }
+);
 
 export const SyncRun = model<ISyncRun>('SyncRun', SyncRunSchema);

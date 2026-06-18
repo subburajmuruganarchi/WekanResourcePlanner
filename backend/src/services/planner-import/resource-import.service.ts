@@ -16,6 +16,7 @@ import {
     upsertJobRole,
     upsertSkill,
 } from './planner-import.utils';
+import { ImportWriteOptions, mongooseSessionOpts, failOrSkipRow } from './types/import-write.options';
 
 const PROTECTED_EMAILS = ['admin@r360.com', 'pm@r360.com'];
 
@@ -25,13 +26,17 @@ export interface ResourceImportOutput extends SheetImportResult {
     skills: number;
 }
 
-export async function bootstrapImportContext(syncId?: string): Promise<ImportContext> {
+export async function bootstrapImportContext(
+    syncId?: string,
+    writeOpts?: ImportWriteOptions
+): Promise<ImportContext> {
     const partial = createEmptyImportContext();
     const passwordHash = await bcrypt.hash(PASSWORD_PLAIN, 10);
+    const sessionOpts = mongooseSessionOpts(writeOpts);
 
-    const adminRoleId = await upsertAccessRole(ACCESS_ROLES.ADMIN);
-    const pmRoleId = await upsertAccessRole(ACCESS_ROLES.PM);
-    const employeeRoleId = await upsertAccessRole(ACCESS_ROLES.EMPLOYEE);
+    const adminRoleId = await upsertAccessRole(ACCESS_ROLES.ADMIN, writeOpts);
+    const pmRoleId = await upsertAccessRole(ACCESS_ROLES.PM, writeOpts);
+    const employeeRoleId = await upsertAccessRole(ACCESS_ROLES.EMPLOYEE, writeOpts);
 
     const defaultAdmin = await Employee.findOneAndUpdate(
         { email: 'admin@r360.com' },
@@ -48,7 +53,7 @@ export async function bootstrapImportContext(syncId?: string): Promise<ImportCon
             },
             $setOnInsert: { password: passwordHash },
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true, ...sessionOpts }
     );
 
     const defaultPm = await Employee.findOneAndUpdate(
@@ -66,7 +71,7 @@ export async function bootstrapImportContext(syncId?: string): Promise<ImportCon
             },
             $setOnInsert: { password: passwordHash },
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true, ...sessionOpts }
     );
 
     return {
@@ -91,10 +96,17 @@ export function applyR360AccessRows(ctx: ImportContext, accessRows: R360AccessIm
     }
 }
 
-export async function resolvePmFallback(ctx: ImportContext): Promise<void> {
+export async function resolvePmFallback(
+    ctx: ImportContext,
+    writeOpts?: ImportWriteOptions
+): Promise<void> {
     for (const [email, roleId] of ctx.accessByEmail) {
         if (roleId.equals(ctx.pmRoleId)) {
-            const pm = await Employee.findOne({ email }).lean();
+            let query = Employee.findOne({ email });
+            if (writeOpts?.session) {
+                query = query.session(writeOpts.session);
+            }
+            const pm = await query.lean();
             if (pm) {
                 ctx.pmFallbackId = pm._id;
                 break;
@@ -105,21 +117,23 @@ export async function resolvePmFallback(ctx: ImportContext): Promise<void> {
 
 export async function importResourceRows(
     rows: ResourceImportRow[],
-    ctx: ImportContext
+    ctx: ImportContext,
+    writeOpts?: ImportWriteOptions
 ): Promise<ResourceImportOutput> {
     const skippedRows: SkippedRow[] = [];
     const errors: string[] = [];
     let employeesUpserted = 0;
+    const sessionOpts = mongooseSessionOpts(writeOpts);
 
     for (const row of rows) {
         const identifier = row.email || row.employeeCode || row.name || 'unknown';
 
         if (!row.email.includes('@')) {
-            skippedRows.push({ identifier, reason: 'Invalid email' });
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'Invalid email');
             continue;
         }
         if (isDummyResource(row.name, row.employeeCode)) {
-            skippedRows.push({ identifier, reason: 'Dummy resource row' });
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'Dummy resource row');
             continue;
         }
 
@@ -127,7 +141,7 @@ export async function importResourceRows(
             const { first, last } = parseName(row.name);
             let jobRoleId = ctx.jobRoleIds.get(row.jobRole);
             if (!jobRoleId) {
-                jobRoleId = await upsertJobRole(row.jobRole);
+                jobRoleId = await upsertJobRole(row.jobRole, writeOpts);
                 ctx.jobRoleIds.set(row.jobRole, jobRoleId);
             }
 
@@ -155,7 +169,7 @@ export async function importResourceRows(
                     $set: setFields,
                     $setOnInsert: { password: ctx.passwordHash },
                 },
-                { upsert: true, new: true }
+                { upsert: true, new: true, ...sessionOpts }
             );
 
             employeesUpserted++;
@@ -167,7 +181,7 @@ export async function importResourceRows(
                 const sk = row.skills[i];
                 let skillId = ctx.skillCache.get(sk);
                 if (!skillId) {
-                    skillId = await upsertSkill(sk, row.resourceType || 'General');
+                    skillId = await upsertSkill(sk, row.resourceType || 'General', writeOpts);
                     ctx.skillCache.set(sk, skillId);
                 }
                 if (!skillId) continue;
@@ -183,18 +197,22 @@ export async function importResourceRows(
                             is_primary: i === 0,
                         },
                     },
-                    { upsert: true }
+                    { upsert: true, ...sessionOpts }
                 );
             }
 
             if (skillIdsForEmployee.length > 0) {
                 ctx.employeePrimarySkill.set(emp!._id.toString(), skillIdsForEmployee[0]);
-                await EmployeeSkill.deleteMany({
-                    employee_id: emp!._id,
-                    skill_id: { $nin: skillIdsForEmployee },
-                });
+                await EmployeeSkill.deleteMany(
+                    {
+                        employee_id: emp!._id,
+                        skill_id: { $nin: skillIdsForEmployee },
+                    },
+                    sessionOpts
+                );
             }
         } catch (err) {
+            if (writeOpts?.atomic) throw err;
             const msg = err instanceof Error ? err.message : String(err);
             errors.push(`${identifier}: ${msg}`);
             skippedRows.push({ identifier, reason: msg });
@@ -202,7 +220,7 @@ export async function importResourceRows(
     }
 
     if (ctx.syncId) {
-        await deactivateStaleEmployees(ctx.syncId);
+        await deactivateStaleEmployees(ctx.syncId, writeOpts);
     }
 
     return {
@@ -217,12 +235,16 @@ export async function importResourceRows(
     };
 }
 
-async function deactivateStaleEmployees(syncId: string): Promise<void> {
+async function deactivateStaleEmployees(
+    syncId: string,
+    writeOpts?: ImportWriteOptions
+): Promise<void> {
     await Employee.updateMany(
         {
             last_sync_id: { $exists: true, $ne: syncId },
             email: { $nin: PROTECTED_EMAILS },
         },
-        { $set: { is_active: false, status: 'Inactive' } }
+        { $set: { is_active: false, status: 'Inactive' } },
+        mongooseSessionOpts(writeOpts)
     );
 }

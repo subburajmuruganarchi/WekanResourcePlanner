@@ -8,6 +8,7 @@ export const ACCESS_ROLES = {
 
 export interface ImportContext {
     syncId?: string;
+    syncBatchId?: string;
     jobRoleIds: Map<string, Types.ObjectId>;
     employeeByEmail: Map<string, Types.ObjectId>;
     employeeByCode: Map<string, Types.ObjectId>;

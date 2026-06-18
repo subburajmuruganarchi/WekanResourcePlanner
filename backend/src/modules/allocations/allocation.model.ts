@@ -13,6 +13,8 @@ export interface IProjectAllocation extends Document {
     allocation_percent: number;
     type?: AllocationType;
     is_active: boolean;
+    /** Last full-sync batch that touched this allocation (stale cleanup). */
+    last_sync_batch_id?: string;
     // MCP Explainability Fields
     allocation_reason?: string;
     created_by_role?: CreatedByRole;
@@ -29,6 +31,7 @@ const ProjectAllocationSchema = new Schema<IProjectAllocation>({
     allocation_percent: { type: Number, required: true, min: 0, max: 100 },
     type: { type: String, enum: Object.values(AllocationType), default: AllocationType.PERCENTAGE },
     is_active: { type: Boolean, default: true },
+    last_sync_batch_id: { type: String, index: true, sparse: true },
     // MCP Explainability Fields
     allocation_reason: { type: String, trim: true },
     created_by_role: { type: String, enum: Object.values(CreatedByRole) }
@@ -39,7 +42,7 @@ const ProjectAllocationSchema = new Schema<IProjectAllocation>({
 
 // Compound Indexes for availability checking
 ProjectAllocationSchema.index({ employee_id: 1, start_date: 1, end_date: 1 });
-ProjectAllocationSchema.index({ project_id: 1, employee_id: 1 });
+ProjectAllocationSchema.index({ project_id: 1, employee_id: 1 }, { unique: true });
 
 export interface IAllocationOverrideLog extends Document {
     allocation_id?: Types.ObjectId;

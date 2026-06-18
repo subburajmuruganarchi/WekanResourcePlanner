@@ -13,7 +13,10 @@ import {
     upsertJobRole,
     upsertSkill,
 } from './planner-import.utils';
+import { ImportWriteOptions, mongooseSessionOpts, failOrSkipRow } from './types/import-write.options';
 import { CreatedByRole, WeeklyAllocationSource, WeeklyAllocationStatus } from '../../common/types/enums';
+
+const WEEKLY_BULK_FLUSH_SIZE = 500;
 
 export interface AllocationImportOutput extends SheetImportResult {
     allocationsUpserted: number;
@@ -22,34 +25,46 @@ export interface AllocationImportOutput extends SheetImportResult {
 
 export async function importAllocationRows(
     rows: AllocationImportRow[],
-    ctx: ImportContext
+    ctx: ImportContext,
+    writeOpts?: ImportWriteOptions
 ): Promise<AllocationImportOutput> {
     const skippedRows: SkippedRow[] = [];
     const errors: string[] = [];
     let allocationsUpserted = 0;
     let weeklyEntriesUpserted = 0;
+    const sessionOpts = mongooseSessionOpts(writeOpts);
+    const weeklyBulkOps: Parameters<typeof WeeklyAllocationEntry.bulkWrite>[0] = [];
+
+    const flushWeeklyBulk = async (): Promise<void> => {
+        if (weeklyBulkOps.length === 0) return;
+        await WeeklyAllocationEntry.bulkWrite(weeklyBulkOps, {
+            ordered: true,
+            ...sessionOpts,
+        });
+        weeklyBulkOps.length = 0;
+    };
 
     let defaultSkillId = [...ctx.skillCache.values()].find((id): id is Types.ObjectId => !!id);
     if (!defaultSkillId) {
-        defaultSkillId = await upsertSkill('General', 'General');
+        defaultSkillId = await upsertSkill('General', 'General', writeOpts);
     }
 
     for (const row of rows) {
         const identifier = `${row.pid}:${row.employeeCode}` || row.projectName;
 
         if (!row.projectName) {
-            skippedRows.push({ identifier, reason: 'Missing project name' });
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'Missing project name');
             continue;
         }
         if (isDummyResource(row.resourceName, row.employeeCode)) {
-            skippedRows.push({ identifier, reason: 'Dummy resource row' });
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'Dummy resource row');
             continue;
         }
 
         const code = ctx.projectByPid.get(row.pid) || projectCodeFromRow(row.pid, row.projectName);
         const projectId = ctx.projectByCode.get(code);
         if (!projectId) {
-            skippedRows.push({ identifier, reason: `Project not found for code ${code}` });
+            failOrSkipRow(writeOpts, skippedRows, identifier, `Project not found for code ${code}`);
             continue;
         }
 
@@ -61,19 +76,24 @@ export async function importAllocationRows(
             if (emailGuess) employeeId = ctx.employeeByEmail.get(emailGuess);
         }
         if (!employeeId) {
-            skippedRows.push({ identifier, reason: `Employee not found for EID ${row.employeeCode}` });
+            failOrSkipRow(
+                writeOpts,
+                skippedRows,
+                identifier,
+                `Employee not found for EID ${row.employeeCode}`
+            );
             continue;
         }
 
         if (row.weeklyHours.length === 0) {
-            skippedRows.push({ identifier, reason: 'No weekly hours' });
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'No weekly hours');
             continue;
         }
 
         try {
             let jobRoleId = ctx.jobRoleIds.get(row.jobRole);
             if (!jobRoleId) {
-                jobRoleId = await upsertJobRole(row.jobRole || 'Consultant');
+                jobRoleId = await upsertJobRole(row.jobRole || 'Consultant', writeOpts);
                 ctx.jobRoleIds.set(row.jobRole, jobRoleId);
             }
 
@@ -99,38 +119,45 @@ export async function importAllocationRows(
                         end_date: endDate,
                         allocation_percent: percent,
                         is_active: isActive,
+                        ...(ctx.syncBatchId ? { last_sync_batch_id: ctx.syncBatchId } : {}),
                         allocation_reason: `${SEED_TAG} from Project_Allocation (${latest.hours}h/wk, ${row.resourceType || row.projectType})`,
                         created_by_role: CreatedByRole.ADMIN,
                     },
                 },
-                { upsert: true, new: true }
+                { upsert: true, new: true, ...sessionOpts }
             );
             allocationsUpserted++;
 
             for (const week of row.weeklyHours) {
-                await WeeklyAllocationEntry.findOneAndUpdate(
-                    {
-                        employee_id: employeeId,
-                        project_id: projectId,
-                        week_start: week.weekStart,
-                    },
-                    {
-                        $set: {
-                            allocation_id: allocationDoc!._id,
+                weeklyBulkOps.push({
+                    updateOne: {
+                        filter: {
                             employee_id: employeeId,
                             project_id: projectId,
                             week_start: week.weekStart,
-                            planned_hours: week.hours,
-                            actual_hours: 0,
-                            forecast_hours: week.hours,
-                            variance_hours: week.hours,
-                            source: WeeklyAllocationSource.PLANNED,
-                            status: WeeklyAllocationStatus.PUBLISHED,
                         },
+                        update: {
+                            $set: {
+                                allocation_id: allocationDoc!._id,
+                                employee_id: employeeId,
+                                project_id: projectId,
+                                week_start: week.weekStart,
+                                planned_hours: week.hours,
+                                actual_hours: 0,
+                                forecast_hours: week.hours,
+                                variance_hours: week.hours,
+                                source: WeeklyAllocationSource.PLANNED,
+                                status: WeeklyAllocationStatus.PUBLISHED,
+                            },
+                        },
+                        upsert: true,
                     },
-                    { upsert: true }
-                );
+                });
                 weeklyEntriesUpserted++;
+
+                if (weeklyBulkOps.length >= WEEKLY_BULK_FLUSH_SIZE) {
+                    await flushWeeklyBulk();
+                }
             }
 
             await ProjectRoleEffort.findOneAndUpdate(
@@ -146,13 +173,20 @@ export async function importAllocationRows(
                         hours_per_day: 8,
                     },
                 },
-                { upsert: true }
+                { upsert: true, ...sessionOpts }
             );
         } catch (err) {
+            if (writeOpts?.atomic) throw err;
             const msg = err instanceof Error ? err.message : String(err);
             errors.push(`${identifier}: ${msg}`);
             skippedRows.push({ identifier, reason: msg });
         }
+    }
+
+    await flushWeeklyBulk();
+
+    if (ctx.syncBatchId) {
+        await deactivateStaleAllocations(ctx.syncBatchId, writeOpts);
     }
 
     return {
@@ -164,4 +198,18 @@ export async function importAllocationRows(
         allocationsUpserted,
         weeklyEntriesUpserted,
     };
+}
+
+async function deactivateStaleAllocations(
+    syncBatchId: string,
+    writeOpts?: ImportWriteOptions
+): Promise<void> {
+    await ProjectAllocation.updateMany(
+        {
+            last_sync_batch_id: { $exists: true, $ne: syncBatchId },
+            allocation_reason: { $regex: SEED_TAG },
+        },
+        { $set: { is_active: false } },
+        mongooseSessionOpts(writeOpts)
+    );
 }

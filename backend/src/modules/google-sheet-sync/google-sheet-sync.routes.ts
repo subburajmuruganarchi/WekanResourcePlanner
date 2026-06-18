@@ -18,15 +18,27 @@ router.get(
 );
 
 router.post(
-    '/manual',
-    requireRole('Admin'),
-    (req, res, next) => googleSheetSyncController.manual(req, res, next)
-);
-
-router.post(
     '/sync-all',
     requireRole('Admin'),
     (req, res, next) => googleSheetSyncController.syncAll(req, res, next)
+);
+
+router.post(
+    '/sync/full',
+    requireRole('Admin'),
+    (req, res, next) => googleSheetSyncController.syncFull(req, res, next)
+);
+
+router.get(
+    '/sync-all/status/:syncId',
+    requireRole('Admin'),
+    (req, res, next) => googleSheetSyncController.syncAllStatus(req, res, next)
+);
+
+router.get(
+    '/sync/status/:syncBatchId',
+    requireRole('Admin'),
+    (req, res, next) => googleSheetSyncController.syncStatus(req, res, next)
 );
 
 export { router as googleSheetSyncRouter };

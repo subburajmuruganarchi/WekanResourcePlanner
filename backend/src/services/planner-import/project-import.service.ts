@@ -16,6 +16,7 @@ import {
     upsertJobRole,
     upsertSkill,
 } from './planner-import.utils';
+import { ImportWriteOptions, mongooseSessionOpts, failOrSkipRow } from './types/import-write.options';
 
 export interface ProjectImportOutput extends SheetImportResult {
     projectsUpserted: number;
@@ -23,17 +24,19 @@ export interface ProjectImportOutput extends SheetImportResult {
 
 export async function importProjectRows(
     rows: ProjectImportRow[],
-    ctx: ImportContext
+    ctx: ImportContext,
+    writeOpts?: ImportWriteOptions
 ): Promise<ProjectImportOutput> {
     const skippedRows: SkippedRow[] = [];
     const errors: string[] = [];
     let projectsUpserted = 0;
+    const sessionOpts = mongooseSessionOpts(writeOpts);
 
     for (const row of rows) {
         const identifier = row.pid || row.name || 'unknown';
 
         if (!row.name) {
-            skippedRows.push({ identifier, reason: 'Missing project name' });
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'Missing project name');
             continue;
         }
 
@@ -77,7 +80,7 @@ export async function importProjectRows(
             const doc = await Project.findOneAndUpdate(
                 { project_code: code },
                 { $set: setFields },
-                { upsert: true, new: true }
+                { upsert: true, new: true, ...sessionOpts }
             );
 
             projectsUpserted++;
@@ -93,7 +96,7 @@ export async function importProjectRows(
                 if (staffing.count <= 0) continue;
                 let roleId = ctx.jobRoleIds.get(staffing.label);
                 if (!roleId) {
-                    roleId = await upsertJobRole(staffing.label);
+                    roleId = await upsertJobRole(staffing.label, writeOpts);
                     ctx.jobRoleIds.set(staffing.label, roleId);
                 }
                 await ProjectRoleEffort.findOneAndUpdate(
@@ -109,7 +112,7 @@ export async function importProjectRows(
                             hours_per_day: 8,
                         },
                     },
-                    { upsert: true }
+                    { upsert: true, ...sessionOpts }
                 );
             }
 
@@ -123,7 +126,7 @@ export async function importProjectRows(
                 'SDE II (Full Stack)';
             let requirementRoleId = ctx.jobRoleIds.get(requirementRoleName);
             if (!requirementRoleId) {
-                requirementRoleId = await upsertJobRole(requirementRoleName);
+                requirementRoleId = await upsertJobRole(requirementRoleName, writeOpts);
                 ctx.jobRoleIds.set(requirementRoleName, requirementRoleId);
             }
             const requirementProfile = roleProfile(requirementRoleName);
@@ -131,7 +134,7 @@ export async function importProjectRows(
             for (const skillName of techSkills) {
                 let skillId = ctx.skillCache.get(skillName);
                 if (!skillId) {
-                    skillId = await upsertSkill(skillName, 'Project Tech');
+                    skillId = await upsertSkill(skillName, 'Project Tech', writeOpts);
                     ctx.skillCache.set(skillName, skillId);
                 }
                 if (!skillId) continue;
@@ -149,10 +152,11 @@ export async function importProjectRows(
                             end_date: end,
                         },
                     },
-                    { upsert: true }
+                    { upsert: true, ...sessionOpts }
                 );
             }
         } catch (err) {
+            if (writeOpts?.atomic) throw err;
             const msg = err instanceof Error ? err.message : String(err);
             errors.push(`${identifier}: ${msg}`);
             skippedRows.push({ identifier, reason: msg });
@@ -160,7 +164,7 @@ export async function importProjectRows(
     }
 
     if (ctx.syncId) {
-        await deactivateStaleProjects(ctx.syncId);
+        await deactivateStaleProjects(ctx.syncId, writeOpts);
     }
 
     return {
@@ -173,9 +177,13 @@ export async function importProjectRows(
     };
 }
 
-async function deactivateStaleProjects(syncId: string): Promise<void> {
+async function deactivateStaleProjects(
+    syncId: string,
+    writeOpts?: ImportWriteOptions
+): Promise<void> {
     await Project.updateMany(
         { last_sync_id: { $exists: true, $ne: syncId } },
-        { $set: { is_active: false, status: ProjectStatus.ON_HOLD } }
+        { $set: { is_active: false, status: ProjectStatus.ON_HOLD } },
+        mongooseSessionOpts(writeOpts)
     );
 }

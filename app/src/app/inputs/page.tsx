@@ -69,11 +69,13 @@ export default function InputsPage() {
     const [error, setError] = useState<string | null>(null)
 
     const [syncStatus, setSyncStatus] = useState<SheetSyncStatus[]>([])
-    const [syncLoading, setSyncLoading] = useState(false)
+    const [statusLoading, setStatusLoading] = useState(false)
+    const [syncRunning, setSyncRunning] = useState(false)
+    const [syncProgress, setSyncProgress] = useState<number | null>(null)
     const [syncMessage, setSyncMessage] = useState<string | null>(null)
 
     const loadSyncStatus = useCallback(async () => {
-        setSyncLoading(true)
+        setStatusLoading(true)
         try {
             const res = await api.get<{ data: { sheets: SheetSyncStatus[] } }>(
                 "/google-sheet-sync/status"
@@ -82,7 +84,7 @@ export default function InputsPage() {
         } catch {
             setSyncStatus([])
         } finally {
-            setSyncLoading(false)
+            setStatusLoading(false)
         }
     }, [])
 
@@ -141,24 +143,108 @@ export default function InputsPage() {
         }
     }
 
+    const pollFullSyncStatus = async (syncBatchId: string): Promise<boolean> => {
+        const maxAttempts = 90
+        for (let i = 0; i < maxAttempts; i++) {
+            const res = await api.get<{
+                status: string
+                syncCompleted: boolean
+                syncBatchId: string
+                progress: number
+                currentSheet?: string
+                sheets?: {
+                    Resource: string
+                    Project: string
+                    Project_Allocation: string
+                }
+                summary?: {
+                    resource: { processed: number; received: number }
+                    project: { processed: number; received: number }
+                    allocation: { processed: number; received: number }
+                }
+                errors: string[]
+                durationMs?: number
+                message?: string
+            }>(`/google-sheet-sync/sync/status/${encodeURIComponent(syncBatchId)}`)
+
+            setSyncProgress(res.data?.progress ?? null)
+            const sheets = res.data?.sheets
+            if (sheets) {
+                setSyncMessage(
+                    `Resource: ${sheets.Resource} · Project: ${sheets.Project} · Allocation: ${sheets.Project_Allocation}`
+                )
+            } else {
+                const sheet = res.data?.currentSheet
+                if (sheet) {
+                    setSyncMessage(`Syncing ${sheet}… (${res.data?.progress ?? 0}%)`)
+                }
+            }
+
+            if (res.data?.status === "SUCCESS" && res.data.syncCompleted) {
+                const summary = res.data.summary
+                const detail = summary
+                    ? `Resource ${summary.resource.processed}/${summary.resource.received}, Project ${summary.project.processed}/${summary.project.received}, Allocation ${summary.allocation.processed}/${summary.allocation.received}`
+                    : ""
+                const duration =
+                    res.data.durationMs != null
+                        ? ` (${Math.round(res.data.durationMs / 1000)}s)`
+                        : ""
+                setSyncMessage(`Full sync completed${duration}${detail ? ` — ${detail}` : ""}`)
+                return true
+            }
+
+            if (res.data?.status === "FAILED" && res.data.syncCompleted) {
+                const err =
+                    res.data.errors?.join("; ") ?? res.data.message ?? "Full sync failed"
+                throw new Error(err)
+            }
+
+            await new Promise((r) => setTimeout(r, 4000))
+        }
+        throw new Error("Full sync timed out while waiting for completion")
+    }
+
     const handleSyncNow = async () => {
         setSyncMessage(null)
-        setSyncLoading(true)
+        setSyncProgress(null)
+        setSyncRunning(true)
         try {
-            const res = await api.post<{ message: string }>(
-                "/google-sheet-sync/sync-all",
-                {},
-                { timeout: 300_000 }
-            )
-            setSyncMessage(res.data?.message ?? "Full sync completed.")
-            await loadSyncStatus()
+            const res = await api.post<{
+                status: string
+                syncId: string
+                syncBatchId: string
+                message?: string
+            }>("/google-sheet-sync/sync/full", {}, { timeout: 30_000 })
+
+            if (res.status === 409 || res.data?.status === "RUNNING") {
+                const activeId = (res.data as { syncBatchId?: string })?.syncBatchId
+                setSyncMessage(
+                    activeId
+                        ? `${res.data?.message ?? "Sync already in progress."} (${activeId})`
+                        : (res.data?.message ?? "Sync already in progress.")
+                )
+                return
+            }
+
+            const syncBatchId = res.data?.syncBatchId ?? res.data?.syncId
+            if (!syncBatchId) {
+                throw new Error("Server did not return a sync batch id")
+            }
+
+            setSyncMessage("Full sync started…")
+            const ok = await pollFullSyncStatus(syncBatchId)
+            if (ok) {
+                await loadSyncStatus()
+                window.location.reload()
+            }
         } catch (err: unknown) {
             const msg =
                 (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
                 (err instanceof Error ? err.message : "Full sync failed")
             setSyncMessage(msg)
         } finally {
-            setSyncLoading(false)
+            setSyncRunning(false)
+            setSyncProgress(null)
         }
     }
 
@@ -187,15 +273,19 @@ export default function InputsPage() {
                     <button
                         type="button"
                         onClick={handleSyncNow}
-                        disabled={syncLoading}
+                        disabled={syncRunning}
                         className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-brand-700 bg-brand-50 rounded-lg hover:bg-brand-100 disabled:opacity-60"
                     >
-                        {syncLoading ? (
+                        {syncRunning ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                             <RefreshCw className="w-4 h-4" />
                         )}
-                        {syncLoading ? "Syncing…" : "Full Sync"}
+                        {syncRunning
+                            ? syncProgress != null
+                                ? `Syncing… ${syncProgress}%`
+                                : "Syncing…"
+                            : "Full Sync"}
                     </button>
                 </div>
                 <p className="text-sm text-gray-600 mb-4">
@@ -206,7 +296,7 @@ export default function InputsPage() {
                     <p className="text-sm text-gray-700 mb-3 p-3 bg-gray-50 rounded-lg">{syncMessage}</p>
                 )}
                 <div className="grid gap-3 md:grid-cols-3">
-                    {syncStatus.length === 0 && !syncLoading && (
+                    {syncStatus.length === 0 && !statusLoading && (
                         <p className="text-sm text-gray-500 col-span-3">No Google Sheet sync runs yet.</p>
                     )}
                     {syncStatus.map((s) => (

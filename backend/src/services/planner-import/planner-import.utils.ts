@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { Types } from 'mongoose';
+import { ImportWriteOptions, mongooseSessionOpts } from './types/import-write.options';
 import { Role } from '../../modules/roles/role.model';
 import { Skill } from '../../modules/skills/skill.model';
 import {
@@ -175,16 +176,22 @@ export function parseWeekMonday(header: string): Date | null {
     return Number.isNaN(d.getTime()) ? null : startOfUtcWeek(d);
 }
 
-export async function upsertAccessRole(roleName: string): Promise<Types.ObjectId> {
+export async function upsertAccessRole(
+    roleName: string,
+    writeOpts?: ImportWriteOptions
+): Promise<Types.ObjectId> {
     const doc = await Role.findOneAndUpdate(
         { role_name: roleName },
         { $setOnInsert: { role_name: roleName, is_active: true, department: 'WeKan' } },
-        { upsert: true, new: true }
+        { upsert: true, new: true, ...mongooseSessionOpts(writeOpts) }
     );
     return doc!._id;
 }
 
-export async function upsertJobRole(roleName: string): Promise<Types.ObjectId> {
+export async function upsertJobRole(
+    roleName: string,
+    writeOpts?: ImportWriteOptions
+): Promise<Types.ObjectId> {
     const name = roleName.trim() || 'Consultant';
     const doc = await Role.findOneAndUpdate(
         { role_name: name },
@@ -196,31 +203,40 @@ export async function upsertJobRole(roleName: string): Promise<Types.ObjectId> {
                 default_rate: 100,
             },
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true, ...mongooseSessionOpts(writeOpts) }
     );
     return doc!._id;
 }
 
-export async function upsertSkill(name: string, category: string): Promise<Types.ObjectId | undefined> {
+export async function upsertSkill(
+    name: string,
+    category: string,
+    writeOpts?: ImportWriteOptions
+): Promise<Types.ObjectId | undefined> {
     const trimmed = name.trim().slice(0, 120);
     if (!trimmed) return undefined;
     const doc = await Skill.findOneAndUpdate(
         { name: trimmed },
         { $setOnInsert: { name: trimmed, category, is_active: true, description: SEED_TAG } },
-        { upsert: true, new: true }
+        { upsert: true, new: true, ...mongooseSessionOpts(writeOpts) }
     );
     return doc!._id;
 }
 
-export async function cleanupJunkSkills(): Promise<void> {
-    const junkSkills = await Skill.find({
+export async function cleanupJunkSkills(writeOpts?: ImportWriteOptions): Promise<void> {
+    const sessionOpts = mongooseSessionOpts(writeOpts);
+    let junkQuery = Skill.find({
         name: { $regex: /resources freed|date were not|not confirmed/i },
     }).select('_id');
+    if (writeOpts?.session) {
+        junkQuery = junkQuery.session(writeOpts.session);
+    }
+    const junkSkills = await junkQuery;
     if (junkSkills.length === 0) return;
     const { EmployeeSkill } = await import('../../modules/employees/employee-skill.model');
     const { ProjectSkillRequirement } = await import('../../modules/projects/project-skill-requirement.model');
     const junkIds = junkSkills.map((s) => s._id);
-    await ProjectSkillRequirement.deleteMany({ skill_id: { $in: junkIds } });
-    await EmployeeSkill.deleteMany({ skill_id: { $in: junkIds } });
-    await Skill.deleteMany({ _id: { $in: junkIds } });
+    await ProjectSkillRequirement.deleteMany({ skill_id: { $in: junkIds } }, sessionOpts);
+    await EmployeeSkill.deleteMany({ skill_id: { $in: junkIds } }, sessionOpts);
+    await Skill.deleteMany({ _id: { $in: junkIds } }, sessionOpts);
 }
