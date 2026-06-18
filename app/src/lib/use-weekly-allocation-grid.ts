@@ -5,6 +5,7 @@ import {
     clonePlannerRows,
     filterPlannerRowsByUtilization,
     cellKey,
+    rowKey,
 } from './weekly-grid-pivot';
 import type {
     WeeklyAllocationGridResponse,
@@ -249,6 +250,58 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
         });
     }, []);
 
+    const changeRowEmployee = useCallback(
+        (currentRowKey: string, employeeId: string, employeeName: string, projectId: string) => {
+            const newRowKey = rowKey(employeeId, projectId);
+            setPlannerRows((prev) => {
+                const idx = prev.findIndex((r) => r.rowKey === currentRowKey);
+                if (idx < 0) return prev;
+                if (prev.some((r) => r.rowKey === newRowKey && r.rowKey !== currentRowKey)) {
+                    return prev;
+                }
+
+                const old = prev[idx];
+                const newWeekCells = Object.fromEntries(
+                    Object.entries(old.weekCells).map(([week, cell]) => [
+                        week,
+                        { ...cell, employeeId },
+                    ])
+                );
+
+                const next = [...prev];
+                next[idx] = {
+                    ...old,
+                    rowKey: newRowKey,
+                    employeeId,
+                    employeeName,
+                    weekCells: newWeekCells,
+                };
+                return next;
+            });
+
+            const oldRow = plannerRows.find((r) => r.rowKey === currentRowKey);
+            if (oldRow) {
+                for (const week of Object.keys(oldRow.weekCells)) {
+                    const oldKey = cellKey(oldRow.employeeId, oldRow.projectId, week);
+                    const dirty = dirtyRef.current.get(oldKey);
+                    if (dirty) {
+                        dirtyRef.current.delete(oldKey);
+                        dirtyRef.current.set(cellKey(employeeId, projectId, week), {
+                            ...dirty,
+                            employeeId,
+                        });
+                    }
+                }
+                syncDirtyCount();
+            }
+        },
+        [plannerRows]
+    );
+
+    const removePlannerRow = useCallback((rowKeyToRemove: string) => {
+        setPlannerRows((prev) => prev.filter((r) => r.rowKey !== rowKeyToRemove));
+    }, []);
+
     return {
         filters,
         setFilters,
@@ -273,5 +326,7 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
         hasDirty: dirtyCount > 0,
         dirtyKeys,
         appendPlannerRow,
+        changeRowEmployee,
+        removePlannerRow,
     };
 }

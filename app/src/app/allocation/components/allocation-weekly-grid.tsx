@@ -21,8 +21,15 @@ import '../allocation-grid.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
+export interface EmployeeOption {
+    id: string;
+    name: string;
+    role: string;
+}
+
 export interface AllocationGridRow extends WeeklyPlannerGridRow {
     employeeRole: string;
+    isDraft?: boolean;
 }
 
 function formatHours(n: number): string {
@@ -34,21 +41,32 @@ function formatHours(n: number): string {
 interface AllocationWeeklyGridProps {
     rows: AllocationGridRow[];
     weeks: string[];
+    employees: EmployeeOption[];
     canEdit: boolean;
     dirtyKeys: Set<string>;
     onPlannedHoursChange: (row: WeeklyPlannerGridRow, weekStart: string, hours: number) => void;
+    onEmployeeChange: (row: AllocationGridRow, employeeId: string) => void;
     loading?: boolean;
 }
 
 export function AllocationWeeklyGrid({
     rows,
     weeks,
+    employees,
     canEdit,
     dirtyKeys,
     onPlannedHoursChange,
+    onEmployeeChange,
     loading,
 }: AllocationWeeklyGridProps) {
     const gridRef = useRef<AgGridReact<AllocationGridRow>>(null);
+
+    const employeeIds = useMemo(() => employees.map((e) => e.id), [employees]);
+    const employeeNameById = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const e of employees) map.set(e.id, e.name);
+        return map;
+    }, [employees]);
 
     const employeeWeekTotals = useMemo(
         () => computeEmployeeWeekTotals(rows, weeks),
@@ -57,6 +75,7 @@ export function AllocationWeeklyGrid({
 
     const isOverAllocated = useCallback(
         (employeeId: string, weekStart: string) => {
+            if (!employeeId) return false;
             const total = employeeWeekTotals.get(`${employeeId}:${weekStart}`) ?? 0;
             return total > DEFAULT_WEEKLY_CAPACITY_HOURS;
         },
@@ -65,15 +84,15 @@ export function AllocationWeeklyGrid({
 
     const weekColumnDefs = useMemo((): ColDef<AllocationGridRow>[] => {
         return weeks.map((weekStart) => {
-            const header = format(parseISO(weekStart), 'd MMM');
+            const header = format(parseISO(weekStart), 'd MMM').toUpperCase();
             return {
                 colId: `week_${weekStart}`,
                 headerName: header,
                 headerTooltip: weekStart,
                 headerClass: 'ra-header-week',
-                width: 72,
-                minWidth: 64,
-                editable: canEdit,
+                width: 76,
+                minWidth: 68,
+                editable: (params) => canEdit && !!params.data?.employeeId,
                 type: 'numericColumn',
                 filter: false,
                 sortable: false,
@@ -82,7 +101,7 @@ export function AllocationWeeklyGrid({
                 valueGetter: (params) => params.data?.weekCells[weekStart]?.plannedHours ?? 0,
                 valueFormatter: (p) => formatHours(Number(p.value ?? 0)),
                 valueSetter: (params: ValueSetterParams<AllocationGridRow>) => {
-                    if (!params.data || !canEdit) return false;
+                    if (!params.data?.employeeId || !canEdit) return false;
                     const raw = params.newValue;
                     const num =
                         typeof raw === 'number' ? raw : parseFloat(String(raw ?? '').trim());
@@ -92,7 +111,7 @@ export function AllocationWeeklyGrid({
                 },
                 cellClassRules: {
                     'ra-cell-dirty': (p: CellClassParams<AllocationGridRow>) => {
-                        if (!p.data) return false;
+                        if (!p.data?.employeeId) return false;
                         return dirtyKeys.has(
                             cellKey(p.data.employeeId, p.data.projectId, weekStart)
                         );
@@ -100,7 +119,8 @@ export function AllocationWeeklyGrid({
                     'ra-cell-filled': (p: CellClassParams<AllocationGridRow>) =>
                         Number(p.value ?? 0) > 0,
                     'ra-cell-over': (p: CellClassParams<AllocationGridRow>) =>
-                        !!p.data && isOverAllocated(p.data.employeeId, weekStart),
+                        !!p.data?.employeeId &&
+                        isOverAllocated(p.data.employeeId, weekStart),
                 },
             };
         });
@@ -122,8 +142,38 @@ export function AllocationWeeklyGrid({
                 filter: 'agTextColumnFilter',
             },
             {
-                field: 'employeeName',
+                colId: 'resource',
+                field: 'employeeId',
                 headerName: 'Resource',
+                headerClass: 'ra-header-resource',
+                pinned: 'left',
+                width: 200,
+                minWidth: 170,
+                lockPinned: true,
+                suppressMovable: true,
+                editable: canEdit,
+                cellClass: 'ra-pinned-resource',
+                filter: 'agTextColumnFilter',
+                cellEditor: 'agSelectCellEditor',
+                cellEditorParams: {
+                    values: ['', ...employeeIds],
+                },
+                valueFormatter: (params) => {
+                    if (!params.value) return params.data?.isDraft ? 'Select resource…' : '—';
+                    return employeeNameById.get(String(params.value)) ?? params.data?.employeeName ?? '—';
+                },
+                valueSetter: (params: ValueSetterParams<AllocationGridRow>) => {
+                    if (!params.data || !canEdit) return false;
+                    const newId = String(params.newValue ?? '').trim();
+                    if (!newId) return false;
+                    if (newId === params.data.employeeId) return false;
+                    onEmployeeChange(params.data, newId);
+                    return true;
+                },
+            },
+            {
+                field: 'employeeRole',
+                headerName: 'Resource Role',
                 headerClass: 'ra-header-resource',
                 pinned: 'left',
                 width: 180,
@@ -131,25 +181,13 @@ export function AllocationWeeklyGrid({
                 lockPinned: true,
                 suppressMovable: true,
                 editable: false,
-                cellClass: 'ra-pinned-resource',
-                filter: 'agTextColumnFilter',
-            },
-            {
-                field: 'employeeRole',
-                headerName: 'Resource Role',
-                headerClass: 'ra-header-resource',
-                pinned: 'left',
-                width: 160,
-                minWidth: 130,
-                lockPinned: true,
-                suppressMovable: true,
-                editable: false,
                 cellClass: 'ra-pinned-role',
                 filter: 'agTextColumnFilter',
+                valueFormatter: (params) => params.value || '—',
             },
         ];
         return [...pinned, ...weekColumnDefs];
-    }, [weekColumnDefs]);
+    }, [weekColumnDefs, canEdit, employeeIds, employeeNameById, onEmployeeChange]);
 
     const defaultColDef = useMemo<ColDef>(
         () => ({
@@ -168,7 +206,7 @@ export function AllocationWeeklyGrid({
     return (
         <div
             className="ra-grid ag-theme-quartz w-full rounded-xl border border-gray-300 overflow-hidden shadow-sm"
-            style={{ height: 'min(72vh, 680px)', width: '100%' }}
+            style={{ height: 'min(78vh, 720px)', width: '100%' }}
         >
             <AgGridReact<AllocationGridRow>
                 ref={gridRef}

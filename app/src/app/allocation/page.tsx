@@ -3,41 +3,51 @@ import { format, parseISO, startOfWeek, addWeeks } from 'date-fns';
 import { Loader2, Save, Undo2, AlertCircle, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useProjects, useProject } from '@/lib/use-projects';
+import { useProjects } from '@/lib/use-projects';
 import { useAuth } from '@/lib/auth-context';
 import { useEmployees } from '@/lib/use-employees';
 import { useWeeklyAllocationGrid } from '@/lib/use-weekly-allocation-grid';
 import { rowKey } from '@/lib/weekly-grid-pivot';
-import { ProjectManagerAssignment } from './components/project-manager-assignment';
-import { AllocationWeeklyGrid, type AllocationGridRow } from './components/allocation-weekly-grid';
+import {
+    AllocationWeeklyGrid,
+    type AllocationGridRow,
+    type EmployeeOption,
+} from './components/allocation-weekly-grid';
+import type { Project } from '@/types/api';
 import type { WeeklyGridFilters } from '@/types/weekly-allocation';
 import './allocation-grid.css';
 
-function buildWeekRange(project: { startDate: string; endDate?: string } | null): {
+function buildGlobalWeekRange(projects: Project[]): {
     weekStartFrom: string;
     weekStartTo: string;
 } {
+    const withDates = projects.filter((p) => p.startDate);
     const todayStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-    let from = todayStart;
-    let to = addWeeks(todayStart, 11);
 
-    if (project?.startDate) {
-        from = startOfWeek(parseISO(project.startDate), { weekStartsOn: 1 });
-    }
-    if (project?.endDate) {
-        const projectEnd = startOfWeek(parseISO(project.endDate), { weekStartsOn: 1 });
-        to = projectEnd;
+    if (withDates.length === 0) {
+        return {
+            weekStartFrom: format(todayStart, 'yyyy-MM-dd'),
+            weekStartTo: format(addWeeks(todayStart, 11), 'yyyy-MM-dd'),
+        };
     }
 
-    if (to < from) {
-        to = addWeeks(from, 11);
+    let from = startOfWeek(parseISO(withDates[0].startDate), { weekStartsOn: 1 });
+    let to = withDates[0].endDate
+        ? startOfWeek(parseISO(withDates[0].endDate), { weekStartsOn: 1 })
+        : addWeeks(from, 11);
+
+    for (const p of withDates) {
+        const ps = startOfWeek(parseISO(p.startDate), { weekStartsOn: 1 });
+        const pe = p.endDate
+            ? startOfWeek(parseISO(p.endDate), { weekStartsOn: 1 })
+            : addWeeks(ps, 11);
+        if (ps < from) from = ps;
+        if (pe > to) to = pe;
     }
 
     const maxEnd = addWeeks(from, 51);
-    if (to > maxEnd) {
-        to = maxEnd;
-    }
+    if (to > maxEnd) to = maxEnd;
+    if (to < from) to = addWeeks(from, 11);
 
     return {
         weekStartFrom: format(from, 'yyyy-MM-dd'),
@@ -45,52 +55,51 @@ function buildWeekRange(project: { startDate: string; endDate?: string } | null)
     };
 }
 
+function employeeRoleLabel(emp: {
+    jobRole?: string;
+    position?: string;
+    role?: string;
+}): string {
+    return emp.jobRole || emp.position || (typeof emp.role === 'string' ? emp.role : '') || '—';
+}
+
 export function Allocation() {
     const { user } = useAuth();
-    const canEditPm = user?.role === 'Admin';
     const canEditGrid = user?.role === 'Admin';
 
-    const { projects, loading: projLoading, refetch: refetchProjects } = useProjects();
-    const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
-    const { project: selectedProject, refetch: refetchProject } = useProject(selectedProjectId);
+    const { projects, loading: projLoading } = useProjects();
     const { employees } = useEmployees();
 
-    const [addEmployeeId, setAddEmployeeId] = useState('');
     const [weekWindowStart, setWeekWindowStart] = useState(0);
     const WEEKS_VISIBLE = 8;
 
     const grid = useWeeklyAllocationGrid({ canEdit: canEditGrid, pageSize: 500 });
 
-    const listProject = useMemo(
-        () => projects.find((p) => p.id === selectedProjectId),
-        [projects, selectedProjectId]
-    );
-
-    const activeProject = useMemo(() => {
-        if (selectedProject?.id === selectedProjectId) return selectedProject;
-        return listProject ?? null;
-    }, [selectedProject, selectedProjectId, listProject]);
+    const employeeOptions = useMemo((): EmployeeOption[] => {
+        return employees
+            .filter((e) => e.status === 'Active')
+            .map((e) => ({
+                id: e.id,
+                name: e.name,
+                role: employeeRoleLabel(e),
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [employees]);
 
     const employeeRoleMap = useMemo(() => {
         const map = new Map<string, string>();
-        for (const emp of employees) {
-            map.set(
-                emp.id,
-                emp.jobRole || emp.position || (typeof emp.role === 'string' ? emp.role : '') || '—'
-            );
-        }
+        for (const e of employeeOptions) map.set(e.id, e.role);
         return map;
-    }, [employees]);
+    }, [employeeOptions]);
 
     const gridFilters = useMemo((): WeeklyGridFilters | null => {
-        if (!selectedProjectId || !activeProject) return null;
-        const range = buildWeekRange(activeProject);
+        if (projLoading || projects.length === 0) return null;
+        const range = buildGlobalWeekRange(projects);
         return {
             ...range,
-            projectId: selectedProjectId,
             utilization: 'all',
         };
-    }, [selectedProjectId, activeProject]);
+    }, [projects, projLoading]);
 
     useEffect(() => {
         if (!gridFilters) return;
@@ -110,48 +119,65 @@ export function Allocation() {
     const displayRows = useMemo((): AllocationGridRow[] => {
         return grid.plannerRows.map((row) => ({
             ...row,
-            employeeRole: employeeRoleMap.get(row.employeeId) || '—',
+            employeeRole: row.employeeId
+                ? employeeRoleMap.get(row.employeeId) || '—'
+                : '—',
+            isDraft: row.rowKey.startsWith('draft:'),
         }));
     }, [grid.plannerRows, employeeRoleMap]);
 
-    const employeesNotOnGrid = useMemo(() => {
-        const onGrid = new Set(grid.plannerRows.map((r) => r.employeeId));
-        return employees
-            .filter((e) => e.status === 'Active' && !onGrid.has(e.id))
-            .sort((a, b) => a.name.localeCompare(b.name));
-    }, [employees, grid.plannerRows]);
+    const handleEmployeeChange = useCallback(
+        (row: AllocationGridRow, employeeId: string) => {
+            const emp = employeeOptions.find((e) => e.id === employeeId);
+            if (!emp) return;
 
-    const handlePmUpdated = () => {
-        refetchProject();
-        refetchProjects();
-    };
+            const newKey = rowKey(employeeId, row.projectId);
+            if (
+                grid.plannerRows.some(
+                    (r) => r.rowKey === newKey && r.rowKey !== row.rowKey
+                )
+            ) {
+                return;
+            }
 
-    const handleAddResource = useCallback(() => {
-        if (!addEmployeeId || !selectedProjectId || !activeProject) return;
-        const emp = employees.find((e) => e.id === addEmployeeId);
-        if (!emp) return;
+            grid.changeRowEmployee(row.rowKey, employeeId, emp.name, row.projectId);
+        },
+        [employeeOptions, grid]
+    );
 
-        const key = rowKey(addEmployeeId, selectedProjectId);
-        if (grid.plannerRows.some((r) => r.rowKey === key)) return;
+    const handleAddRow = useCallback(() => {
+        const lastRow = grid.plannerRows[grid.plannerRows.length - 1];
+        const refProject =
+            projects.find((p) => p.id === lastRow?.projectId) ??
+            projects.find((p) => p.status === 'Active' || p.status === 'Planning') ??
+            projects[0];
 
+        if (!refProject) return;
+
+        const draftKey = `draft:${Date.now()}`;
         grid.appendPlannerRow({
-            rowKey: key,
-            employeeId: addEmployeeId,
-            employeeName: emp.name,
-            projectId: selectedProjectId,
-            projectName: activeProject.name,
-            projectCode: activeProject.code,
+            rowKey: draftKey,
+            employeeId: '',
+            employeeName: '',
+            projectId: refProject.id,
+            projectName: refProject.name,
+            projectCode: refProject.code,
             weekCells: {},
         });
-        setAddEmployeeId('');
-    }, [addEmployeeId, selectedProjectId, activeProject, employees, grid]);
+    }, [grid, projects]);
 
     const handleSave = async () => {
+        const incomplete = grid.plannerRows.some((r) => !r.employeeId);
+        if (incomplete) {
+            grid.plannerRows
+                .filter((r) => !r.employeeId)
+                .forEach((r) => grid.removePlannerRow(r.rowKey));
+        }
         await grid.saveBulk();
     };
 
     return (
-        <PageContainer className="space-y-6">
+        <PageContainer className="space-y-4">
             <div>
                 <h1 className="text-2xl font-semibold text-gray-900">Resource Allocation</h1>
                 <p className="text-sm text-gray-600 mt-1">
@@ -159,127 +185,72 @@ export function Allocation() {
                 </p>
             </div>
 
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div
-                    className={
-                        selectedProjectId && activeProject
-                            ? canEditPm
-                                ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_auto_auto]'
-                                : 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_auto]'
-                            : 'max-w-xl'
-                    }
-                >
-                    <div className="space-y-2 min-w-0">
-                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                            Select project
-                        </label>
-                        <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                            <SelectTrigger className="h-11 w-full rounded-xl border-gray-200 text-sm font-medium">
-                                <SelectValue placeholder="Choose a project…" />
-                            </SelectTrigger>
-                            <SelectContent className="rounded-xl shadow-xl">
-                                {projLoading ? (
-                                    <div className="flex items-center justify-center p-4">
-                                        <Loader2 className="h-5 w-5 animate-spin text-brand-500" />
-                                    </div>
-                                ) : (
-                                    (projects || []).map((project) => (
-                                        <SelectItem key={project.id} value={project.id}>
-                                            <span className="flex items-center gap-2">
-                                                <span>{project.name}</span>
-                                                <span className="font-mono text-[10px] text-gray-400">
-                                                    {project.code}
-                                                </span>
-                                            </span>
-                                        </SelectItem>
-                                    ))
-                                )}
-                            </SelectContent>
-                        </Select>
+            <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {canEditGrid && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-9 gap-1"
+                                onClick={handleAddRow}
+                                disabled={projLoading || projects.length === 0}
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add row
+                            </Button>
+                        )}
+                        <span className="text-sm text-gray-500">
+                            {displayRows.filter((r) => r.employeeId).length} resource
+                            {displayRows.filter((r) => r.employeeId).length === 1 ? '' : 's'}
+                            {grid.weeks.length > 0 &&
+                                ` · ${format(parseISO(grid.weeks[0]), 'd MMM yyyy')} – ${format(parseISO(grid.weeks[grid.weeks.length - 1]), 'd MMM yyyy')}`}
+                        </span>
                     </div>
 
-                    {selectedProjectId && activeProject && (
-                        <>
-                            <ProjectManagerAssignment
-                                key={selectedProjectId}
-                                projectId={selectedProjectId}
-                                managerId={activeProject.managerId}
-                                managerName={activeProject.managerName}
-                                readOnly={!canEditPm}
-                                onUpdated={handlePmUpdated}
-                            />
-                            <div className="space-y-2 min-w-0">
-                                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                    Status
-                                </label>
-                                <div className="flex h-11 items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm font-medium text-gray-700">
-                                    <span
-                                        className={`h-2 w-2 shrink-0 rounded-full ${
-                                            activeProject.status === 'Active'
-                                                ? 'bg-green-500'
-                                                : activeProject.status === 'Planning'
-                                                  ? 'bg-amber-500'
-                                                  : 'bg-gray-400'
-                                        }`}
-                                    />
-                                    {activeProject.status || 'Active'}
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </div>
-            </div>
-
-            {!selectedProjectId ? (
-                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-12 text-center text-sm text-gray-500">
-                    Select a project above to view and edit weekly resource allocations.
-                </div>
-            ) : (
-                <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                            {canEditGrid && (
-                                <>
-                                    <Select value={addEmployeeId} onValueChange={setAddEmployeeId}>
-                                        <SelectTrigger className="h-9 w-[220px] rounded-lg">
-                                            <SelectValue placeholder="Add resource…" />
-                                        </SelectTrigger>
-                                        <SelectContent className="max-h-64">
-                                            {employeesNotOnGrid.length === 0 ? (
-                                                <SelectItem value="__none__" disabled>
-                                                    All active employees are on the grid
-                                                </SelectItem>
-                                            ) : (
-                                                employeesNotOnGrid.map((emp) => (
-                                                    <SelectItem key={emp.id} value={emp.id}>
-                                                        {emp.name}
-                                                    </SelectItem>
-                                                ))
-                                            )}
-                                        </SelectContent>
-                                    </Select>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-9 gap-1"
-                                        disabled={!addEmployeeId}
-                                        onClick={handleAddResource}
-                                    >
-                                        <Plus className="w-4 h-4" />
-                                        Add row
-                                    </Button>
-                                </>
-                            )}
-                            <span className="text-sm text-gray-500">
-                                {displayRows.length} resource{displayRows.length === 1 ? '' : 's'}
-                                {grid.weeks.length > 0 &&
-                                    ` · ${format(parseISO(grid.weeks[0]), 'd MMM yyyy')} – ${format(parseISO(grid.weeks[grid.weeks.length - 1]), 'd MMM yyyy')}`}
-                            </span>
-                        </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {grid.weeks.length > WEEKS_VISIBLE && (
+                            <>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    disabled={!canScrollWeeksBack}
+                                    onClick={() =>
+                                        setWeekWindowStart((s) => Math.max(0, s - WEEKS_VISIBLE))
+                                    }
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </Button>
+                                <span className="text-xs text-gray-500">
+                                    Weeks {weekWindowStart + 1}–
+                                    {Math.min(weekWindowStart + WEEKS_VISIBLE, grid.weeks.length)} of{' '}
+                                    {grid.weeks.length}
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    disabled={!canScrollWeeksForward}
+                                    onClick={() =>
+                                        setWeekWindowStart((s) =>
+                                            Math.min(
+                                                s + WEEKS_VISIBLE,
+                                                grid.weeks.length - WEEKS_VISIBLE
+                                            )
+                                        )
+                                    }
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </Button>
+                            </>
+                        )}
 
                         {canEditGrid && (
-                            <div className="flex flex-wrap gap-2">
+                            <>
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -302,85 +273,47 @@ export function Allocation() {
                                     )}
                                     Save changes
                                 </Button>
-                            </div>
+                            </>
                         )}
                     </div>
-
-                    {grid.error && (
-                        <div className="flex items-start gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm">
-                            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                            <div>
-                                <p className="font-medium">Could not load allocation grid</p>
-                                <p>{grid.error}</p>
-                                {grid.error.includes('disabled') && (
-                                    <p className="mt-1 text-xs">
-                                        Enable{' '}
-                                        <code className="bg-red-100 px-1 rounded">
-                                            FEATURE_WEEKLY_ALLOCATIONS_ENABLED=true
-                                        </code>{' '}
-                                        on the backend and restart.
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {grid.saveMessage && (
-                        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
-                            {grid.saveMessage}
-                        </p>
-                    )}
-
-                    {grid.weeks.length > WEEKS_VISIBLE && (
-                        <div className="flex items-center justify-end gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
-                                disabled={!canScrollWeeksBack}
-                                onClick={() => setWeekWindowStart((s) => Math.max(0, s - WEEKS_VISIBLE))}
-                            >
-                                <ChevronLeft className="w-4 h-4" />
-                            </Button>
-                            <span className="text-xs text-gray-500">
-                                Weeks {weekWindowStart + 1}–
-                                {Math.min(weekWindowStart + WEEKS_VISIBLE, grid.weeks.length)} of{' '}
-                                {grid.weeks.length}
-                            </span>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
-                                disabled={!canScrollWeeksForward}
-                                onClick={() =>
-                                    setWeekWindowStart((s) =>
-                                        Math.min(s + WEEKS_VISIBLE, grid.weeks.length - WEEKS_VISIBLE)
-                                    )
-                                }
-                            >
-                                <ChevronRight className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    )}
-
-                    <AllocationWeeklyGrid
-                        rows={displayRows}
-                        weeks={visibleWeeks.length > 0 ? visibleWeeks : grid.weeks}
-                        canEdit={canEditGrid}
-                        dirtyKeys={grid.dirtyKeys}
-                        onPlannedHoursChange={grid.updatePlannedHours}
-                        loading={grid.loading}
-                    />
-
-                    <p className="text-xs text-gray-500">
-                        Enter planned hours per week for each resource. Click a cell to edit; use{' '}
-                        <strong>Save changes</strong> to persist. Project Managers can view this grid in
-                        read-only mode.
-                    </p>
                 </div>
-            )}
+
+                {grid.error && (
+                    <div className="flex items-start gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm">
+                        <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                        <div>
+                            <p className="font-medium">Could not load allocation grid</p>
+                            <p>{grid.error}</p>
+                            {grid.error.includes('disabled') && (
+                                <p className="mt-1 text-xs">
+                                    Enable{' '}
+                                    <code className="bg-red-100 px-1 rounded">
+                                        FEATURE_WEEKLY_ALLOCATIONS_ENABLED=true
+                                    </code>{' '}
+                                    on the backend and restart.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {grid.saveMessage && (
+                    <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
+                        {grid.saveMessage}
+                    </p>
+                )}
+
+                <AllocationWeeklyGrid
+                    rows={displayRows}
+                    weeks={visibleWeeks.length > 0 ? visibleWeeks : grid.weeks}
+                    employees={employeeOptions}
+                    canEdit={canEditGrid}
+                    dirtyKeys={grid.dirtyKeys}
+                    onPlannedHoursChange={grid.updatePlannedHours}
+                    onEmployeeChange={handleEmployeeChange}
+                    loading={grid.loading || projLoading}
+                />
+            </div>
         </PageContainer>
     );
 }
