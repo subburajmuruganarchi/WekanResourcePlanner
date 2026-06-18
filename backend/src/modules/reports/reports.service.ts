@@ -15,6 +15,14 @@ import {
     formatMonthYearHeaderUtc,
     formatWeekHeaderUtc,
 } from './report-week.util';
+import type {
+    AllReportsPreviewResponse,
+    ReportMonthBand,
+    ReportPreviewId,
+    ReportPreviewPayload,
+    ReportSheetCell,
+    ReportSheetPreview,
+} from './reports-preview.types';
 
 const HOURS_PER_WEEK = 40;
 
@@ -678,5 +686,423 @@ export class ReportsService {
         );
 
         return workbook;
+    }
+
+    private mkPreviewCell(
+        value: string | number | null,
+        opts?: { bg?: string; fg?: string; bold?: boolean; italic?: boolean; percent?: boolean }
+    ): ReportSheetCell {
+        return { value, ...opts };
+    }
+
+    private buildMonthBands(weeks: Date[], colOffset: number): ReportMonthBand[] {
+        const bands: ReportMonthBand[] = [];
+        let currentMonth = '';
+        let monthStartCol = colOffset;
+        weeks.forEach((w, i) => {
+            const m = formatMonthYearHeaderUtc(w);
+            const col = i + colOffset;
+            if (m !== currentMonth) {
+                if (currentMonth) {
+                    bands.push({ label: currentMonth, colStart: monthStartCol, colEnd: col - 1 });
+                }
+                currentMonth = m;
+                monthStartCol = col;
+            }
+        });
+        bands.push({ label: currentMonth, colStart: monthStartCol, colEnd: weeks.length + colOffset - 1 });
+        return bands;
+    }
+
+    private previewHeaderCells(labels: string[]): ReportSheetCell[] {
+        return labels.map((label) =>
+            this.mkPreviewCell(label, { bold: true, bg: CONFIG.COLORS.HEADER_BG })
+        );
+    }
+
+    private previewResourceMasterSheet(
+        resourceMap: Record<string, ResourceRow>,
+        weeks: Date[],
+        options?: { includeYearInWeekHeaders?: boolean }
+    ): ReportSheetPreview {
+        const colOffset = 3;
+        const dateHeaders = weeks.map((w) =>
+            formatWeekHeaderUtc(w, options?.includeYearInWeekHeaders ?? false)
+        );
+        const headers = ['Role', 'Resource', 'Project / Metric', ...dateHeaders];
+        const rows: ReportSheetCell[][] = [];
+
+        const sortedResources = _.values(resourceMap).sort((a, b) => a.name.localeCompare(b.name));
+        for (const p of sortedResources) {
+            for (const proj of p.projects) {
+                const colors = this.projectTypeColor(proj.type);
+                rows.push([
+                    this.mkPreviewCell(p.role),
+                    this.mkPreviewCell(p.name),
+                    this.mkPreviewCell(proj.name),
+                    ...proj.hours.map((h) =>
+                        this.mkPreviewCell(h, { bg: colors.bg, fg: colors.fg })
+                    ),
+                ]);
+            }
+
+            const bandwidth = p.totalHours.map((h) => Math.round((HOURS_PER_WEEK - h) * 10) / 10);
+            rows.push([
+                this.mkPreviewCell(p.role),
+                this.mkPreviewCell(p.name),
+                this.mkPreviewCell('Bandwidth', { bold: true }),
+                ...bandwidth.map((val) =>
+                    this.mkPreviewCell(val, { bg: this.getBandwidthColor(val), bold: true })
+                ),
+            ]);
+            rows.push([]);
+        }
+
+        return {
+            name: 'Schedule',
+            monthBands: this.buildMonthBands(weeks, colOffset),
+            headers,
+            rows,
+        };
+    }
+
+    private previewBandwidthSheet(resources: ResourceRow[], weeks: Date[]): ReportSheetPreview {
+        const dateHeaders = weeks.map((w) => formatWeekHeaderUtc(w));
+        const headers = ['Type', 'Role', 'Resource', ...dateHeaders];
+        const rows = resources.map((p) => {
+            const avail = p.totalHours.map((h) => Math.round((HOURS_PER_WEEK - h) * 10) / 10);
+            return [
+                this.mkPreviewCell(p.category),
+                this.mkPreviewCell(p.role),
+                this.mkPreviewCell(p.name),
+                ...avail.map((val) =>
+                    this.mkPreviewCell(val, { bg: this.getBandwidthColor(val) })
+                ),
+            ];
+        });
+        return { name: 'Bandwidth', headers, rows };
+    }
+
+    public async generateReportPreview(id: ReportPreviewId, numWeeks: number = 12): Promise<ReportPreviewPayload> {
+        const generatedAt = new Date().toISOString();
+
+        switch (id) {
+            case 'resource-view': {
+                const { resourceMap, weeks } = await this.getReportData(numWeeks, 'forward');
+                return {
+                    id,
+                    title: 'Resource View',
+                    sheets: [this.previewResourceMasterSheet(resourceMap, weeks)],
+                    weekLabels: weeks.map((w) => formatWeekHeaderUtc(w)),
+                    generatedAt,
+                };
+            }
+            case 'consolidated-history': {
+                const { resourceMap, weeks } = await this.getReportData(numWeeks, 'history');
+                return {
+                    id,
+                    title: 'Consolidated History',
+                    sheets: [
+                        this.previewResourceMasterSheet(resourceMap, weeks, {
+                            includeYearInWeekHeaders: true,
+                        }),
+                    ],
+                    weekLabels: weeks.map((w) => formatWeekHeaderUtc(w, true)),
+                    generatedAt,
+                };
+            }
+            case 'project-view': {
+                const { projectMap, weeks } = await this.getReportData(numWeeks, 'forward');
+                const dateHeaders = weeks.map((w) => formatWeekHeaderUtc(w));
+                const headers = ['Project', 'Role', 'Resource', ...dateHeaders];
+                const rows: ReportSheetCell[][] = [];
+                const sortedProjects = _.values(projectMap).sort((a, b) => a.name.localeCompare(b.name));
+                for (const proj of sortedProjects) {
+                    rows.push([
+                        this.mkPreviewCell(proj.name),
+                        this.mkPreviewCell('—'),
+                        this.mkPreviewCell('Project total', { bold: true }),
+                        ...proj.totalHours.map((h) =>
+                            this.mkPreviewCell(h, { bg: CONFIG.COLORS.TOTAL, bold: true })
+                        ),
+                    ]);
+                    for (const res of proj.resources.sort((a, b) => a.name.localeCompare(b.name))) {
+                        const assignmentType =
+                            res.projects.find((p) => p.code === proj.code)?.type || 'External';
+                        const colors = this.projectTypeColor(assignmentType);
+                        rows.push([
+                            this.mkPreviewCell(proj.name),
+                            this.mkPreviewCell(res.role),
+                            this.mkPreviewCell(res.name),
+                            ...res.totalHours.map((h) =>
+                                this.mkPreviewCell(h, { bg: colors.bg, fg: colors.fg })
+                            ),
+                        ]);
+                    }
+                    rows.push([]);
+                }
+                return {
+                    id,
+                    title: 'Project View',
+                    sheets: [
+                        {
+                            name: 'Project View',
+                            monthBands: this.buildMonthBands(weeks, 3),
+                            headers,
+                            rows,
+                        },
+                    ],
+                    weekLabels: dateHeaders,
+                    generatedAt,
+                };
+            }
+            case 'role-summary-hrs':
+            case 'role-summary-perc': {
+                const isPercentage = id === 'role-summary-perc';
+                const { resourceMap, weeks } = await this.getReportData(numWeeks, 'forward');
+                const roles: Record<
+                    string,
+                    { internal: number[]; external: number[]; projected: number[]; capacity: number[] }
+                > = {};
+                const grandTotal = {
+                    internal: new Array(weeks.length).fill(0),
+                    external: new Array(weeks.length).fill(0),
+                    projected: new Array(weeks.length).fill(0),
+                    capacity: new Array(weeks.length).fill(0),
+                };
+
+                _.values(resourceMap).forEach((p) => {
+                    if (!roles[p.role]) {
+                        roles[p.role] = {
+                            internal: new Array(weeks.length).fill(0),
+                            external: new Array(weeks.length).fill(0),
+                            projected: new Array(weeks.length).fill(0),
+                            capacity: new Array(weeks.length).fill(0),
+                        };
+                    }
+                    for (let i = 0; i < weeks.length; i++) {
+                        roles[p.role].capacity[i] += HOURS_PER_WEEK;
+                        grandTotal.capacity[i] += HOURS_PER_WEEK;
+                    }
+                    p.projects.forEach((proj) => {
+                        proj.hours.forEach((h, i) => {
+                            if (proj.type === 'Internal') {
+                                roles[p.role].internal[i] += h;
+                                grandTotal.internal[i] += h;
+                            } else if (proj.type === 'Projected') {
+                                roles[p.role].projected[i] += h;
+                                grandTotal.projected[i] += h;
+                            } else {
+                                roles[p.role].external[i] += h;
+                                grandTotal.external[i] += h;
+                            }
+                        });
+                    });
+                });
+
+                const sortedRoles = Object.keys(roles).sort((a, b) => {
+                    const catA = this.getCategoryRank(a);
+                    const catB = this.getCategoryRank(b);
+                    if (catA !== catB) return catA - catB;
+                    return a.localeCompare(b);
+                });
+
+                const dateHeaders = weeks.map((w) => formatWeekHeaderUtc(w));
+                const headers = ['Specific Role', 'Type', ...dateHeaders];
+                const rows: ReportSheetCell[][] = [];
+
+                const addBlock = (
+                    label: string,
+                    data: typeof grandTotal
+                ) => {
+                    const makeRow = (
+                        typeLabel: string,
+                        rowData: number[],
+                        bg: string,
+                        fg: string,
+                        bold: boolean
+                    ) => {
+                        const displayData = isPercentage
+                            ? rowData.map((v, i) => (data.capacity[i] ? v / data.capacity[i] : 0))
+                            : rowData;
+                        rows.push([
+                            this.mkPreviewCell(label),
+                            this.mkPreviewCell(typeLabel, { bold }),
+                            ...displayData.map((v) =>
+                                this.mkPreviewCell(v, { bg, fg, bold, percent: isPercentage })
+                            ),
+                        ]);
+                    };
+                    makeRow('External', data.external, CONFIG.COLORS.EXT, '000000', false);
+                    makeRow('Internal', data.internal, CONFIG.COLORS.INT, '000000', false);
+                    makeRow('Projected', data.projected, CONFIG.COLORS.PROJ, CONFIG.COLORS.PROJ_TEXT, false);
+                    const benchHours = data.capacity.map(
+                        (cap, i) => cap - (data.internal[i] + data.external[i] + data.projected[i])
+                    );
+                    makeRow('Bench', benchHours, CONFIG.COLORS.BENCH, '000000', true);
+                    if (!isPercentage) {
+                        makeRow('Total Capacity', data.capacity, CONFIG.COLORS.TOTAL, '000000', false);
+                    }
+                    rows.push([]);
+                };
+
+                addBlock('All Roles (Total)', grandTotal);
+                sortedRoles.forEach((r) => addBlock(r, roles[r]));
+
+                return {
+                    id,
+                    title: isPercentage ? 'Role %' : 'Role Hrs',
+                    sheets: [{ name: isPercentage ? 'Role %' : 'Role Hrs', headers, rows }],
+                    weekLabels: dateHeaders,
+                    generatedAt,
+                };
+            }
+            case 'bandwidth': {
+                const { resourceMap, weeks } = await this.getReportData(numWeeks, 'forward');
+                const sortedResources = _.values(resourceMap).sort((a, b) => {
+                    const bwA = HOURS_PER_WEEK - a.totalHours[0];
+                    const bwB = HOURS_PER_WEEK - b.totalHours[0];
+                    if (bwA !== bwB) return bwB - bwA;
+                    return a.name.localeCompare(b.name);
+                });
+                return {
+                    id,
+                    title: 'Bandwidth',
+                    sheets: [this.previewBandwidthSheet(sortedResources, weeks)],
+                    weekLabels: weeks.map((w) => formatWeekHeaderUtc(w)),
+                    generatedAt,
+                };
+            }
+            case 'overallocated': {
+                const { resourceMap, weeks } = await this.getReportData(numWeeks, 'forward');
+                const overallocated = _.values(resourceMap).filter((p) =>
+                    p.totalHours.some((h) => h > HOURS_PER_WEEK)
+                );
+                const sheet: ReportSheetPreview =
+                    overallocated.length === 0
+                        ? {
+                              name: 'Overallocated',
+                              headers: ['Message'],
+                              rows: [[this.mkPreviewCell('No overallocated resources in the selected horizon.')]],
+                          }
+                        : this.previewBandwidthSheet(overallocated, weeks);
+                sheet.name = 'Overallocated';
+                return {
+                    id,
+                    title: 'Overallocated',
+                    sheets: [sheet],
+                    weekLabels: weeks.map((w) => formatWeekHeaderUtc(w)),
+                    generatedAt,
+                };
+            }
+            case 'resource-analytics': {
+                const { resourceMap, weeks } = await this.getReportData(numWeeks, 'forward');
+                const roleEfforts = await ProjectRoleEffort.find({
+                    end_date: { $gte: weeks[0] },
+                    start_date: { $lte: weeks[weeks.length - 1] },
+                }).populate('role_id');
+                const allocations = await ProjectAllocation.find({ is_active: true }).populate('employee_id');
+
+                const fteByRoleWeek = new Map<string, number[]>();
+                const roleNames = new Map<string, string>();
+                for (const effort of roleEfforts) {
+                    const roleId = effort.role_id?._id?.toString() || effort.role_id?.toString();
+                    if (!roleId) continue;
+                    const roleDoc = effort.role_id as { role_name?: string };
+                    const roleName =
+                        roleDoc?.role_name || (await Role.findById(roleId))?.role_name || roleId;
+                    roleNames.set(roleId, roleName);
+                    if (!fteByRoleWeek.has(roleId)) {
+                        fteByRoleWeek.set(roleId, new Array(weeks.length).fill(0));
+                    }
+                    const row = fteByRoleWeek.get(roleId)!;
+                    const fulfilled = allocations.filter(
+                        (a) => a.project_id.toString() === effort.project_id.toString()
+                    ).length;
+                    const gap = Math.max(0, effort.required_headcount - fulfilled);
+                    const gapRounded = Math.round(gap * 4) / 4;
+                    weeks.forEach((week, i) => {
+                        const weekEnd = addUtcWeeks(week, 1);
+                        if (effort.start_date < weekEnd && effort.end_date >= week) {
+                            row[i] = Math.max(row[i], gapRounded);
+                        }
+                    });
+                }
+
+                const fteHeaders = ['Role', 'Metric', ...weeks.map((w) => formatWeekHeaderUtc(w))];
+                const fteRows: ReportSheetCell[][] = [...fteByRoleWeek.entries()]
+                    .sort((a, b) => (roleNames.get(a[0]) || '').localeCompare(roleNames.get(b[0]) || ''))
+                    .map(([roleId, vals]) => [
+                        this.mkPreviewCell(roleNames.get(roleId) || roleId),
+                        this.mkPreviewCell('Required FTE (gap)'),
+                        ...vals.map((v) =>
+                            this.mkPreviewCell(v, {
+                                bg: typeof v === 'number' && v > 0 ? CONFIG.COLORS.BENCH : undefined,
+                            })
+                        ),
+                    ]);
+
+                const overallocated = _.values(resourceMap).filter((p) =>
+                    p.totalHours.some((h) => h > HOURS_PER_WEEK)
+                );
+                const overSheet =
+                    overallocated.length === 0
+                        ? {
+                              name: 'Overallocated',
+                              headers: ['Message'],
+                              rows: [
+                                  [
+                                      this.mkPreviewCell(
+                                          'No overallocated resources in the selected horizon.'
+                                      ),
+                                  ],
+                              ],
+                          }
+                        : this.previewBandwidthSheet(overallocated, weeks);
+                overSheet.name = 'Overallocated';
+
+                const withBench = _.values(resourceMap).filter((p) =>
+                    p.totalHours.some((h) => h < HOURS_PER_WEEK)
+                );
+                const benchSheet = this.previewBandwidthSheet(
+                    withBench.sort((a, b) => a.name.localeCompare(b.name)),
+                    weeks
+                );
+                benchSheet.name = 'Bandwidth';
+
+                return {
+                    id,
+                    title: 'Resource Analytics',
+                    sheets: [
+                        { name: 'Required FTEs', headers: fteHeaders, rows: fteRows },
+                        overSheet,
+                        benchSheet,
+                    ],
+                    weekLabels: weeks.map((w) => formatWeekHeaderUtc(w)),
+                    generatedAt,
+                };
+            }
+            default:
+                throw new Error(`Unknown report preview id: ${id}`);
+        }
+    }
+
+    public async generateAllReportPreviews(numWeeks: number = 12): Promise<AllReportsPreviewResponse> {
+        const ids: ReportPreviewId[] = [
+            'resource-view',
+            'project-view',
+            'resource-analytics',
+            'role-summary-hrs',
+            'role-summary-perc',
+            'bandwidth',
+            'overallocated',
+            'consolidated-history',
+        ];
+        const reports = await Promise.all(ids.map((id) => this.generateReportPreview(id, numWeeks)));
+        return {
+            weeks: numWeeks,
+            generatedAt: new Date().toISOString(),
+            reports,
+        };
     }
 }

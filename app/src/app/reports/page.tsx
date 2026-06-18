@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
     FileBarChart,
     Download,
@@ -18,19 +18,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { api } from "@/lib/api"
-
-type ReportId =
-    | "resource-view"
-    | "project-view"
-    | "resource-analytics"
-    | "role-summary-hrs"
-    | "role-summary-perc"
-    | "bandwidth"
-    | "overallocated"
-    | "consolidated-history"
+import { ReportSheetViewer } from "@/components/reports/report-sheet-viewer"
+import type {
+    AllReportsPreviewResponse,
+    ReportPreviewId,
+    ReportPreviewPayload,
+} from "@/types/report-preview"
 
 interface ReportCard {
-    id: ReportId
+    id: ReportPreviewId
     title: string
     description: string
     icon: LucideIcon
@@ -38,7 +34,7 @@ interface ReportCard {
     colorClass: string
 }
 
-const REPORT_CONFIG: Record<ReportId, { endpoint: string; filename: string }> = {
+const REPORT_CONFIG: Record<ReportPreviewId, { endpoint: string; filename: string }> = {
     "resource-view": { endpoint: "/reports/resource-view", filename: "Resource_View.xlsx" },
     "project-view": { endpoint: "/reports/project-view", filename: "Project_View.xlsx" },
     "resource-analytics": { endpoint: "/reports/resource-analytics", filename: "Resource_Analytics.xlsx" },
@@ -51,15 +47,55 @@ const REPORT_CONFIG: Record<ReportId, { endpoint: string; filename: string }> = 
 
 export default function ReportsPage() {
     const [isRefreshing, setIsRefreshing] = useState(false)
-    const [downloading, setDownloading] = useState<ReportId | null>(null)
+    const [downloading, setDownloading] = useState<ReportPreviewId | null>(null)
     const [downloadError, setDownloadError] = useState<string | null>(null)
+    const [previewError, setPreviewError] = useState<string | null>(null)
+    const [previews, setPreviews] = useState<ReportPreviewPayload[]>([])
+    const [activeReportId, setActiveReportId] = useState<ReportPreviewId | null>(null)
+    const [activeSheetIndex, setActiveSheetIndex] = useState(0)
+    const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null)
+
+    const loadPreviews = useCallback(async () => {
+        setIsRefreshing(true)
+        setPreviewError(null)
+        try {
+            const response = await api.get<{ status: string; data: AllReportsPreviewResponse }>(
+                "/reports/previews",
+                { params: { weeks: 12 } }
+            )
+            const payload = response.data.data
+            setPreviews(payload.reports)
+            setLastLoadedAt(payload.generatedAt)
+            setActiveSheetIndex(0)
+            setActiveReportId((current) => current ?? payload.reports[0]?.id ?? null)
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : "Failed to load report previews. Please try again."
+            setPreviewError(message)
+        } finally {
+            setIsRefreshing(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        void loadPreviews()
+    }, [loadPreviews])
 
     const handleRefresh = () => {
-        setIsRefreshing(true)
-        window.location.reload()
+        void loadPreviews()
     }
 
-    const downloadReport = async (id: ReportId) => {
+    const activeReport = useMemo(
+        () => previews.find((r) => r.id === activeReportId) ?? null,
+        [previews, activeReportId]
+    )
+
+    const selectReport = (id: ReportPreviewId) => {
+        setActiveReportId(id)
+        setActiveSheetIndex(0)
+    }
+
+    const downloadReport = async (id: ReportPreviewId) => {
         const config = REPORT_CONFIG[id]
         setDownloading(id)
         setDownloadError(null)
@@ -161,9 +197,14 @@ export default function ReportsPage() {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-gray-900">Reports</h1>
                     <p className="text-gray-500 mt-2 max-w-2xl">
-                        Download Excel master schedules and capacity reports aligned with the Resource Planner
-                        workbook. All reports use live allocation data.
+                        View live master schedules and capacity reports in the app, or download Excel files
+                        aligned with the Resource Planner workbook.
                     </p>
+                    {lastLoadedAt && (
+                        <p className="text-xs text-gray-400 mt-1">
+                            Last refreshed {new Date(lastLoadedAt).toLocaleString()}
+                        </p>
+                    )}
                 </div>
                 <Button
                     onClick={handleRefresh}
@@ -172,9 +213,19 @@ export default function ReportsPage() {
                     className="gap-2 shrink-0"
                 >
                     <RefreshCcw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                    Refresh
+                    {isRefreshing ? "Loading…" : "Refresh"}
                 </Button>
             </div>
+
+            {previewError && (
+                <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-sm font-medium">Failed to load report previews</p>
+                        <p className="text-sm mt-1">{previewError}</p>
+                    </div>
+                </div>
+            )}
 
             {downloadError && (
                 <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
@@ -186,51 +237,93 @@ export default function ReportsPage() {
                 </div>
             )}
 
+            <Card className="border-gray-200 shadow-sm">
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-semibold">Report preview</CardTitle>
+                    <CardDescription>
+                        Select a report card below to switch views. Use Refresh to reload live allocation data.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isRefreshing && previews.length === 0 ? (
+                        <div className="flex items-center justify-center py-16 text-sm text-gray-500 gap-2">
+                            <RefreshCcw className="w-4 h-4 animate-spin" />
+                            Loading reports…
+                        </div>
+                    ) : (
+                        <ReportSheetViewer
+                            report={activeReport}
+                            activeSheetIndex={activeSheetIndex}
+                            onSheetIndexChange={setActiveSheetIndex}
+                        />
+                    )}
+                </CardContent>
+            </Card>
+
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-5">
-                {reportCards.map((report) => (
-                    <Card
-                        key={report.id}
-                        className="overflow-hidden border-gray-200 hover:border-brand-300 transition-all hover:shadow-md flex flex-col"
-                    >
-                        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 gap-3">
-                            <div className="space-y-1 min-w-0">
-                                <CardTitle className="text-lg font-bold">{report.title}</CardTitle>
-                                <CardDescription className="text-sm text-gray-500 leading-relaxed">
-                                    {report.description}
-                                </CardDescription>
-                            </div>
-                            <div className={`p-2 rounded-lg shrink-0 ${report.colorClass}`}>
-                                <report.icon className="w-5 h-5" />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="flex-1">
-                            <div className="flex flex-wrap gap-2">
-                                {report.tags.map((tag) => (
-                                    <Badge
-                                        key={tag}
-                                        variant="secondary"
-                                        className="text-[10px] uppercase tracking-wider font-semibold"
-                                    >
-                                        {tag}
-                                    </Badge>
-                                ))}
-                            </div>
-                        </CardContent>
-                        <CardFooter className="bg-gray-50/50 border-t border-gray-100 flex justify-end p-4 mt-auto">
-                            <Button
-                                onClick={() => downloadReport(report.id)}
-                                disabled={!!downloading}
-                                className="gap-2"
-                                size="sm"
-                            >
-                                <Download
-                                    className={`w-4 h-4 ${downloading === report.id ? "animate-bounce" : ""}`}
-                                />
-                                {downloading === report.id ? "Generating…" : "Download .xlsx"}
-                            </Button>
-                        </CardFooter>
-                    </Card>
-                ))}
+                {reportCards.map((report) => {
+                    const isActive = activeReportId === report.id
+                    return (
+                        <Card
+                            key={report.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => selectReport(report.id)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault()
+                                    selectReport(report.id)
+                                }
+                            }}
+                            className={`overflow-hidden transition-all hover:shadow-md flex flex-col cursor-pointer ${
+                                isActive
+                                    ? "border-brand-400 ring-2 ring-brand-200 shadow-md"
+                                    : "border-gray-200 hover:border-brand-300"
+                            }`}
+                        >
+                            <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 gap-3">
+                                <div className="space-y-1 min-w-0">
+                                    <CardTitle className="text-lg font-bold">{report.title}</CardTitle>
+                                    <CardDescription className="text-sm text-gray-500 leading-relaxed">
+                                        {report.description}
+                                    </CardDescription>
+                                </div>
+                                <div className={`p-2 rounded-lg shrink-0 ${report.colorClass}`}>
+                                    <report.icon className="w-5 h-5" />
+                                </div>
+                            </CardHeader>
+                            <CardContent className="flex-1">
+                                <div className="flex flex-wrap gap-2">
+                                    {report.tags.map((tag) => (
+                                        <Badge
+                                            key={tag}
+                                            variant="secondary"
+                                            className="text-[10px] uppercase tracking-wider font-semibold"
+                                        >
+                                            {tag}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </CardContent>
+                            <CardFooter className="bg-gray-50/50 border-t border-gray-100 flex justify-end p-4 mt-auto">
+                                <Button
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        void downloadReport(report.id)
+                                    }}
+                                    disabled={!!downloading}
+                                    className="gap-2"
+                                    size="sm"
+                                >
+                                    <Download
+                                        className={`w-4 h-4 ${downloading === report.id ? "animate-bounce" : ""}`}
+                                    />
+                                    {downloading === report.id ? "Generating…" : "Download .xlsx"}
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    )
+                })}
             </div>
 
             <Card className="bg-brand-50 border-brand-100">

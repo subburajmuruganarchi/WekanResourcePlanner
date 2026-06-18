@@ -137,4 +137,31 @@ export class ReportsController {
             res.status(500).json(errorPayload(req, 'Internal Server Error', error));
         }
     }
+
+    public async getAllPreviews(req: Request, res: Response) {
+        try {
+            const data = await reportsService.generateAllReportPreviews(this.weeksFromQuery(req));
+            res.json({ status: 'success', data });
+        } catch (error: unknown) {
+            structuredLogger.error('Failed to generate report previews', {
+                ...logContextFromRequest(req, 'reports'),
+                error: error instanceof Error ? error.message : String(error),
+            });
+            res.status(500).json(errorPayload(req, 'Internal Server Error', error));
+        }
+    }
+
+    public async getPreview(req: Request, res: Response) {
+        try {
+            const id = req.params.id as import('./reports-preview.types').ReportPreviewId;
+            const data = await reportsService.generateReportPreview(id, this.weeksFromQuery(req));
+            res.json({ status: 'success', data });
+        } catch (error: unknown) {
+            structuredLogger.error('Failed to generate report preview', {
+                ...logContextFromRequest(req, 'reports'),
+                error: error instanceof Error ? error.message : String(error),
+            });
+            res.status(500).json(errorPayload(req, 'Internal Server Error', error));
+        }
+    }
 }

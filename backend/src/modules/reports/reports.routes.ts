@@ -15,5 +15,7 @@ router.get('/consolidated-history', controller.getConsolidatedReport.bind(contro
 router.get('/role-summary', controller.getRoleSummaryReport.bind(controller));
 router.get('/bandwidth', controller.getBandwidthReport.bind(controller));
 router.get('/overallocated', controller.getOverallocatedReport.bind(controller));
+router.get('/previews', controller.getAllPreviews.bind(controller));
+router.get('/preview/:id', controller.getPreview.bind(controller));
 
 export default router;
