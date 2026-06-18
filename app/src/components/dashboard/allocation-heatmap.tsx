@@ -49,10 +49,10 @@ export function AllocationHeatmap({ projects, employees, cells, loading }: Alloc
                         {projects.map((p) => (
                             <th
                                 key={p.id}
-                                className="p-2 border-b text-gray-600 font-medium max-w-[72px] truncate"
-                                title={`${p.name} (${p.code})`}
+                                className="p-2 border-b text-gray-600 font-medium max-w-[100px] truncate"
+                                title={p.code ? `${p.name} (${p.code})` : p.name}
                             >
-                                {p.code || p.name.slice(0, 8)}
+                                {p.name}
                             </th>
                         ))}
                     </tr>

@@ -469,6 +469,41 @@ const PROJECT_STATUS_RANK: Record<ProjectStatus, number> = {
     [ProjectStatus.COMPLETED]: 1,
 };
 
+function projectStatusUpdateFields(
+    status: ProjectStatus,
+    projectType = ''
+): { status: ProjectStatus; is_active: boolean; priority: ReturnType<typeof mapPriority> } {
+    return {
+        status,
+        is_active: status === ProjectStatus.ACTIVE || status === ProjectStatus.PLANNING,
+        priority: mapPriority(projectType, status),
+    };
+}
+
+/** Apply column-4 / sheet status after project import commits. */
+export async function applyProjectStatusFromProjectRows(rows: ProjectImportRow[]): Promise<number> {
+    let updated = 0;
+
+    for (const row of rows) {
+        if (!row.name || !row.statusRaw?.trim()) continue;
+        const code = projectCodeFromRow(row.pid, row.name);
+        const status = mapProjectStatus(row.statusRaw);
+        const res = await Project.updateMany(
+            { project_code: code },
+            { $set: projectStatusUpdateFields(status, row.type) }
+        );
+        updated += res.modifiedCount;
+    }
+
+    if (updated > 0) {
+        structuredLogger.info('PROJECT STATUS APPLIED FROM PROJECT SHEET', {
+            projectsUpdated: updated,
+        });
+    }
+
+    return updated;
+}
+
 /**
  * Project sheet webhooks can lose Status when the sheet has duplicate "Status" columns.
  * Allocation rows carry a reliable "Project Status" field — use it to repair project.status.
@@ -494,14 +529,7 @@ export async function applyProjectStatusFromAllocationRows(
         const code = projectCodeFromRow(pid, '');
         const res = await Project.updateMany(
             { project_code: code },
-            {
-                $set: {
-                    status,
-                    is_active:
-                        status === ProjectStatus.ACTIVE || status === ProjectStatus.PLANNING,
-                    priority: mapPriority('', status),
-                },
-            },
+            { $set: projectStatusUpdateFields(status, '') },
             mongooseSessionOpts(writeOpts)
         );
         updated += res.modifiedCount;

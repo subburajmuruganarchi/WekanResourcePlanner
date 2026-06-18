@@ -1,7 +1,11 @@
 import { ProjectAllocation } from '../modules/allocations/allocation.model';
 import { Project } from '../modules/projects/project.model';
+import { WeeklyAllocationEntry } from '../modules/weekly-allocations/weekly-allocation-entry.model';
 import { computePeakCommittedPercent } from '../modules/allocations/allocation-availability.util';
 import type { DashboardPeriodRange } from '../modules/dashboard/dashboard-period.util';
+import { features } from '../config/features';
+
+const WEEKLY_CAPACITY = features.weeklyCapacityHours ?? 40;
 
 export interface HeatmapCell {
     employeeId: string;
@@ -18,8 +22,138 @@ export interface AllocationHeatmapData {
 const MAX_EMPLOYEES = 14;
 const MAX_PROJECTS = 10;
 
+type ProjectMeta = { id: string; name: string; code: string };
+
+function hoursToPercent(hours: number, weeks: number): number {
+    return Math.min(100, Math.round((hours / (WEEKLY_CAPACITY * weeks)) * 100));
+}
+
+/** Period-scoped heatmap from weekly planner rows (matches dashboard week filter). */
+async function buildAllocationHeatmapFromWeekly(
+    period: DashboardPeriodRange
+): Promise<AllocationHeatmapData> {
+    const entries = await WeeklyAllocationEntry.find({
+        week_start: { $gte: period.weekStartFrom, $lte: period.weekStartTo },
+        planned_hours: { $gt: 0 },
+    })
+        .populate<{ project_id: { _id: unknown; project_name: string; project_code: string } }>(
+            'project_id',
+            'project_name project_code'
+        )
+        .populate<{ employee_id: { _id: unknown; first_name: string; last_name: string } }>(
+            'employee_id',
+            'first_name last_name'
+        )
+        .lean();
+
+    if (entries.length === 0) {
+        return { projects: [], employees: [], cells: [] };
+    }
+
+    type CellAgg = {
+        employeeId: string;
+        projectId: string;
+        empName: string;
+        projName: string;
+        projCode: string;
+        totalHours: number;
+        weekCount: number;
+    };
+
+    const cellAgg = new Map<string, CellAgg>();
+
+    for (const entry of entries) {
+        const emp = entry.employee_id as {
+            _id?: { toString: () => string };
+            first_name?: string;
+            last_name?: string;
+        };
+        const proj = entry.project_id as {
+            _id?: { toString: () => string };
+            project_name?: string;
+            project_code?: string;
+        };
+        if (!emp?._id || !proj?._id) continue;
+
+        const employeeId = emp._id.toString();
+        const projectId = proj._id.toString();
+        const key = `${employeeId}:${projectId}`;
+        const cur = cellAgg.get(key) ?? {
+            employeeId,
+            projectId,
+            empName: `${emp.first_name ?? ''} ${emp.last_name ?? ''}`.trim(),
+            projName: proj.project_name || 'Project',
+            projCode: proj.project_code || '',
+            totalHours: 0,
+            weekCount: 0,
+        };
+        cur.totalHours += entry.planned_hours ?? 0;
+        cur.weekCount += 1;
+        cellAgg.set(key, cur);
+    }
+
+    const cells: HeatmapCell[] = [...cellAgg.values()].map((c) => ({
+        employeeId: c.employeeId,
+        projectId: c.projectId,
+        percent: hoursToPercent(c.totalHours, c.weekCount || 1),
+    }));
+
+    const employeeTotals = new Map<string, { id: string; name: string; totalPercent: number }>();
+    const projectMeta = new Map<string, ProjectMeta>();
+
+    for (const c of cellAgg.values()) {
+        const pct = hoursToPercent(c.totalHours, c.weekCount || 1);
+        const et = employeeTotals.get(c.employeeId) ?? {
+            id: c.employeeId,
+            name: c.empName,
+            totalPercent: 0,
+        };
+        et.totalPercent += pct;
+        employeeTotals.set(c.employeeId, et);
+        projectMeta.set(c.projectId, { id: c.projectId, name: c.projName, code: c.projCode });
+    }
+
+    const employees = [...employeeTotals.values()]
+        .sort((a, b) => b.totalPercent - a.totalPercent)
+        .slice(0, MAX_EMPLOYEES);
+    const employeeIds = new Set(employees.map((e) => e.id));
+
+    const employeeCells = cells.filter((c) => employeeIds.has(c.employeeId));
+
+    const projectWeight = new Map<string, number>();
+    for (const c of employeeCells) {
+        projectWeight.set(c.projectId, (projectWeight.get(c.projectId) ?? 0) + c.percent);
+    }
+
+    const projects = [...projectWeight.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, MAX_PROJECTS)
+        .map(([projectId]) => {
+            const meta = projectMeta.get(projectId);
+            return meta ?? { id: projectId, name: 'Project', code: '' };
+        });
+
+    const projectIds = new Set(projects.map((p) => p.id));
+    const filteredCells = employeeCells.filter((c) => projectIds.has(c.projectId));
+
+    return { projects, employees, cells: filteredCells };
+}
+
 /** Read-only snapshot for dashboard heatmap (active allocations in period). */
 export async function buildAllocationHeatmap(
+    period?: DashboardPeriodRange
+): Promise<AllocationHeatmapData> {
+    if (period) {
+        const weekly = await buildAllocationHeatmapFromWeekly(period);
+        if (weekly.employees.length > 0) {
+            return weekly;
+        }
+    }
+
+    return buildAllocationHeatmapFromLegacyAllocations(period);
+}
+
+async function buildAllocationHeatmapFromLegacyAllocations(
     period?: DashboardPeriodRange
 ): Promise<AllocationHeatmapData> {
     const allocationFilter: Record<string, unknown> = { is_active: true };
@@ -91,16 +225,25 @@ export async function buildAllocationHeatmap(
         .slice(0, MAX_EMPLOYEES);
 
     const employeeIds = new Set(employees.map((e) => e.id));
+    const employeeCells = cells.filter((c) => employeeIds.has(c.employeeId));
 
-    const projects = [...projectTotals.values()]
-        .sort((a, b) => b.headcount - a.headcount)
-        .slice(0, MAX_PROJECTS);
+    const projectWeight = new Map<string, { meta: ProjectMeta; weight: number }>();
+    for (const c of employeeCells) {
+        const meta = projectTotals.get(c.projectId);
+        if (!meta) continue;
+        const cur = projectWeight.get(c.projectId) ?? { meta, weight: 0 };
+        cur.weight += c.percent;
+        projectWeight.set(c.projectId, cur);
+    }
+
+    const projects = [...projectWeight.values()]
+        .sort((a, b) => b.weight - a.weight)
+        .slice(0, MAX_PROJECTS)
+        .map((p) => p.meta);
 
     const projectIds = new Set(projects.map((p) => p.id));
 
-    const filteredCells = cells.filter(
-        (c) => employeeIds.has(c.employeeId) && projectIds.has(c.projectId)
-    );
+    const filteredCells = employeeCells.filter((c) => projectIds.has(c.projectId));
 
     return {
         projects: projects.map(({ id, name, code }) => ({ id, name, code })),

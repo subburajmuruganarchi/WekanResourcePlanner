@@ -27,7 +27,7 @@ import {
     importResourceRows,
     prepareResourceImportReferences,
 } from './resource-import.service';
-import { importProjectRows, prepareProjectImportReferences, applyProjectStatusFromAllocationRows } from './project-import.service';
+import { importProjectRows, prepareProjectImportReferences, applyProjectStatusFromAllocationRows, applyProjectStatusFromProjectRows } from './project-import.service';
 import { importAllocationRows, prepareAllocationImportReferences } from './allocation-import.service';
 import { cleanupJunkSkills, PASSWORD_PLAIN } from './planner-import.utils';
 import { ImportContext } from './types/import-context.types';
@@ -162,7 +162,9 @@ export async function runPlannerSheetImport(params: {
 }): Promise<PlannerImportResult> {
     const atomic = params.atomic ?? !!params.syncId;
     if (!atomic) {
-        return executePlannerSheetImport(params);
+        const result = await executePlannerSheetImport(params);
+        await runPostImportStatusRepair(params);
+        return result;
     }
 
     if (params.resourceRows?.length) {
@@ -242,6 +244,8 @@ export async function runPlannerSheetImport(params: {
             syncBatchId: params.syncBatchId,
             resourceOnly: params.resourceOnly,
         });
+
+        await runPostImportStatusRepair(params);
 
         return result;
     } catch (err) {
@@ -359,7 +363,6 @@ async function executePlannerSheetImport(params: {
         sheetResults.push(allocResult);
         allocationsUpserted = allocResult.allocationsUpserted;
         weeklyEntriesUpserted = allocResult.weeklyEntriesUpserted;
-        await applyProjectStatusFromAllocationRows(params.allocationRows, writeOpts);
     }
 
     if (!writeOpts.deferJunkSkillCleanup) {
@@ -378,6 +381,19 @@ async function executePlannerSheetImport(params: {
         message: 'WeKan Planner import complete',
         ...merged,
     };
+}
+
+/** Status updates run after commit — MongoDB transactions cannot reliably update docs from prior syncs. */
+async function runPostImportStatusRepair(params: {
+    projectRows?: ProjectImportRow[];
+    allocationRows?: AllocationImportRow[];
+}): Promise<void> {
+    if (params.projectRows?.length) {
+        await applyProjectStatusFromProjectRows(params.projectRows);
+    }
+    if (params.allocationRows?.length) {
+        await applyProjectStatusFromAllocationRows(params.allocationRows);
+    }
 }
 
 /** Excel-based import — loads worksheets, converts via Excel adapter, delegates to sheet import. */
