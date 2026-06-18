@@ -7,7 +7,7 @@ import { notificationService } from '../notifications/notification.service';
 import { structuredLogger } from '../../common/logger';
 import { NotificationType } from '../notifications/notification.model';
 import { Types, startSession } from 'mongoose';
-import { TimeEntryStatus } from '../../common/types/enums';
+import { TimeEntryStatus, ProjectStatus } from '../../common/types/enums';
 import { features } from '../../config/features';
 import { weeklyActualsSyncService } from '../../services/weekly-actuals/weekly-actuals-sync.service';
 import { isFutureUtcWeek } from '../../common/utils/week.util';
@@ -99,19 +99,15 @@ export class TimeEntryService {
             // Calculate week start date (Monday)
             const weekStartDate = this.getWeekStartDate(entryDate);
 
-            // Validate employee is allocated to this project
-            const allocation = await ProjectAllocation.findOne({
-                employee_id: new Types.ObjectId(request.employeeId),
-                project_id: new Types.ObjectId(request.projectId),
-                is_active: true,
-                start_date: { $lte: entryDate },
-                end_date: { $gte: entryDate }
-            }).session(session);
+            const project = await Project.findById(request.projectId).session(session);
+            if (!project) throw new Error('Project not found');
 
-            if (!allocation) {
+            if (
+                project.status === ProjectStatus.COMPLETED ||
+                project.is_active === false
+            ) {
                 throw new Error(
-                    'Employee is not allocated to this project for the selected date. ' +
-                    'Time entries can only be logged against allocated projects.'
+                    'Cannot log time against an inactive or completed project.'
                 );
             }
 
@@ -156,8 +152,7 @@ export class TimeEntryService {
                 );
             }
 
-            // Fetch project to get PM ID for denormalization
-            const project = await Project.findById(request.projectId).session(session);
+            // Fetch project PM for denormalization (loaded above)
             if (!project) throw new Error('Project not found');
 
             // Upsert the time entry (update if exists for same employee + project + date)

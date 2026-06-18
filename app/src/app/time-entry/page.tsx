@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback } from "react"
-import { Calendar, Save, Clock, Loader2, AlertCircle, Plus, Trash2, Target, Pencil, ChevronLeft, ChevronRight } from "lucide-react"
+import { Calendar, Save, Clock, Loader2, AlertCircle, Target, ChevronLeft, ChevronRight } from "lucide-react"
 import { snapToMonday } from "@/lib/dashboard-period"
 import {
     getCurrentWeekStart,
@@ -15,7 +15,7 @@ import {
 import { PageContainer } from "@/components/layout/page-container"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useTimeEntries } from "@/lib/use-time-entries"
@@ -23,40 +23,15 @@ import { useEmployees } from "@/lib/use-employees"
 import { useProjects } from "@/lib/use-projects"
 import { useAuth } from "@/lib/auth-context"
 import { api } from "@/lib/api-client"
+import { TimeEntryWeekCalendar } from "@/components/time-entry/time-entry-week-calendar"
+import { TimeEntryEntryDialog } from "@/components/time-entry/time-entry-entry-dialog"
+import type { DayData, DayEntry, ProjectOption, DailyForecastDay } from "@/components/time-entry/time-entry-types"
 
 interface TimeCodeResponse {
     id: string
     code: string
     description: string
     isBillable: boolean
-}
-
-interface DayEntry {
-    tempId: string
-    serverEntryId?: string
-    projectCode: string
-    hours: number
-    comments: string
-    status?: string
-    isDirty?: boolean
-    isEditing?: boolean
-}
-
-interface DayData {
-    day: string
-    date: string
-    fullDate: string
-    entries: DayEntry[]
-}
-
-
-
-interface DailyForecastDay {
-    date: string
-    dayName: string
-    isWeekday: boolean
-    totalForecast: number
-    byProject: { projectId: string; projectName: string; percentage: number; forecastHours: number }[]
 }
 
 interface DailyForecastData {
@@ -100,6 +75,7 @@ export function TimeEntry() {
     const [timeCodeError, setTimeCodeError] = useState<string | null>(null)
     const [savingEntryId, setSavingEntryId] = useState<string | null>(null)
     const [rowSaveMessage, setRowSaveMessage] = useState<string | null>(null)
+    const [entryDialog, setEntryDialog] = useState<{ dayIndex: number; tempId: string } | null>(null)
 
     const { user } = useAuth()
     const isSelfOnly = user?.role === 'Employee' || user?.role === 'User'
@@ -243,27 +219,40 @@ export function TimeEntry() {
         [employees, selectedEmployeeId]
     )
 
-    const allocatedProjects = useMemo(() => {
+    const selectableProjects = useMemo((): ProjectOption[] => {
         const allocatedIds = new Set<string>()
         allocationEstimates?.byProject.forEach((p) => allocatedIds.add(p.projectId))
         dailyForecast?.days.forEach((d) =>
             d.byProject.forEach((p) => allocatedIds.add(p.projectId))
         )
 
-        const fromAllocations = projects.filter((p) => allocatedIds.has(p.id))
-
         const usedCodes = new Set(
             weekData.flatMap((d) => d.entries.map((e) => e.projectCode)).filter(Boolean)
         )
-        const fromExistingEntries = projects.filter(
-            (p) => usedCodes.has(p.code) && !allocatedIds.has(p.id)
-        )
 
-        return [...fromAllocations, ...fromExistingEntries].map((p) => ({
-            code: p.code,
-            name: p.name,
-            id: p.id,
-        }))
+        const byId = new Map<string, ProjectOption>()
+        for (const p of projects) {
+            const isActive =
+                !p.status || p.status === "Active" || p.status === "Planning"
+            if (!isActive && !usedCodes.has(p.code)) continue
+            byId.set(p.id, {
+                code: p.code,
+                name: p.name,
+                id: p.id,
+                isAllocated: allocatedIds.has(p.id),
+            })
+        }
+        for (const p of projects) {
+            if (usedCodes.has(p.code) && !byId.has(p.id)) {
+                byId.set(p.id, {
+                    code: p.code,
+                    name: p.name,
+                    id: p.id,
+                    isAllocated: allocatedIds.has(p.id),
+                })
+            }
+        }
+        return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
     }, [projects, allocationEstimates, dailyForecast, weekData])
 
     const totalHours = useMemo(() =>
@@ -325,9 +314,9 @@ export function TimeEntry() {
 
     const getProjectId = useCallback(
         (code: string): string | null => {
-            return allocatedProjects.find((p) => p.code === code)?.id || null
+            return selectableProjects.find((p) => p.code === code)?.id || null
         },
-        [allocatedProjects]
+        [selectableProjects]
     )
 
     const saveEntry = useCallback(
@@ -350,9 +339,9 @@ export function TimeEntry() {
                 return
             }
 
-            const projectId = allocatedProjects.find((p) => p.code === entry.projectCode)?.id
+            const projectId = selectableProjects.find((p) => p.code === entry.projectCode)?.id
             if (!projectId) {
-                setSubmitError(`Invalid project: ${entry.projectCode}. Only allocated projects can be saved.`)
+                setSubmitError(`Invalid project: ${entry.projectCode}. Select an active project.`)
                 return
             }
 
@@ -400,7 +389,7 @@ export function TimeEntry() {
                 setSavingEntryId(null)
             }
         },
-        [selectedEmployee, timeCodeId, weekData, allocatedProjects, submitTimeEntry, fetchDailyForecast]
+        [selectedEmployee, timeCodeId, weekData, selectableProjects, submitTimeEntry, fetchDailyForecast]
     )
 
     const handleEmployeeChange = useCallback((newId: string) => {
@@ -429,35 +418,56 @@ export function TimeEntry() {
     }, [selectedWeekStart, hasUnsavedChanges])
 
     const addEntry = useCallback((dayIndex: number) => {
-        setWeekData(prev => prev.map((day, i) =>
-            i === dayIndex
-                ? { ...day, entries: [...day.entries, { tempId: generateTempId(), projectCode: "", hours: 0, comments: "", isDirty: true, isEditing: true }] }
-                : day
-        ))
+        const tempId = generateTempId()
+        setWeekData((prev) =>
+            prev.map((day, i) =>
+                i === dayIndex
+                    ? {
+                          ...day,
+                          entries: [
+                              ...day.entries,
+                              {
+                                  tempId,
+                                  projectCode: "",
+                                  hours: 0,
+                                  comments: "",
+                                  isDirty: true,
+                                  isEditing: true,
+                              },
+                          ],
+                      }
+                    : day
+            )
+        )
+        setEntryDialog({ dayIndex, tempId })
     }, [])
 
-    const startEditingEntry = useCallback((dayIndex: number, tempId: string) => {
-        setWeekData(prev => prev.map((day, i) =>
-            i === dayIndex
-                ? { ...day, entries: day.entries.map(e => e.tempId === tempId ? { ...e, isEditing: true } : e) }
-                : day
-        ))
+    const openEditEntry = useCallback((dayIndex: number, tempId: string) => {
+        setEntryDialog({ dayIndex, tempId })
     }, [])
 
-    const cancelEditingEntry = useCallback((dayIndex: number, tempId: string) => {
-        setWeekData(prev => prev.map((day, i) => {
-            if (i !== dayIndex) return day
-            return {
-                ...day,
-                entries: day.entries.map(e => {
-                    if (e.tempId !== tempId) return e
-                    if (!e.serverEntryId) return e
-                    return { ...e, isEditing: false, isDirty: false }
-                }),
+    const closeEntryDialog = useCallback(() => {
+        if (entryDialog) {
+            const entry = weekData[entryDialog.dayIndex]?.entries.find(
+                (e) => e.tempId === entryDialog.tempId
+            )
+            if (entry && !entry.serverEntryId && !entry.projectCode && entry.hours <= 0) {
+                setWeekData((prev) =>
+                    prev.map((day, i) =>
+                        i === entryDialog.dayIndex
+                            ? {
+                                  ...day,
+                                  entries: day.entries.filter(
+                                      (e) => e.tempId !== entryDialog.tempId
+                                  ),
+                              }
+                            : day
+                    )
+                )
             }
-        }))
-        void fetchSavedEntries()
-    }, [fetchSavedEntries])
+        }
+        setEntryDialog(null)
+    }, [entryDialog, weekData])
 
     const removeEntry = useCallback(async (dayIndex: number, tempId: string) => {
         const entry = weekData[dayIndex]?.entries.find(e => e.tempId === tempId)
@@ -482,6 +492,35 @@ export function TimeEntry() {
                 : day
         ))
     }, [])
+
+    const dialogEntry = useMemo(() => {
+        if (!entryDialog) return null
+        return (
+            weekData[entryDialog.dayIndex]?.entries.find(
+                (e) => e.tempId === entryDialog.tempId
+            ) ?? null
+        )
+    }, [entryDialog, weekData])
+
+    const updateDialogEntry = useCallback(
+        (field: keyof DayEntry, value: string | number) => {
+            if (!entryDialog) return
+            updateEntry(entryDialog.dayIndex, entryDialog.tempId, field, value)
+        },
+        [entryDialog, updateEntry]
+    )
+
+    const saveDialogEntry = useCallback(async () => {
+        if (!entryDialog) return
+        await saveEntry(entryDialog.dayIndex, entryDialog.tempId)
+        setEntryDialog(null)
+    }, [entryDialog, saveEntry])
+
+    const deleteDialogEntry = useCallback(async () => {
+        if (!entryDialog) return
+        await removeEntry(entryDialog.dayIndex, entryDialog.tempId)
+        setEntryDialog(null)
+    }, [entryDialog, removeEntry])
 
     const getStatusColor = (hours: number) => {
         if (hours === 40) return "bg-green-100 text-green-600 border-green-200"
@@ -907,204 +946,51 @@ export function TimeEntry() {
                 )}
             </div>
 
-            <div className="space-y-4">
-                    {weekData.map((day, dayIndex) => {
-                        const dayTotal = day.entries.reduce((sum, e) => sum + (Number(e.hours) || 0), 0)
-                        const isWeekend = day.day === "Saturday" || day.day === "Sunday"
+            <Card className="p-4">
+                <p className="text-sm text-gray-600 mb-4">
+                    Click a day to add time, or click an entry to edit. Allocated projects are listed first; employees may also log time to any active project.
+                </p>
+                <TimeEntryWeekCalendar
+                    weekData={weekData}
+                    dailyForecastDays={dailyForecast?.days}
+                    projects={selectableProjects}
+                    isTimesheetLocked={isTimesheetLocked}
+                    onAddEntry={addEntry}
+                    onEditEntry={openEditEntry}
+                />
+            </Card>
 
-                        return (
-                            <Card key={day.fullDate} className={`overflow-hidden ${isWeekend ? 'bg-gray-50/50' : ''}`}>
-                                <div className="flex items-center justify-between p-4 border-b bg-gray-50">
-                                    <div>
-                                        <span className="font-medium">{day.day}</span>
-                                        <span className="text-sm text-gray-500 ml-2">{day.date}</span>
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                        {(() => {
-                                            const forecast = dailyForecast?.days?.find(d => d.date === day.fullDate)
-                                            const forecastHours = forecast?.totalForecast ?? 0
-                                            return (
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-sm text-gray-600">Actual: <strong>{dayTotal}h</strong></span>
-                                                    {forecastHours > 0 && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${dayTotal >= forecastHours
-                                                                ? 'bg-green-100 text-green-700'
-                                                                : 'bg-amber-100 text-amber-700'
-                                                                }`}>
-                                                                Forecast: {forecastHours}h
-                                                            </span>
-                                                            <span className="text-xs text-gray-400">
-                                                                ({forecast!.byProject.map(p => `${p.projectName}: ${p.forecastHours}h`).join(', ')})
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )
-                                        })()}
-                                        {!isTimesheetLocked && (
-                                            <Button size="sm" variant="outline" className="gap-1" onClick={() => addEntry(dayIndex)}>
-                                                <Plus className="w-4 h-4" /> Add Entry
-                                            </Button>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {day.entries.length === 0 ? (
-                                    <div className="p-4 text-center text-gray-400 text-sm">
-                                        No entries for this day. Click "Add Entry" to log time.
-                                    </div>
-                                ) : (
-                                    <div className="divide-y">
-                                        {day.entries.map(entry => {
-                                            const canSave =
-                                                !!timeCodeId &&
-                                                !!entry.projectCode &&
-                                                entry.hours > 0 &&
-                                                !!getProjectId(entry.projectCode)
-                                            const isSaving = savingEntryId === entry.tempId
-                                            const isSubmittedEntry =
-                                                entry.status === 'Submitted' || entry.status === 'PM_Approved'
-                                            const isLocked =
-                                                isSubmittedEntry ||
-                                                (!!entry.serverEntryId && !entry.isDirty && !entry.isEditing)
-
-                                            return (
-                                            <div key={entry.tempId} className="p-4 flex flex-col lg:flex-row lg:items-center gap-3">
-                                                <Select
-                                                    value={entry.projectCode}
-                                                    disabled={isLocked}
-                                                    onValueChange={(val) => updateEntry(dayIndex, entry.tempId, 'projectCode', val)}
-                                                >
-                                                    <SelectTrigger className="h-9 w-full lg:w-[200px] shrink-0">
-                                                        <SelectValue placeholder="Select code" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectGroup>
-                                                            <SelectLabel>Projects</SelectLabel>
-                                                            {allocatedProjects.length === 0 ? (
-                                                                <SelectItem value="__none__" disabled>
-                                                                    No allocated projects this week
-                                                                </SelectItem>
-                                                            ) : (
-                                                                allocatedProjects.map((p) => (
-                                                                    <SelectItem key={p.code} value={p.code}>
-                                                                        {p.name}
-                                                                    </SelectItem>
-                                                                ))
-                                                            )}
-                                                        </SelectGroup>
-                                                        <SelectGroup>
-                                                            <SelectLabel>Leaves</SelectLabel>
-                                                            {leaveTypes.map(l => <SelectItem key={l.code} value={l.code}>{l.name}</SelectItem>)}
-                                                        </SelectGroup>
-                                                        <SelectGroup>
-                                                            <SelectLabel>Other</SelectLabel>
-                                                            {otherCodes.map(o => <SelectItem key={o.code} value={o.code}>{o.name}</SelectItem>)}
-                                                        </SelectGroup>
-                                                    </SelectContent>
-                                                </Select>
-
-                                                <Input
-                                                    type="number"
-                                                    className="h-9 w-full lg:w-24 shrink-0"
-                                                    min="0"
-                                                    max="24"
-                                                    step="0.5"
-                                                    placeholder="Hours"
-                                                    disabled={isLocked}
-                                                    value={entry.hours || ''}
-                                                    onChange={(e) => updateEntry(dayIndex, entry.tempId, 'hours', parseFloat(e.target.value) || 0)}
-                                                />
-
-                                                <Input
-                                                    className="h-9 flex-1 min-w-0"
-                                                    placeholder="Comments (optional)"
-                                                    disabled={isLocked}
-                                                    value={entry.comments}
-                                                    onChange={(e) => updateEntry(dayIndex, entry.tempId, 'comments', e.target.value)}
-                                                />
-
-                                                <div className="flex items-center gap-2 shrink-0 lg:ml-auto">
-                                                    {isLocked && (
-                                                        <Badge
-                                                            variant={
-                                                                entry.status === 'Submitted'
-                                                                    ? 'info'
-                                                                    : entry.status === 'PM_Approved'
-                                                                      ? 'success'
-                                                                      : 'success'
-                                                            }
-                                                            className="text-xs"
-                                                        >
-                                                            {entry.status === 'Submitted'
-                                                                ? 'Submitted'
-                                                                : entry.status === 'PM_Approved'
-                                                                  ? 'Approved'
-                                                                  : 'Saved'}
-                                                        </Badge>
-                                                    )}
-                                                    {isLocked && !isSubmittedEntry ? (
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            className="gap-1.5"
-                                                            disabled={isSaving || loading}
-                                                            onClick={() => startEditingEntry(dayIndex, entry.tempId)}
-                                                        >
-                                                            <Pencil className="w-4 h-4" />
-                                                            Edit
-                                                        </Button>
-                                                    ) : isSubmittedEntry ? null : (
-                                                        <>
-                                                            {entry.serverEntryId && entry.isEditing && !entry.isDirty && (
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="ghost"
-                                                                    className="text-gray-600"
-                                                                    disabled={isSaving || loading}
-                                                                    onClick={() => cancelEditingEntry(dayIndex, entry.tempId)}
-                                                                >
-                                                                    Cancel
-                                                                </Button>
-                                                            )}
-                                                            <Button
-                                                                size="sm"
-                                                                variant={entry.isDirty ? 'default' : 'outline'}
-                                                                className="gap-1.5"
-                                                                disabled={!canSave || isSaving || loading}
-                                                                onClick={() => void saveEntry(dayIndex, entry.tempId)}
-                                                            >
-                                                                {isSaving ? (
-                                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                                ) : (
-                                                                    <Save className="w-4 h-4" />
-                                                                )}
-                                                                Save
-                                                            </Button>
-                                                        </>
-                                                    )}
-                                                    {!isSubmittedEntry && (
-                                                        <Button
-                                                            size="icon"
-                                                            variant="ghost"
-                                                            className="text-red-500 hover:text-red-600 hover:bg-red-50 shrink-0"
-                                                            disabled={isSaving}
-                                                            onClick={() => removeEntry(dayIndex, entry.tempId)}
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </Card>
-                        )
-                    })}
-            </div>
+            {entryDialog && dialogEntry && (
+                <TimeEntryEntryDialog
+                    open={!!entryDialog}
+                    dayLabel={weekData[entryDialog.dayIndex]?.day ?? ""}
+                    dayDate={weekData[entryDialog.dayIndex]?.date ?? ""}
+                    entry={dialogEntry}
+                    projects={selectableProjects}
+                    leaveTypes={leaveTypes}
+                    otherCodes={otherCodes}
+                    isLocked={
+                        dialogEntry.status === "Submitted" ||
+                        dialogEntry.status === "PM_Approved" ||
+                        isTimesheetLocked
+                    }
+                    isSaving={savingEntryId === entryDialog.tempId}
+                    canSave={
+                        !!timeCodeId &&
+                        !!dialogEntry.projectCode &&
+                        dialogEntry.hours > 0 &&
+                        !!getProjectId(dialogEntry.projectCode)
+                    }
+                    onClose={closeEntryDialog}
+                    onChange={updateDialogEntry}
+                    onSave={() => void saveDialogEntry()}
+                    onDelete={
+                        dialogEntry.serverEntryId
+                            ? () => void deleteDialogEntry()
+                            : undefined
+                    }
+                />
+            )}
 
             {(hasUnsavedChanges || totalHours > 0 || isTimesheetLocked) && (
                 <div className="sticky bottom-0 z-10 -mx-4 px-4 py-3 bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">

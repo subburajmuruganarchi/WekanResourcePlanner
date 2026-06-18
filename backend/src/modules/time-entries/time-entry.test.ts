@@ -140,20 +140,19 @@ describe('TimeEntryService - Integration', () => {
         expect(saved?.status).toBe(TimeEntryStatus.DRAFT);
     });
 
-    it('should fail when logging time for unallocated project (by date)', async () => {
-        // Allocation is for 2026. Try 2025.
+    it('should allow time entry when employee is not allocated but project is active', async () => {
         const request: CreateTimeEntryRequest = {
             employeeId: employeeId.toString(),
             projectId: projectId.toString(),
             timeCodeId: timeCodeId.toString(),
-            date: '2025-01-15', // Outside allocated dates
-            hours: 8,
-            comments: 'Future work'
+            date: '2025-01-15',
+            hours: 4,
+            comments: 'Ad-hoc support',
         };
 
-        await expect(timeEntryService.createTimeEntry(request))
-            .rejects
-            .toThrow(/Employee is not allocated/);
+        const result = await timeEntryService.createTimeEntry(request);
+        expect(result.hours).toBe(4);
+        expect(result.status).toBe(TimeEntryStatus.DRAFT);
     });
 
     it('should enforce weekly hour cap of 40h', async () => {
