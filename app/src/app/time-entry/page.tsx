@@ -473,6 +473,7 @@ export function TimeEntry() {
             )
             setEntryDialog({ dayIndex, tempId })
         },
+        // [weekDates]
         [weekDates]
     )
 
