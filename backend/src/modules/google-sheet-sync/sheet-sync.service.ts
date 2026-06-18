@@ -32,6 +32,7 @@ import {
     waitForSheetPrerequisites,
     markBatchSheetCompleted,
     ensureSyncBatch,
+    cascadeBatchSheetFailure,
     type SupportedSheet,
 } from './sync-batch-coordinator';
 import { buildBatchSheetStatus } from './sheet-sync.status';
@@ -39,7 +40,10 @@ import { buildBatchSheetStatus } from './sheet-sync.status';
 export type { SupportedSheet };
 
 const SHEET_ORDER: SupportedSheet[] = ['Resource', 'Project', 'Project_Allocation'];
-const APPS_SCRIPT_SYNC_TIMEOUT_MS = 300_000;
+/** Only wait this long for GAS web app to accept the kickoff request. */
+const APPS_SCRIPT_KICKOFF_TIMEOUT_MS = 30_000;
+/** Background job waits for all sheet webhooks (not limited by GAS runtime). */
+export const FULL_SYNC_BATCH_TIMEOUT_MS = 1_200_000;
 
 const SHEET_IMPORT_LOG: Record<
     SupportedSheet,
@@ -204,8 +208,9 @@ export const sheetSyncService = {
                     syncBatchId,
                     sheet,
                     mode: acquireMode,
+                    cached: acquireMode === 'cached',
                 });
-                return syncResponseFromRun(syncRun, requestId);
+                return { ...syncResponseFromRun(syncRun, requestId), cached: acquireMode === 'cached' };
             }
             if (syncRun.status === 'FAILED') {
                 const reason =
@@ -287,9 +292,11 @@ export const sheetSyncService = {
             }
 
             structuredLogger.info(SHEET_IMPORT_LOG[sheet].success, {
+                event: 'SHEET_SYNC_COMPLETED',
                 requestId,
                 syncBatchId,
                 sheet,
+                status: 'SUCCESS',
                 rowsReceived: received,
                 rowsProcessed: response.rowsProcessed,
                 durationMs,
@@ -300,6 +307,7 @@ export const sheetSyncService = {
             const { message } = await persistSyncRunFailure(syncRun._id, err);
             if (syncBatchId) {
                 await markBatchSheetFailed(syncBatchId, sheet, message);
+                await cascadeBatchSheetFailure(syncBatchId, sheet, message);
                 await SyncBatch.updateOne(
                     { batchId: syncBatchId },
                     {
@@ -312,8 +320,15 @@ export const sheetSyncService = {
                 );
             }
             structuredLogger.error('SYNC_FAILED', {
+                event:
+                    sheet === 'Resource'
+                        ? 'RESOURCE_IMPORT_FAILED'
+                        : sheet === 'Project'
+                          ? 'PROJECT_IMPORT_FAILED'
+                          : 'ALLOCATION_IMPORT_FAILED',
                 requestId,
                 syncBatchId,
+                syncId,
                 sheet,
                 error: message,
                 stack: err instanceof Error ? err.stack : undefined,
@@ -390,25 +405,36 @@ export const sheetSyncService = {
         ): 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' =>
             buildBatchSheetStatus(batch.sheets)[name];
 
+        const sheets = {
+            Resource: sheetState('Resource'),
+            Project: sheetState('Project'),
+            Project_Allocation: sheetState('Project_Allocation'),
+        };
+
+        const anyFailed = Object.values(sheets).some((s) => s === 'FAILED');
+        const allSuccess = Object.values(sheets).every((s) => s === 'SUCCESS');
+        const derivedStatus =
+            batch.status === 'FAILED' || anyFailed
+                ? 'FAILED'
+                : allSuccess
+                  ? 'SUCCESS'
+                  : batch.status;
+
         const durationMs = batch.completedAt
             ? batch.completedAt.getTime() - batch.startedAt.getTime()
             : Date.now() - batch.startedAt.getTime();
 
         return {
-            status: batch.status,
+            status: derivedStatus,
             syncId: batch.batchId,
             syncBatchId: batch.batchId,
             requestId: batch.requestId,
             currentSheet: batch.currentSheet,
             progress: batch.progress,
-            sheets: {
-                Resource: sheetState('Resource'),
-                Project: sheetState('Project'),
-                Project_Allocation: sheetState('Project_Allocation'),
-            },
+            sheets,
             summary: batch.summary,
             errors: batch.failureMessages ?? [],
-            syncCompleted: batch.status === 'SUCCESS' || batch.status === 'FAILED',
+            syncCompleted: derivedStatus === 'SUCCESS' || derivedStatus === 'FAILED',
             durationMs,
             timestamp: (batch.completedAt ?? batch.startedAt).toISOString(),
         };
@@ -451,8 +477,8 @@ async function executeFullSyncJob(batchId: string, requestId: string): Promise<v
     try {
         await SyncBatch.updateOne({ batchId }, { $set: { status: 'RUNNING' } });
 
-        const appsScriptResponse = await triggerAppsScriptFullSync(requestId, batchId);
-        await waitForBatchSheetRuns(batchId, requestId);
+        kickoffAppsScriptFullSync(requestId, batchId);
+        await waitForBatchSheetRuns(batchId, requestId, FULL_SYNC_BATCH_TIMEOUT_MS);
         const summary = await buildBatchSummary(batchId);
         assertFullSyncSummary(summary);
 
@@ -470,6 +496,17 @@ async function executeFullSyncJob(batchId: string, requestId: string): Promise<v
             }
         );
 
+        structuredLogger.info('FULL SYNC COMPLETED', {
+            event: 'FULL_SYNC_COMPLETED',
+            requestId,
+            syncBatchId: batchId,
+            status: 'SUCCESS',
+            durationMs,
+            resourceCount: summary.resource.processed,
+            projectCount: summary.project.processed,
+            allocationCount: summary.allocation.processed,
+        });
+
         structuredLogger.info('FULL SYNC SUCCESS', {
             requestId,
             syncBatchId: batchId,
@@ -477,7 +514,6 @@ async function executeFullSyncJob(batchId: string, requestId: string): Promise<v
             resource: summary.resource.processed,
             project: summary.project.processed,
             allocation: summary.allocation.processed,
-            appsScriptResponse,
         });
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -509,55 +545,55 @@ async function executeFullSyncJob(batchId: string, requestId: string): Promise<v
     }
 }
 
-async function triggerAppsScriptFullSync(requestId: string, batchId: string): Promise<unknown> {
+/**
+ * Fire-and-forget Apps Script kickoff — do NOT block the batch job on GAS runtime.
+ * Sheet imports run via webhooks; the background job polls SyncRun completion.
+ */
+function kickoffAppsScriptFullSync(requestId: string, batchId: string): void {
     const url = env.GOOGLE_APPS_SCRIPT_WEB_APP_URL;
     if (!url) {
-        throw new AppError(
-            'Google Apps Script web app URL is not configured (GOOGLE_APPS_SCRIPT_WEB_APP_URL).',
-            503
-        );
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), APPS_SCRIPT_SYNC_TIMEOUT_MS);
-
-    try {
-        structuredLogger.info('Calling Apps Script full sync', { requestId, syncBatchId: batchId });
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Request-Id': requestId,
-                'X-Sync-Batch-Id': batchId,
-            },
-            body: JSON.stringify({ batchId, syncBatchId: batchId }),
-            signal: controller.signal,
-            redirect: 'follow',
+        structuredLogger.error('GOOGLE_APPS_SCRIPT_WEB_APP_URL not configured', {
+            requestId,
+            syncBatchId: batchId,
         });
-
-        const text = await response.text();
-        if (!response.ok) {
-            throw new AppError(
-                `Google Apps Script sync failed (${response.status}): ${text.slice(0, 500)}`,
-                502
-            );
-        }
-
-        try {
-            return JSON.parse(text) as unknown;
-        } catch {
-            return { raw: text };
-        }
-    } catch (err) {
-        if (err instanceof AppError) throw err;
-        if (err instanceof Error && err.name === 'AbortError') {
-            throw new AppError('Google Apps Script sync timed out after 5 minutes.', 504);
-        }
-        const message = err instanceof Error ? err.message : String(err);
-        throw new AppError(`Failed to trigger Google Apps Script sync: ${message}`, 502);
-    } finally {
-        clearTimeout(timeout);
+        return;
     }
+
+    structuredLogger.info('KICKOFF APPS SCRIPT FULL SYNC', { requestId, syncBatchId: batchId });
+
+    void (async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), APPS_SCRIPT_KICKOFF_TIMEOUT_MS);
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Request-Id': requestId,
+                    'X-Sync-Batch-Id': batchId,
+                },
+                body: JSON.stringify({ batchId, syncBatchId: batchId }),
+                signal: controller.signal,
+                redirect: 'follow',
+            });
+            const text = await response.text();
+            structuredLogger.info('APPS SCRIPT KICKOFF RESPONSE', {
+                requestId,
+                syncBatchId: batchId,
+                httpStatus: response.status,
+                bodyPreview: text.slice(0, 300),
+            });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            structuredLogger.warn('APPS SCRIPT KICKOFF FAILED (webhooks may still arrive)', {
+                requestId,
+                syncBatchId: batchId,
+                error: message,
+            });
+        } finally {
+            clearTimeout(timeout);
+        }
+    })();
 }
 
 async function buildBatchSummary(batchId: string): Promise<FullSyncSummary> {

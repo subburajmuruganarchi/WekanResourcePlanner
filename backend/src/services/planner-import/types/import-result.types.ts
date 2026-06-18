@@ -62,6 +62,8 @@ export interface GoogleSheetSyncResponse {
     syncId?: string;
     requestId?: string;
     durationMs?: number;
+    /** True when returning a prior SUCCESS SyncRun without re-importing. */
+    cached?: boolean;
 }
 
 export interface SheetSyncSummary {

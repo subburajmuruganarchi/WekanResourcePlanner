@@ -16,7 +16,8 @@ import {
     upsertJobRole,
     upsertSkill,
 } from './planner-import.utils';
-import { ImportWriteOptions, mongooseSessionOpts, failOrSkipRow } from './types/import-write.options';
+import { ImportWriteOptions, mongooseSessionOpts, failOrSkipRow, IMPORT_BULK_CHUNK_SIZE } from './types/import-write.options';
+import { structuredLogger } from '../../common/logger';
 
 const PROTECTED_EMAILS = ['admin@r360.com', 'pm@r360.com'];
 
@@ -120,6 +121,231 @@ export async function importResourceRows(
     ctx: ImportContext,
     writeOpts?: ImportWriteOptions
 ): Promise<ResourceImportOutput> {
+    if (writeOpts?.atomic) {
+        return importResourceRowsBulk(rows, ctx, writeOpts);
+    }
+    return importResourceRowsSequential(rows, ctx, writeOpts);
+}
+
+/** Upsert job roles and skills outside MongoDB transaction (reference data). */
+export async function prepareResourceImportReferences(
+    rows: ResourceImportRow[],
+    ctx: ImportContext
+): Promise<void> {
+    const refOpts: ImportWriteOptions = { atomic: true };
+    for (const row of rows) {
+        const email = row.email.trim().toLowerCase();
+        if (!email.includes('@') || isDummyResource(row.name, row.employeeCode)) continue;
+
+        if (!ctx.jobRoleIds.has(row.jobRole)) {
+            const jobRoleId = await upsertJobRole(row.jobRole, refOpts);
+            ctx.jobRoleIds.set(row.jobRole, jobRoleId);
+        }
+        for (const sk of [...new Set(row.skills)]) {
+            if (!ctx.skillCache.has(sk)) {
+                const skillId = await upsertSkill(sk, row.resourceType || 'General', refOpts);
+                ctx.skillCache.set(sk, skillId);
+            }
+        }
+    }
+}
+
+async function importResourceRowsBulk(
+    rows: ResourceImportRow[],
+    ctx: ImportContext,
+    writeOpts: ImportWriteOptions
+): Promise<ResourceImportOutput> {
+    const skippedRows: SkippedRow[] = [];
+    const sessionOpts = mongooseSessionOpts(writeOpts);
+    const bulkStartedAt = Date.now();
+
+    structuredLogger.info('RESOURCE IMPORT START', {
+        event: 'START_RESOURCE_IMPORT',
+        rowsReceived: rows.length,
+        syncBatchId: ctx.syncBatchId,
+        syncId: ctx.syncId,
+    });
+
+    type PreparedRow = {
+        row: ResourceImportRow;
+        identifier: string;
+        first: string;
+        last: string;
+        jobRoleId: Types.ObjectId;
+        accessRoleId: Types.ObjectId;
+        isAvailable: boolean;
+    };
+
+    const preparedByEmail = new Map<string, PreparedRow>();
+
+    for (const row of rows) {
+        const email = row.email.trim().toLowerCase();
+        const identifier = email || row.employeeCode || row.name || 'unknown';
+        if (!email.includes('@')) {
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'Invalid email');
+            continue;
+        }
+        if (isDummyResource(row.name, row.employeeCode)) {
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'Dummy resource row');
+            continue;
+        }
+
+        const { first, last } = parseName(row.name);
+        const jobRoleId = ctx.jobRoleIds.get(row.jobRole);
+        if (!jobRoleId) {
+            throw new Error(`Job role not prepared: ${row.jobRole}`);
+        }
+
+        preparedByEmail.set(email, {
+            row: { ...row, email },
+            identifier,
+            first,
+            last,
+            jobRoleId,
+            accessRoleId: ctx.accessByEmail.get(email) ?? ctx.employeeRoleId,
+            isAvailable: !row.availability.toLowerCase().includes('not'),
+        });
+    }
+
+    const prepared = [...preparedByEmail.values()];
+
+    const employeeOps: Parameters<typeof Employee.bulkWrite>[0] = prepared.map((p) => {
+        const setFields: Record<string, unknown> = {
+            first_name: p.first,
+            last_name: p.last,
+            email: p.row.email.toLowerCase(),
+            employee_code: p.row.employeeCode || undefined,
+            role_id: p.accessRoleId,
+            job_role_id: p.jobRoleId,
+            position: p.row.jobRole,
+            department: departmentLabel(p.row.resourceType, p.row.location),
+            status: p.isAvailable ? 'Active' : 'Inactive',
+            is_active: p.isAvailable,
+            max_allocation_percent: 100,
+        };
+        if (ctx.syncId) setFields.last_sync_id = ctx.syncId;
+
+        return {
+            updateOne: {
+                filter: { email: p.row.email.toLowerCase() },
+                update: {
+                    $set: setFields,
+                    $setOnInsert: { password: ctx.passwordHash },
+                },
+                upsert: true,
+            },
+        };
+    });
+
+    structuredLogger.info('RESOURCE BULK WRITE START', {
+        event: 'RESOURCE_BULK_WRITE_START',
+        syncBatchId: ctx.syncBatchId,
+        syncId: ctx.syncId,
+        employeeOps: employeeOps.length,
+    });
+
+    const employeeWriteStart = Date.now();
+    let employeeWriteCount = 0;
+    for (let i = 0; i < employeeOps.length; i += IMPORT_BULK_CHUNK_SIZE) {
+        const chunk = employeeOps.slice(i, i + IMPORT_BULK_CHUNK_SIZE);
+        if (chunk.length > 0) {
+            const result = await Employee.bulkWrite(chunk, { ordered: true, ...sessionOpts });
+            employeeWriteCount += (result.upsertedCount ?? 0) + (result.modifiedCount ?? 0);
+        }
+    }
+
+    if (employeeWriteCount !== prepared.length) {
+        throw new Error(
+            `Resource employee bulkWrite mismatch: expected ${prepared.length} writes, got ${employeeWriteCount}`
+        );
+    }
+
+    const emails = prepared.map((p) => p.row.email.toLowerCase());
+    let employeeQuery = Employee.find({ email: { $in: emails } }).select('_id email employee_code');
+    if (writeOpts.session) {
+        employeeQuery = employeeQuery.session(writeOpts.session);
+    }
+    const employeeDocs = await employeeQuery.lean();
+
+    const employeeIdByEmail = new Map(
+        employeeDocs.map((e) => [String(e.email).toLowerCase(), e._id as Types.ObjectId])
+    );
+
+    for (const p of prepared) {
+        const id = employeeIdByEmail.get(p.row.email.toLowerCase());
+        if (!id) {
+            throw new Error(`${p.identifier}: employee upsert did not persist`);
+        }
+        ctx.employeeByEmail.set(p.row.email.toLowerCase(), id);
+        if (p.row.employeeCode) {
+            ctx.employeeByCode.set(p.row.employeeCode.toUpperCase(), id);
+        }
+    }
+
+    const skillOps: Parameters<typeof EmployeeSkill.bulkWrite>[0] = [];
+    for (const p of prepared) {
+        const employeeId = employeeIdByEmail.get(p.row.email.toLowerCase())!;
+        for (let i = 0; i < p.row.skills.length; i++) {
+            const sk = p.row.skills[i];
+            const skillId = ctx.skillCache.get(sk);
+            if (!skillId) continue;
+            if (i === 0) ctx.employeePrimarySkill.set(employeeId.toString(), skillId);
+            skillOps.push({
+                updateOne: {
+                    filter: { employee_id: employeeId, skill_id: skillId },
+                    update: {
+                        $set: {
+                            employee_id: employeeId,
+                            skill_id: skillId,
+                            skill_level: inferSkillLevel(p.row.jobRole, i),
+                            experience_years: inferExperienceYears(p.row.jobRole, i),
+                            is_primary: i === 0,
+                        },
+                    },
+                    upsert: true,
+                },
+            });
+        }
+    }
+
+    for (let i = 0; i < skillOps.length; i += IMPORT_BULK_CHUNK_SIZE) {
+        const chunk = skillOps.slice(i, i + IMPORT_BULK_CHUNK_SIZE);
+        if (chunk.length > 0) {
+            await EmployeeSkill.bulkWrite(chunk, { ordered: true, ...sessionOpts });
+        }
+    }
+
+    structuredLogger.info('RESOURCE BULK WRITE COMPLETE', {
+        event: 'RESOURCE_BULK_WRITE_COMPLETE',
+        syncBatchId: ctx.syncBatchId,
+        syncId: ctx.syncId,
+        employeesUpserted: prepared.length,
+        skillOps: skillOps.length,
+        durationMs: Date.now() - employeeWriteStart,
+        totalDurationMs: Date.now() - bulkStartedAt,
+    });
+
+    if (ctx.syncId && !writeOpts?.deferStaleCleanup) {
+        await deactivateStaleEmployees(ctx.syncId, writeOpts);
+    }
+
+    return {
+        rowsReceived: rows.length,
+        rowsProcessed: prepared.length,
+        rowsSkipped: skippedRows.length,
+        skippedRows,
+        errors: [],
+        employeesUpserted: prepared.length,
+        jobRoles: ctx.jobRoleIds.size,
+        skills: ctx.skillCache.size,
+    };
+}
+
+async function importResourceRowsSequential(
+    rows: ResourceImportRow[],
+    ctx: ImportContext,
+    writeOpts?: ImportWriteOptions
+): Promise<ResourceImportOutput> {
     const skippedRows: SkippedRow[] = [];
     const errors: string[] = [];
     let employeesUpserted = 0;
@@ -219,7 +445,7 @@ export async function importResourceRows(
         }
     }
 
-    if (ctx.syncId) {
+    if (ctx.syncId && !writeOpts?.deferStaleCleanup) {
         await deactivateStaleEmployees(ctx.syncId, writeOpts);
     }
 
@@ -235,7 +461,7 @@ export async function importResourceRows(
     };
 }
 
-async function deactivateStaleEmployees(
+export async function deactivateStaleEmployees(
     syncId: string,
     writeOpts?: ImportWriteOptions
 ): Promise<void> {

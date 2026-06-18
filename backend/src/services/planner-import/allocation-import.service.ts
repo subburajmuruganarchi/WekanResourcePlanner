@@ -13,17 +13,338 @@ import {
     upsertJobRole,
     upsertSkill,
 } from './planner-import.utils';
-import { ImportWriteOptions, mongooseSessionOpts, failOrSkipRow } from './types/import-write.options';
+import {
+    ImportWriteOptions,
+    mongooseSessionOpts,
+    failOrSkipRow,
+    IMPORT_BULK_CHUNK_SIZE,
+} from './types/import-write.options';
 import { CreatedByRole, WeeklyAllocationSource, WeeklyAllocationStatus } from '../../common/types/enums';
-
-const WEEKLY_BULK_FLUSH_SIZE = 500;
+import { structuredLogger } from '../../common/logger';
 
 export interface AllocationImportOutput extends SheetImportResult {
     allocationsUpserted: number;
     weeklyEntriesUpserted: number;
 }
 
+type PreparedAllocation = {
+    identifier: string;
+    projectId: Types.ObjectId;
+    employeeId: Types.ObjectId;
+    jobRoleId: Types.ObjectId;
+    skillId?: Types.ObjectId;
+    percent: number;
+    startDate: Date;
+    endDate: Date;
+    isActive: boolean;
+    allocationReason: string;
+    weeklyHours: AllocationImportRow['weeklyHours'];
+};
+
+function allocationKey(projectId: Types.ObjectId, employeeId: Types.ObjectId): string {
+    return `${projectId.toString()}:${employeeId.toString()}`;
+}
+
+async function bulkWriteChunked<T extends Parameters<typeof ProjectAllocation.bulkWrite>[0]>(
+    model: { bulkWrite: typeof ProjectAllocation.bulkWrite },
+    ops: T,
+    sessionOpts: ReturnType<typeof mongooseSessionOpts>,
+    chunkSize = IMPORT_BULK_CHUNK_SIZE
+): Promise<{ upserted: number; modified: number }> {
+    let upserted = 0;
+    let modified = 0;
+    for (let i = 0; i < ops.length; i += chunkSize) {
+        const chunk = ops.slice(i, i + chunkSize);
+        if (chunk.length === 0) continue;
+        const result = await model.bulkWrite(chunk, { ordered: true, ...sessionOpts });
+        upserted += result.upsertedCount ?? 0;
+        modified += result.modifiedCount ?? 0;
+    }
+    return { upserted, modified };
+}
+
 export async function importAllocationRows(
+    rows: AllocationImportRow[],
+    ctx: ImportContext,
+    writeOpts?: ImportWriteOptions
+): Promise<AllocationImportOutput> {
+    if (writeOpts?.atomic) {
+        return importAllocationRowsBulk(rows, ctx, writeOpts);
+    }
+    return importAllocationRowsSequential(rows, ctx, writeOpts);
+}
+
+/** Upsert job roles outside MongoDB transaction. */
+export async function prepareAllocationImportReferences(
+    rows: AllocationImportRow[],
+    ctx: ImportContext
+): Promise<void> {
+    const refOpts: ImportWriteOptions = { atomic: true };
+    if (![...ctx.skillCache.values()].find((id): id is Types.ObjectId => !!id)) {
+        const general = await upsertSkill('General', 'General', refOpts);
+        if (general) ctx.skillCache.set('General', general);
+    }
+    for (const row of rows) {
+        const roleName = row.jobRole || 'Consultant';
+        if (!ctx.jobRoleIds.has(roleName)) {
+            ctx.jobRoleIds.set(roleName, await upsertJobRole(roleName, refOpts));
+        }
+    }
+}
+
+async function importAllocationRowsBulk(
+    rows: AllocationImportRow[],
+    ctx: ImportContext,
+    writeOpts: ImportWriteOptions
+): Promise<AllocationImportOutput> {
+    const skippedRows: SkippedRow[] = [];
+    const sessionOpts = mongooseSessionOpts(writeOpts);
+    const startedAt = Date.now();
+
+    structuredLogger.info('ALLOCATION IMPORT START', {
+        rowsReceived: rows.length,
+        syncBatchId: ctx.syncBatchId,
+        syncId: ctx.syncId,
+        atomic: true,
+    });
+
+    let defaultSkillId = [...ctx.skillCache.values()].find((id): id is Types.ObjectId => !!id);
+
+    const prepared: PreparedAllocation[] = [];
+
+    for (const row of rows) {
+        const identifier = `${row.pid}:${row.employeeCode}` || row.projectName;
+
+        if (!row.projectName) {
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'Missing project name');
+            continue;
+        }
+        if (isDummyResource(row.resourceName, row.employeeCode)) {
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'Dummy resource row');
+            continue;
+        }
+
+        const code = ctx.projectByPid.get(row.pid) || projectCodeFromRow(row.pid, row.projectName);
+        const projectId = ctx.projectByCode.get(code);
+        if (!projectId) {
+            failOrSkipRow(writeOpts, skippedRows, identifier, `Project not found for code ${code}`);
+            continue;
+        }
+
+        let employeeId = ctx.employeeByCode.get(row.employeeCode);
+        if (!employeeId) {
+            const emailGuess = [...ctx.employeeByEmail.keys()].find((e) =>
+                e.startsWith(row.resourceName.split(' ')[0].toLowerCase())
+            );
+            if (emailGuess) employeeId = ctx.employeeByEmail.get(emailGuess);
+        }
+        if (!employeeId) {
+            failOrSkipRow(
+                writeOpts,
+                skippedRows,
+                identifier,
+                `Employee not found for EID ${row.employeeCode}`
+            );
+            continue;
+        }
+
+        if (row.weeklyHours.length === 0) {
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'No weekly hours');
+            continue;
+        }
+
+        const jobRoleId = ctx.jobRoleIds.get(row.jobRole || 'Consultant');
+        if (!jobRoleId) {
+            throw new Error(`Job role not prepared: ${row.jobRole || 'Consultant'}`);
+        }
+
+        const latest = row.weeklyHours[row.weeklyHours.length - 1];
+        const percent = Math.min(100, Math.round((latest.hours / HOURS_PER_WEEK) * 100));
+        const startDate = row.weeklyHours[0].weekStart;
+        const endDate = row.weeklyHours[row.weeklyHours.length - 1].weekStart;
+        const isActive =
+            !row.activeFlag.toLowerCase().includes('not') &&
+            !row.projectStatus.toLowerCase().includes('completed') &&
+            percent > 0;
+        const skillId = ctx.employeePrimarySkill.get(employeeId.toString()) || defaultSkillId;
+
+        prepared.push({
+            identifier,
+            projectId,
+            employeeId,
+            jobRoleId,
+            skillId,
+            percent,
+            startDate,
+            endDate,
+            isActive,
+            allocationReason: `${SEED_TAG} from Project_Allocation (${latest.hours}h/wk, ${row.resourceType || row.projectType})`,
+            weeklyHours: row.weeklyHours,
+        });
+    }
+
+    const allocationOps: Parameters<typeof ProjectAllocation.bulkWrite>[0] = prepared.map((p) => ({
+        updateOne: {
+            filter: { project_id: p.projectId, employee_id: p.employeeId },
+            update: {
+                $set: {
+                    project_id: p.projectId,
+                    employee_id: p.employeeId,
+                    role_id: p.jobRoleId,
+                    ...(p.skillId ? { skill_id: p.skillId } : {}),
+                    start_date: p.startDate,
+                    end_date: p.endDate,
+                    allocation_percent: p.percent,
+                    is_active: p.isActive,
+                    ...(ctx.syncBatchId ? { last_sync_batch_id: ctx.syncBatchId } : {}),
+                    allocation_reason: p.allocationReason,
+                    created_by_role: CreatedByRole.ADMIN,
+                },
+            },
+            upsert: true,
+        },
+    }));
+
+    structuredLogger.info('ALLOCATION BULK WRITE START', {
+        syncBatchId: ctx.syncBatchId,
+        allocationOps: allocationOps.length,
+    });
+
+    const allocWriteStart = Date.now();
+    const allocWriteResult = await bulkWriteChunked(
+        ProjectAllocation,
+        allocationOps,
+        sessionOpts
+    );
+
+    if (allocWriteResult.upserted + allocWriteResult.modified !== prepared.length) {
+        throw new Error(
+            `Allocation bulkWrite mismatch: expected ${prepared.length}, got ${allocWriteResult.upserted + allocWriteResult.modified}`
+        );
+    }
+
+    let allocQuery = ProjectAllocation.find({
+        $or: prepared.map((p) => ({
+            project_id: p.projectId,
+            employee_id: p.employeeId,
+        })),
+    }).select('_id project_id employee_id');
+    if (writeOpts.session) {
+        allocQuery = allocQuery.session(writeOpts.session);
+    }
+    const allocationDocs = await allocQuery.lean();
+
+    const allocationIdByKey = new Map(
+        allocationDocs.map((a) => [
+            allocationKey(a.project_id as Types.ObjectId, a.employee_id as Types.ObjectId),
+            a._id as Types.ObjectId,
+        ])
+    );
+
+    const weeklyOps: Parameters<typeof WeeklyAllocationEntry.bulkWrite>[0] = [];
+    const roleEffortByKey = new Map<string, Parameters<typeof ProjectRoleEffort.bulkWrite>[0][0]>();
+
+    for (const p of prepared) {
+        const allocId = allocationIdByKey.get(allocationKey(p.projectId, p.employeeId));
+        if (!allocId) {
+            throw new Error(`${p.identifier}: allocation upsert did not persist`);
+        }
+
+        for (const week of p.weeklyHours) {
+            weeklyOps.push({
+                updateOne: {
+                    filter: {
+                        employee_id: p.employeeId,
+                        project_id: p.projectId,
+                        week_start: week.weekStart,
+                    },
+                    update: {
+                        $set: {
+                            allocation_id: allocId,
+                            employee_id: p.employeeId,
+                            project_id: p.projectId,
+                            week_start: week.weekStart,
+                            planned_hours: week.hours,
+                            actual_hours: 0,
+                            forecast_hours: week.hours,
+                            variance_hours: week.hours,
+                            source: WeeklyAllocationSource.PLANNED,
+                            status: WeeklyAllocationStatus.PUBLISHED,
+                        },
+                    },
+                    upsert: true,
+                },
+            });
+        }
+
+        const roleKey = `${p.projectId.toString()}:${p.jobRoleId.toString()}`;
+        if (!roleEffortByKey.has(roleKey)) {
+            roleEffortByKey.set(roleKey, {
+                updateOne: {
+                    filter: { project_id: p.projectId, role_id: p.jobRoleId },
+                    update: {
+                        $set: {
+                            project_id: p.projectId,
+                            role_id: p.jobRoleId,
+                            required_headcount: 1,
+                            required_days: 60,
+                            start_date: p.startDate,
+                            end_date: p.endDate,
+                            hours_per_day: 8,
+                        },
+                    },
+                    upsert: true,
+                },
+            });
+        }
+    }
+
+    const roleEffortOps = [...roleEffortByKey.values()];
+    let weeklyWriteCount = 0;
+
+    if (weeklyOps.length > 0) {
+        const weeklyResult = await bulkWriteChunked(
+            WeeklyAllocationEntry,
+            weeklyOps,
+            sessionOpts
+        );
+        weeklyWriteCount = weeklyResult.upserted + weeklyResult.modified;
+        if (weeklyWriteCount !== weeklyOps.length) {
+            throw new Error(
+                `Weekly allocation bulkWrite mismatch: expected ${weeklyOps.length}, got ${weeklyWriteCount}`
+            );
+        }
+    }
+
+    if (roleEffortOps.length > 0) {
+        await bulkWriteChunked(ProjectRoleEffort, roleEffortOps, sessionOpts);
+    }
+
+    structuredLogger.info('ALLOCATION BULK WRITE COMPLETE', {
+        syncBatchId: ctx.syncBatchId,
+        allocationsUpserted: prepared.length,
+        weeklyOps: weeklyOps.length,
+        roleEffortOps: roleEffortOps.length,
+        durationMs: Date.now() - allocWriteStart,
+        totalDurationMs: Date.now() - startedAt,
+    });
+
+    if (ctx.syncBatchId && !writeOpts?.deferStaleCleanup) {
+        await deactivateStaleAllocations(ctx.syncBatchId, writeOpts);
+    }
+
+    return {
+        rowsReceived: rows.length,
+        rowsProcessed: prepared.length,
+        rowsSkipped: skippedRows.length,
+        skippedRows,
+        errors: [],
+        allocationsUpserted: prepared.length,
+        weeklyEntriesUpserted: weeklyOps.length,
+    };
+}
+
+async function importAllocationRowsSequential(
     rows: AllocationImportRow[],
     ctx: ImportContext,
     writeOpts?: ImportWriteOptions
@@ -34,6 +355,12 @@ export async function importAllocationRows(
     let weeklyEntriesUpserted = 0;
     const sessionOpts = mongooseSessionOpts(writeOpts);
     const weeklyBulkOps: Parameters<typeof WeeklyAllocationEntry.bulkWrite>[0] = [];
+
+    structuredLogger.info('ALLOCATION IMPORT START', {
+        rowsReceived: rows.length,
+        syncBatchId: ctx.syncBatchId,
+        atomic: false,
+    });
 
     const flushWeeklyBulk = async (): Promise<void> => {
         if (weeklyBulkOps.length === 0) return;
@@ -155,7 +482,7 @@ export async function importAllocationRows(
                 });
                 weeklyEntriesUpserted++;
 
-                if (weeklyBulkOps.length >= WEEKLY_BULK_FLUSH_SIZE) {
+                if (weeklyBulkOps.length >= IMPORT_BULK_CHUNK_SIZE) {
                     await flushWeeklyBulk();
                 }
             }
@@ -185,7 +512,7 @@ export async function importAllocationRows(
 
     await flushWeeklyBulk();
 
-    if (ctx.syncBatchId) {
+    if (ctx.syncBatchId && !writeOpts?.deferStaleCleanup) {
         await deactivateStaleAllocations(ctx.syncBatchId, writeOpts);
     }
 
@@ -200,7 +527,7 @@ export async function importAllocationRows(
     };
 }
 
-async function deactivateStaleAllocations(
+export async function deactivateStaleAllocations(
     syncBatchId: string,
     writeOpts?: ImportWriteOptions
 ): Promise<void> {

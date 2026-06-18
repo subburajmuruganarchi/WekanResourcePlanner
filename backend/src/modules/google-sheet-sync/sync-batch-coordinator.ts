@@ -8,7 +8,20 @@ import { SyncRun } from './sync-run.model';
 export type SupportedSheet = 'Resource' | 'Project' | 'Project_Allocation';
 
 const BATCH_WAIT_POLL_MS = 2_000;
-const BATCH_WAIT_TIMEOUT_MS = 120_000;
+/** Wait up to 20 minutes for prerequisite sheets in a full sync batch. */
+const BATCH_WAIT_TIMEOUT_MS = 1_200_000;
+
+const DEPENDENT_SHEETS: Record<SupportedSheet, SupportedSheet[]> = {
+    Resource: ['Project', 'Project_Allocation'],
+    Project: ['Project_Allocation'],
+    Project_Allocation: [],
+};
+
+const SKIP_REASON: Record<SupportedSheet, string> = {
+    Resource: 'Skipped because Resource import failed',
+    Project: 'Skipped because Project import failed',
+    Project_Allocation: 'Skipped because Allocation import failed',
+};
 
 const SHEET_ORDER: SupportedSheet[] = ['Resource', 'Project', 'Project_Allocation'];
 
@@ -100,6 +113,97 @@ export async function markBatchSheetCompleted(
     });
 }
 
+async function findFailedPrerequisite(
+    batchId: string,
+    flags: BatchCompletionFlag[]
+): Promise<{ sheet: SupportedSheet; reason: string } | null> {
+    for (const flag of flags) {
+        const sheet =
+            flag === 'resourceCompleted'
+                ? 'Resource'
+                : flag === 'projectCompleted'
+                  ? 'Project'
+                  : 'Project_Allocation';
+
+        const run = await SyncRun.findOne({ syncBatchId: batchId, sheet }).lean();
+        if (run?.status === 'FAILED') {
+            return {
+                sheet,
+                reason: run.errorMessage ?? run.errorMessages?.[0] ?? `${sheet} import failed`,
+            };
+        }
+    }
+    return null;
+}
+
+/**
+ * When a sheet fails in a batch, mark dependent sheets as FAILED so they never stay RUNNING.
+ */
+export async function cascadeBatchSheetFailure(
+    batchId: string,
+    failedSheet: SupportedSheet,
+    reason: string
+): Promise<void> {
+    const dependents = DEPENDENT_SHEETS[failedSheet];
+    if (dependents.length === 0) return;
+
+    await SyncBatch.updateOne({ batchId }, { $set: { status: 'FAILED' } });
+
+    for (const sheet of dependents) {
+        const skipReason = SKIP_REASON[failedSheet];
+
+        await SyncBatch.updateOne(
+            { batchId, 'sheets.sheet': sheet },
+            {
+                $set: {
+                    'sheets.$.status': 'FAILED',
+                    'sheets.$.errors': [skipReason],
+                },
+            }
+        );
+
+        await SyncRun.findOneAndUpdate(
+            { syncBatchId: batchId, sheet },
+            {
+                $set: {
+                    status: 'FAILED',
+                    completedAt: new Date(),
+                    errorMessage: skipReason,
+                    errorMessages: [skipReason],
+                    rowsProcessed: 0,
+                },
+                $setOnInsert: {
+                    sheet,
+                    syncBatchId: batchId,
+                    startedAt: new Date(),
+                    rowsReceived: 0,
+                    rowsSkipped: 0,
+                },
+            },
+            { upsert: true }
+        );
+
+        await SyncRun.updateMany(
+            { syncBatchId: batchId, sheet, status: 'RUNNING' },
+            {
+                $set: {
+                    status: 'FAILED',
+                    completedAt: new Date(),
+                    errorMessage: skipReason,
+                    errorMessages: [skipReason],
+                },
+            }
+        );
+    }
+
+    structuredLogger.warn('CASCADE_BATCH_SHEET_FAILURE', {
+        syncBatchId: batchId,
+        failedSheet,
+        reason,
+        skippedSheets: dependents,
+    });
+}
+
 async function isBatchFlagComplete(batchId: string, flag: BatchCompletionFlag): Promise<boolean> {
     const batch = await SyncBatch.findOne({ batchId }).select(flag).lean();
     if (batch?.[flag] === true) return true;
@@ -137,16 +241,26 @@ async function waitForBatchFlags(
             );
         }
 
+        const failedPrereq = await findFailedPrerequisite(batchId, flags);
+        if (failedPrereq) {
+            throw new AppError(
+                `${waitingForLabel} dependency failed: ${failedPrereq.sheet} — ${failedPrereq.reason}`,
+                422
+            );
+        }
+
         const results = await Promise.all(flags.map((f) => isBatchFlagComplete(batchId, f)));
         if (results.every(Boolean)) return;
 
         await sleep(BATCH_WAIT_POLL_MS);
     }
 
-    throw new AppError(
-        `Timed out after ${BATCH_WAIT_TIMEOUT_MS / 1000}s waiting for ${waitingForLabel} in batch ${batchId}`,
-        504
-    );
+    const timeoutMessage =
+        waitingForLabel === 'Project'
+            ? 'Project sheet did not complete before Allocation sync timeout'
+            : `Timed out after ${BATCH_WAIT_TIMEOUT_MS / 1000}s waiting for ${waitingForLabel} in batch ${batchId}`;
+
+    throw new AppError(timeoutMessage, 504);
 }
 
 async function assertGlobalAllocationDependencies(): Promise<void> {

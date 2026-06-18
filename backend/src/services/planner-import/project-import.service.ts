@@ -1,4 +1,5 @@
 import { Project } from '../../modules/projects/project.model';
+import { Types } from 'mongoose';
 import { ProjectSkillRequirement } from '../../modules/projects/project-skill-requirement.model';
 import { ProjectRoleEffort } from '../../modules/projects/project-role-effort.model';
 import { ProjectImportRow } from './types/project-row.dto';
@@ -16,13 +17,285 @@ import {
     upsertJobRole,
     upsertSkill,
 } from './planner-import.utils';
-import { ImportWriteOptions, mongooseSessionOpts, failOrSkipRow } from './types/import-write.options';
+import { ImportWriteOptions, mongooseSessionOpts, failOrSkipRow, IMPORT_BULK_CHUNK_SIZE } from './types/import-write.options';
+import { structuredLogger } from '../../common/logger';
 
 export interface ProjectImportOutput extends SheetImportResult {
     projectsUpserted: number;
 }
 
 export async function importProjectRows(
+    rows: ProjectImportRow[],
+    ctx: ImportContext,
+    writeOpts?: ImportWriteOptions
+): Promise<ProjectImportOutput> {
+    if (writeOpts?.atomic) {
+        return importProjectRowsBulk(rows, ctx, writeOpts);
+    }
+    return importProjectRowsSequential(rows, ctx, writeOpts);
+}
+
+/** Upsert job roles and skills outside MongoDB transaction. */
+export async function prepareProjectImportReferences(
+    rows: ProjectImportRow[],
+    ctx: ImportContext
+): Promise<void> {
+    const refOpts: ImportWriteOptions = { atomic: true };
+    for (const row of rows) {
+        if (!row.name) continue;
+
+        const staffingRoles: { label: string; count: number }[] = [
+            { label: 'SDE II (Full Stack)', count: row.beRequired || row.feRequired },
+            { label: 'Mobile Developer', count: row.mobileRequired },
+            { label: 'QA Engineer', count: row.qaRequired },
+        ];
+        for (const staffing of staffingRoles) {
+            if (staffing.count <= 0) continue;
+            if (!ctx.jobRoleIds.has(staffing.label)) {
+                ctx.jobRoleIds.set(staffing.label, await upsertJobRole(staffing.label, refOpts));
+            }
+        }
+
+        const requirementRoleName =
+            row.architect ||
+            (row.beRequired > 0 ? 'SDE II (Backend)' : '') ||
+            (row.feRequired > 0 ? 'SDE II (Frontend)' : '') ||
+            (row.mobileRequired > 0 ? 'SDE II (Mobile)' : '') ||
+            (row.qaRequired > 0 ? 'QA Engineer' : '') ||
+            'SDE II (Full Stack)';
+        if (!ctx.jobRoleIds.has(requirementRoleName)) {
+            ctx.jobRoleIds.set(
+                requirementRoleName,
+                await upsertJobRole(requirementRoleName, refOpts)
+            );
+        }
+
+        for (const skillName of parseSkillList(row.tech)) {
+            if (!ctx.skillCache.has(skillName)) {
+                ctx.skillCache.set(
+                    skillName,
+                    await upsertSkill(skillName, 'Project Tech', refOpts)
+                );
+            }
+        }
+    }
+}
+
+async function importProjectRowsBulk(
+    rows: ProjectImportRow[],
+    ctx: ImportContext,
+    writeOpts: ImportWriteOptions
+): Promise<ProjectImportOutput> {
+    const skippedRows: SkippedRow[] = [];
+    const sessionOpts = mongooseSessionOpts(writeOpts);
+    const startedAt = Date.now();
+
+    structuredLogger.info('PROJECT IMPORT START', {
+        rowsReceived: rows.length,
+        syncBatchId: ctx.syncBatchId,
+    });
+
+    type PreparedProject = {
+        row: ProjectImportRow;
+        identifier: string;
+        code: string;
+        status: ProjectStatus;
+        start: Date;
+        end: Date;
+        businessGoal: string;
+    };
+
+    const prepared: PreparedProject[] = [];
+
+    for (const row of rows) {
+        const identifier = row.pid || row.name || 'unknown';
+        if (!row.name) {
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'Missing project name');
+            continue;
+        }
+
+        const code = projectCodeFromRow(row.pid, row.name);
+        const status = mapProjectStatus(row.statusRaw);
+        const start = row.confirmedStart || row.estimatedStart || new Date('2025-01-01T00:00:00.000Z');
+        let end = new Date('2026-12-31T00:00:00.000Z');
+        if (row.durationWeeks > 0) {
+            end = new Date(start.getTime());
+            end.setUTCDate(end.getUTCDate() + row.durationWeeks * 7);
+        }
+
+        const staffingNotes = [
+            row.architect ? `Architect: ${row.architect}` : '',
+            row.beRequired ? `BE: ${row.beRequired}` : '',
+            row.feRequired ? `FE: ${row.feRequired}` : '',
+            row.mobileRequired ? `Mobile: ${row.mobileRequired}` : '',
+            row.qaRequired ? `QA: ${row.qaRequired}` : '',
+        ]
+            .filter(Boolean)
+            .join(' | ');
+        const businessGoal =
+            [row.tech, staffingNotes].filter(Boolean).join(' — ').slice(0, 500) || SEED_TAG;
+
+        prepared.push({ row, identifier, code, status, start, end, businessGoal });
+    }
+
+    const projectOps: Parameters<typeof Project.bulkWrite>[0] = prepared.map((p) => {
+        const setFields: Record<string, unknown> = {
+            project_name: p.row.name,
+            project_code: p.code,
+            project_owner_id: ctx.defaultAdminId,
+            project_manager_id: ctx.pmFallbackId,
+            status: p.status,
+            priority: mapPriority(p.row.type, p.status),
+            start_date: p.start,
+            end_date: p.end,
+            billing_type: mapBilling(p.row.type),
+            business_goal: p.businessGoal,
+            is_active: true,
+        };
+        if (ctx.syncId) setFields.last_sync_id = ctx.syncId;
+
+        return {
+            updateOne: {
+                filter: { project_code: p.code },
+                update: { $set: setFields },
+                upsert: true,
+            },
+        };
+    });
+
+    structuredLogger.info('PROJECT BULK WRITE START', { ops: projectOps.length });
+    const writeStart = Date.now();
+    for (let i = 0; i < projectOps.length; i += IMPORT_BULK_CHUNK_SIZE) {
+        const chunk = projectOps.slice(i, i + IMPORT_BULK_CHUNK_SIZE);
+        if (chunk.length > 0) {
+            await Project.bulkWrite(chunk, { ordered: true, ...sessionOpts });
+        }
+    }
+
+    const codes = prepared.map((p) => p.code);
+    let projectQuery = Project.find({ project_code: { $in: codes } }).select('_id project_code');
+    if (writeOpts.session) {
+        projectQuery = projectQuery.session(writeOpts.session);
+    }
+    const projectDocs = await projectQuery.lean();
+    const projectIdByCode = new Map(
+        projectDocs.map((p) => [String(p.project_code), p._id as Types.ObjectId])
+    );
+
+    const roleEffortOps: Parameters<typeof ProjectRoleEffort.bulkWrite>[0] = [];
+    const skillReqOps: Parameters<typeof ProjectSkillRequirement.bulkWrite>[0] = [];
+
+    for (const p of prepared) {
+        const projectId = projectIdByCode.get(p.code);
+        if (!projectId) {
+            throw new Error(`${p.identifier}: project upsert did not persist`);
+        }
+        ctx.projectByCode.set(p.code, projectId);
+        if (p.row.pid) ctx.projectByPid.set(p.row.pid.toUpperCase(), p.code);
+
+        const staffingRoles: { label: string; count: number }[] = [
+            { label: 'SDE II (Full Stack)', count: p.row.beRequired || p.row.feRequired },
+            { label: 'Mobile Developer', count: p.row.mobileRequired },
+            { label: 'QA Engineer', count: p.row.qaRequired },
+        ];
+        for (const staffing of staffingRoles) {
+            if (staffing.count <= 0) continue;
+            const roleId = ctx.jobRoleIds.get(staffing.label);
+            if (!roleId) {
+                throw new Error(`Job role not prepared: ${staffing.label}`);
+            }
+            roleEffortOps.push({
+                updateOne: {
+                    filter: { project_id: projectId, role_id: roleId },
+                    update: {
+                        $set: {
+                            project_id: projectId,
+                            role_id: roleId,
+                            required_headcount: staffing.count,
+                            required_days: 60,
+                            start_date: p.start,
+                            end_date: p.end,
+                            hours_per_day: 8,
+                        },
+                    },
+                    upsert: true,
+                },
+            });
+        }
+
+        const techSkills = parseSkillList(p.row.tech);
+        const requirementRoleName =
+            p.row.architect ||
+            (p.row.beRequired > 0 ? 'SDE II (Backend)' : '') ||
+            (p.row.feRequired > 0 ? 'SDE II (Frontend)' : '') ||
+            (p.row.mobileRequired > 0 ? 'SDE II (Mobile)' : '') ||
+            (p.row.qaRequired > 0 ? 'QA Engineer' : '') ||
+            'SDE II (Full Stack)';
+        const requirementRoleId = ctx.jobRoleIds.get(requirementRoleName);
+        if (!requirementRoleId) {
+            throw new Error(`Job role not prepared: ${requirementRoleName}`);
+        }
+        const requirementProfile = roleProfile(requirementRoleName);
+
+        for (const skillName of techSkills) {
+            const skillId = ctx.skillCache.get(skillName);
+            if (!skillId) continue;
+            skillReqOps.push({
+                updateOne: {
+                    filter: { project_id: projectId, skill_id: skillId },
+                    update: {
+                        $set: {
+                            project_id: projectId,
+                            skill_id: skillId,
+                            role_id: requirementRoleId,
+                            min_skill_level: requirementProfile.level,
+                            required_headcount: 1,
+                            required_days: 30,
+                            start_date: p.start,
+                            end_date: p.end,
+                        },
+                    },
+                    upsert: true,
+                },
+            });
+        }
+    }
+
+    for (let i = 0; i < roleEffortOps.length; i += IMPORT_BULK_CHUNK_SIZE) {
+        const chunk = roleEffortOps.slice(i, i + IMPORT_BULK_CHUNK_SIZE);
+        if (chunk.length > 0) {
+            await ProjectRoleEffort.bulkWrite(chunk, { ordered: true, ...sessionOpts });
+        }
+    }
+    for (let i = 0; i < skillReqOps.length; i += IMPORT_BULK_CHUNK_SIZE) {
+        const chunk = skillReqOps.slice(i, i + IMPORT_BULK_CHUNK_SIZE);
+        if (chunk.length > 0) {
+            await ProjectSkillRequirement.bulkWrite(chunk, { ordered: true, ...sessionOpts });
+        }
+    }
+
+    structuredLogger.info('PROJECT BULK WRITE COMPLETE', {
+        syncBatchId: ctx.syncBatchId,
+        projectsUpserted: prepared.length,
+        durationMs: Date.now() - writeStart,
+        totalDurationMs: Date.now() - startedAt,
+    });
+
+    if (ctx.syncId && !writeOpts?.deferStaleCleanup) {
+        await deactivateStaleProjects(ctx.syncId, writeOpts);
+    }
+
+    return {
+        rowsReceived: rows.length,
+        rowsProcessed: prepared.length,
+        rowsSkipped: skippedRows.length,
+        skippedRows,
+        errors: [],
+        projectsUpserted: prepared.length,
+    };
+}
+
+async function importProjectRowsSequential(
     rows: ProjectImportRow[],
     ctx: ImportContext,
     writeOpts?: ImportWriteOptions
@@ -163,7 +436,7 @@ export async function importProjectRows(
         }
     }
 
-    if (ctx.syncId) {
+    if (ctx.syncId && !writeOpts?.deferStaleCleanup) {
         await deactivateStaleProjects(ctx.syncId, writeOpts);
     }
 
@@ -177,7 +450,7 @@ export async function importProjectRows(
     };
 }
 
-async function deactivateStaleProjects(
+export async function deactivateStaleProjects(
     syncId: string,
     writeOpts?: ImportWriteOptions
 ): Promise<void> {

@@ -25,14 +25,27 @@ import {
     applyR360AccessRows,
     resolvePmFallback,
     importResourceRows,
+    prepareResourceImportReferences,
 } from './resource-import.service';
-import { importProjectRows } from './project-import.service';
-import { importAllocationRows } from './allocation-import.service';
+import { importProjectRows, prepareProjectImportReferences } from './project-import.service';
+import { importAllocationRows, prepareAllocationImportReferences } from './allocation-import.service';
 import { cleanupJunkSkills, PASSWORD_PLAIN } from './planner-import.utils';
 import { ImportContext } from './types/import-context.types';
 import { ImportWriteOptions } from './types/import-write.options';
 import { hydrateContextFromDatabase } from './context-hydration.service';
 import { startSession, ClientSession } from 'mongoose';
+import { structuredLogger } from '../../common/logger';
+import { unwrapImportError, toError } from './import-error.utils';
+import { inferImportSheet, runPostTransactionCleanup } from './import-post-cleanup';
+
+/** MongoDB multi-doc transaction limits — bulk imports need extended commit window. */
+const TRANSACTION_OPTIONS = {
+    maxCommitTimeMS: 300_000,
+    readConcern: { level: 'local' as const },
+    writeConcern: { w: 'majority' as const },
+};
+
+const LONG_TRANSACTION_WARN_MS = 45_000;
 
 export type { PlannerImportOptions, PlannerImportResult } from './types/import-result.types';
 
@@ -151,13 +164,105 @@ export async function runPlannerSheetImport(params: {
         return executePlannerSheetImport(params);
     }
 
+    const sheet = inferImportSheet(params);
+    const txnStartedAt = Date.now();
+
+    const preTxnWriteOpts: ImportWriteOptions = { atomic: true };
+    let preCtx =
+        params.existingContext ?? (await bootstrapImportContext(params.syncId, preTxnWriteOpts));
+    if (params.syncBatchId) {
+        preCtx.syncBatchId = params.syncBatchId;
+    }
+    if (params.r360AccessRows?.length) {
+        applyR360AccessRows(preCtx, params.r360AccessRows);
+        await resolvePmFallback(preCtx, preTxnWriteOpts);
+    }
+
+    if (params.resourceRows?.length) {
+        await prepareResourceImportReferences(params.resourceRows, preCtx);
+    }
+    if (params.projectRows?.length) {
+        if (!params.resourceRows?.length) {
+            await hydrateContextFromDatabase(preCtx, undefined);
+            await resolvePmFallback(preCtx, undefined);
+        }
+        await prepareProjectImportReferences(params.projectRows, preCtx);
+    }
+    if (params.allocationRows?.length && !params.resourceRows?.length && !params.projectRows?.length) {
+        await hydrateContextFromDatabase(preCtx, undefined);
+        await prepareAllocationImportReferences(params.allocationRows, preCtx);
+    }
+
+    structuredLogger.info('TRANSACTION_STARTED', {
+        event: 'TRANSACTION_STARTED',
+        sheet,
+        syncBatchId: params.syncBatchId,
+        syncId: params.syncId,
+    });
+
     const session = await startSession();
     try {
         let result!: PlannerImportResult;
         await session.withTransaction(async () => {
-            result = await executePlannerSheetImport({ ...params, atomic: true, session });
+            result = await executePlannerSheetImport({
+                ...params,
+                existingContext: preCtx,
+                atomic: true,
+                session,
+                deferStaleCleanup: true,
+                deferJunkSkillCleanup: true,
+            });
+        }, TRANSACTION_OPTIONS);
+
+        const durationMs = Date.now() - txnStartedAt;
+        if (durationMs > LONG_TRANSACTION_WARN_MS) {
+            structuredLogger.warn('LONG_TRANSACTION_WARNING', {
+                event: 'LONG_TRANSACTION_WARNING',
+                sheet,
+                syncBatchId: params.syncBatchId,
+                durationMs,
+            });
+        }
+
+        structuredLogger.info('TRANSACTION_COMMITTED', {
+            event: 'TRANSACTION_COMMITTED',
+            sheet,
+            syncBatchId: params.syncBatchId,
+            durationMs,
         });
+
+        await runPostTransactionCleanup({
+            sheet,
+            syncId: params.syncId,
+            syncBatchId: params.syncBatchId,
+            resourceOnly: params.resourceOnly,
+        });
+
         return result;
+    } catch (err) {
+        const durationMs = Date.now() - txnStartedAt;
+        const unwrapped = unwrapImportError(err);
+        structuredLogger.error('TRANSACTION_ROLLED_BACK', {
+            event: 'TRANSACTION_ROLLED_BACK',
+            sheet,
+            syncBatchId: params.syncBatchId,
+            syncId: params.syncId,
+            durationMs,
+            error: unwrapped.message,
+            code: unwrapped.code,
+            codeName: unwrapped.codeName,
+            stack: unwrapped.stack,
+        });
+        structuredLogger.error('PLANNER_IMPORT_TRANSACTION_FAILED', {
+            syncBatchId: params.syncBatchId,
+            syncId: params.syncId,
+            sheet,
+            message: unwrapped.message,
+            code: unwrapped.code,
+            codeName: unwrapped.codeName,
+            stack: unwrapped.stack,
+        });
+        throw toError(unwrapped);
     } finally {
         await session.endSession();
     }
@@ -174,10 +279,14 @@ async function executePlannerSheetImport(params: {
     existingContext?: ImportContext;
     atomic?: boolean;
     session?: ClientSession;
+    deferStaleCleanup?: boolean;
+    deferJunkSkillCleanup?: boolean;
 }): Promise<PlannerImportResult> {
     const writeOpts = {
         session: params.session,
         atomic: params.atomic,
+        deferStaleCleanup: params.deferStaleCleanup,
+        deferJunkSkillCleanup: params.deferJunkSkillCleanup,
     };
     const resourceOnly = params.resourceOnly ?? false;
     let ctx =
@@ -220,8 +329,10 @@ async function executePlannerSheetImport(params: {
 
     if (params.projectRows) {
         if (!params.resourceRows) {
-            await hydrateContextFromDatabase(ctx, writeOpts);
-            await resolvePmFallback(ctx, writeOpts);
+            if (!params.session) {
+                await hydrateContextFromDatabase(ctx, undefined);
+                await resolvePmFallback(ctx, undefined);
+            }
         }
         const projectResult = await importProjectRows(params.projectRows, ctx, writeOpts);
         sheetResults.push(projectResult);
@@ -230,7 +341,9 @@ async function executePlannerSheetImport(params: {
 
     if (params.allocationRows) {
         if (!params.resourceRows && !params.projectRows) {
-            await hydrateContextFromDatabase(ctx, writeOpts);
+            if (!params.session) {
+                await hydrateContextFromDatabase(ctx, undefined);
+            }
         }
         if (ctx.employeeByEmail.size === 0 || ctx.projectByCode.size === 0) {
             throw new Error(
@@ -243,7 +356,9 @@ async function executePlannerSheetImport(params: {
         weeklyEntriesUpserted = allocResult.weeklyEntriesUpserted;
     }
 
-    await cleanupJunkSkills(writeOpts);
+    if (!writeOpts.deferJunkSkillCleanup) {
+        await cleanupJunkSkills(writeOpts);
+    }
 
     const merged = mergeSheetResults(...sheetResults);
     return {

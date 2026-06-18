@@ -28,7 +28,7 @@ export function googleSheetRowToResourceRow(row: Record<string, unknown>): Resou
         jobRole: str(row, 'Job Role', 'JobRole', 'jobRole', 'job_role'),
         resourceType: str(row, 'Resource Type', 'ResourceType', 'resourceType', 'resource_type'),
         availability: str(row, 'Availability', 'availability'),
-        email: str(row, 'Email', 'email').toLowerCase(),
+        email: str(row, 'Email', 'email').trim().toLowerCase(),
         location: str(row, 'Location', 'location'),
         skills: skillsRaw ? parseSkillList(skillsRaw) : [],
     };

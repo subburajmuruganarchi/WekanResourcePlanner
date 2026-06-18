@@ -4,7 +4,7 @@ import { SyncRun } from './sync-run.model';
 import type { SupportedSheet } from './sync-batch-coordinator';
 
 const BATCH_COMPLETION_POLL_MS = 2_000;
-const BATCH_COMPLETION_TIMEOUT_MS = 280_000;
+const DEFAULT_BATCH_COMPLETION_TIMEOUT_MS = 1_200_000;
 
 const SHEET_ORDER: SupportedSheet[] = ['Resource', 'Project', 'Project_Allocation'];
 
@@ -29,9 +29,10 @@ function formatBatchRunDetail(
  */
 export async function waitForBatchSheetRuns(
     batchId: string,
-    requestId: string
+    requestId: string,
+    timeoutMs: number = DEFAULT_BATCH_COMPLETION_TIMEOUT_MS
 ): Promise<void> {
-    const deadline = Date.now() + BATCH_COMPLETION_TIMEOUT_MS;
+    const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
         const runs = await SyncRun.find({ syncBatchId: batchId }).lean();

@@ -3,6 +3,7 @@ import { sheetSyncService, resolveSyncBatchId } from './sheet-sync.service';
 import { GoogleSheetWebhookBody } from '../../services/planner-import/types/import-result.types';
 import { AppError } from '../../common/errors/app-error';
 import { SyncInProgressError } from './sync-errors';
+import { extractFailureDetails } from './sync-run-persistence';
 
 function requestIdFrom(req: Request): string {
     return req.requestId ?? `SYNC-${Date.now()}`;
@@ -16,50 +17,81 @@ function syncBatchIdFrom(req: Request, body: GoogleSheetWebhookBody): string | u
     return undefined;
 }
 
+function webhookFailureStatus(err: unknown): number {
+    if (err instanceof AppError) {
+        if (err.statusCode >= 400 && err.statusCode < 600) return err.statusCode;
+    }
+    return 500;
+}
+
 export const googleSheetSyncController = {
     async webhook(req: Request, res: Response, next: NextFunction): Promise<void> {
+        const body = req.body as GoogleSheetWebhookBody;
+        const requestId = requestIdFrom(req);
+        let syncBatchId: string | undefined;
+
         try {
-            const body = req.body as GoogleSheetWebhookBody;
             if (!body?.sheet || !Array.isArray(body.rows)) {
                 res.status(400).json({
-                    success: false,
-                    message: 'Request body must include sheet and rows array.',
+                    status: 'FAILED',
+                    sheet: body?.sheet ?? null,
+                    error: 'Request body must include sheet and rows array.',
+                    syncCompleted: false,
+                    requestId,
                 });
                 return;
             }
 
-            const requestId = requestIdFrom(req);
             const explicitBatchId = syncBatchIdFrom(req, body);
-            const syncBatchId = await resolveSyncBatchId(explicitBatchId, requestId);
+            syncBatchId = await resolveSyncBatchId(explicitBatchId, requestId);
             const result = await sheetSyncService.syncSheet(body, {
                 requestId,
                 syncBatchId,
             });
 
             res.status(200).json({
-                status: 'success',
+                status: 'SUCCESS',
                 syncCompleted: true,
+                cached: result.cached === true,
                 syncId: result.syncId,
                 syncBatchId,
                 requestId,
                 sheet: result.sheet,
-                received: result.rowsReceived,
-                processed: result.rowsProcessed,
-                failed: result.rowsSkipped,
+                rowsReceived: result.rowsReceived,
+                rowsProcessed: result.rowsProcessed,
+                rowsSkipped: result.rowsSkipped,
                 durationMs: result.durationMs,
                 errors: result.errors,
                 timestamp: new Date().toISOString(),
-                data: result,
             });
         } catch (error) {
             if (error instanceof AppError && error.statusCode === 409) {
                 res.status(409).json({
                     status: 'FULL_SYNC_RUNNING',
                     message: error.message,
+                    syncBatchId,
+                    requestId,
                 });
                 return;
             }
-            next(error);
+
+            const details = extractFailureDetails(error);
+            const httpStatus = webhookFailureStatus(error);
+            const sheet = body?.sheet ?? 'unknown';
+
+            res.status(httpStatus).json({
+                status: 'FAILED',
+                sheet,
+                error: details.message,
+                code: details.code,
+                codeName: details.codeName,
+                errmsg: details.errmsg,
+                syncBatchId,
+                syncId: undefined,
+                requestId,
+                syncCompleted: false,
+                timestamp: new Date().toISOString(),
+            });
         }
     },
 
