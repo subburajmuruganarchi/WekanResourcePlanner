@@ -6,6 +6,7 @@ import {
     parseSheetDateFromText,
     parseWeekMonday,
 } from '../planner-import.utils';
+import { filterImportableResourceRows } from '../resource-row.validation';
 
 function str(row: Record<string, unknown>, ...keys: string[]): string {
     for (const key of keys) {
@@ -21,13 +22,34 @@ function num(row: Record<string, unknown>, ...keys: string[]): number {
 }
 
 export function googleSheetRowToResourceRow(row: Record<string, unknown>): ResourceImportRow {
-    const skillsRaw = str(row, 'Skills', 'skills', 'Skill');
+    const skillsRaw = str(
+        row,
+        'Skills',
+        'skills',
+        'Skill',
+        'Skill (from HR)',
+        'Skill (from HR) '
+    );
     return {
-        employeeCode: str(row, 'EID', 'eid', 'EmployeeCode', 'employee_code'),
+        employeeCode: str(row, 'EID', 'eid', 'ID', 'id', 'EmployeeCode', 'employee_code'),
         name: str(row, 'Name', 'name'),
-        jobRole: str(row, 'Job Role', 'JobRole', 'jobRole', 'job_role'),
-        resourceType: str(row, 'Resource Type', 'ResourceType', 'resourceType', 'resource_type'),
-        availability: str(row, 'Availability', 'availability'),
+        jobRole: str(row, 'Job Role', 'JobRole', 'jobRole', 'job_role', 'Role', 'role'),
+        resourceType: str(
+            row,
+            'Resource Type',
+            'ResourceType',
+            'resourceType',
+            'resource_type',
+            'Type',
+            'type'
+        ),
+        availability: str(
+            row,
+            'Availability',
+            'availability',
+            'Availablility',
+            'availablility'
+        ),
         email: str(row, 'Email', 'email').trim().toLowerCase(),
         location: str(row, 'Location', 'location'),
         skills: skillsRaw ? parseSkillList(skillsRaw) : [],
@@ -36,6 +58,13 @@ export function googleSheetRowToResourceRow(row: Record<string, unknown>): Resou
 
 export function googleSheetRowsToResourceRows(rows: Record<string, unknown>[]): ResourceImportRow[] {
     return rows.map(googleSheetRowToResourceRow);
+}
+
+/** Map + drop placeholder/dummy/empty rows before import. */
+export function googleSheetRowsToImportableResourceRows(
+    rows: Record<string, unknown>[]
+): ResourceImportRow[] {
+    return filterImportableResourceRows(googleSheetRowsToResourceRows(rows));
 }
 
 export function googleSheetRowToProjectRow(row: Record<string, unknown>): ProjectImportRow {

@@ -4,8 +4,14 @@ import {
     validateResourceRow,
     assertResourceRowsValid,
     ResourceValidationError,
+    shouldSkipResourceRow,
+    filterImportableResourceRows,
 } from './resource-row.validation';
 import { ResourceImportRow } from './types/resource-row.dto';
+import {
+    googleSheetRowToResourceRow,
+    googleSheetRowsToImportableResourceRows,
+} from './adapters/google-sheet-row.adapter';
 
 function row(overrides: Partial<ResourceImportRow> = {}): ResourceImportRow {
     return {
@@ -96,6 +102,96 @@ describe('resource-row.validation', () => {
 
         it('does not throw when all rows are valid', () => {
             expect(() => assertResourceRowsValid([row(), row({ employeeCode: 'E1002', email: 'b@c.com' })])).not.toThrow();
+        });
+    });
+
+    describe('shouldSkipResourceRow', () => {
+        it('skips dummy Z-prefix rows', () => {
+            expect(
+                shouldSkipResourceRow(
+                    row({ employeeCode: 'Z001', name: 'z Dummy Architect', email: '#ref!' })
+                )
+            ).toBe(true);
+        });
+
+        it('skips placeholder slots with EID but no Name', () => {
+            expect(shouldSkipResourceRow(row({ employeeCode: 'E071', name: '', email: '' }))).toBe(true);
+        });
+
+        it('skips completely empty rows', () => {
+            expect(shouldSkipResourceRow(row({ employeeCode: '', name: '', email: '' }))).toBe(true);
+        });
+
+        it('does not skip real employees with valid email', () => {
+            expect(
+                shouldSkipResourceRow(
+                    row({ employeeCode: 'E001', name: 'Babu Reddy', email: 'babur@wekancode.com' })
+                )
+            ).toBe(false);
+        });
+
+        it('does not skip E069 — empty email is a validation error not a skip', () => {
+            expect(
+                shouldSkipResourceRow(row({ employeeCode: 'E069', name: 'Manikandan', email: '' }))
+            ).toBe(false);
+        });
+    });
+
+    describe('filterImportableResourceRows', () => {
+        it('filters 126-row sheet down to importable employees only', () => {
+            const rows: ResourceImportRow[] = [
+                row({ employeeCode: 'E001', name: 'Babu Reddy', email: 'babur@wekancode.com' }),
+                row({ employeeCode: 'E071', name: '', email: '' }),
+                row({ employeeCode: 'Z001', name: 'z Dummy Architect', email: '#ref!' }),
+                row({ employeeCode: '', name: '', email: '' }),
+            ];
+            const importable = filterImportableResourceRows(rows);
+            expect(importable).toHaveLength(1);
+            expect(importable[0].employeeCode).toBe('E001');
+        });
+
+        it('assertResourceRowsValid ignores skipped rows', () => {
+            const rows: ResourceImportRow[] = [
+                row({ employeeCode: 'E001', email: 'a@b.com' }),
+                row({ employeeCode: 'Z001', name: 'z Dummy', email: '#ref!' }),
+            ];
+            expect(() => assertResourceRowsValid(rows)).not.toThrow();
+        });
+    });
+
+    describe('Apps Script column mapping', () => {
+        it('maps Role, Type, Availablility, Skill (from HR) from webhook payload', () => {
+            const mapped = googleSheetRowToResourceRow({
+                ID: 'E001',
+                EID: 'E001',
+                Name: 'Babu Reddy',
+                Role: 'Architect',
+                Type: 'Backend',
+                Availablility: 'Available',
+                Email: 'babur@wekancode.com',
+                Location: 'Bengalore',
+                'Skill (from HR)': 'NodeJS, NestJS, MongoDB, AWS',
+                Skills: 'NodeJS, NestJS, MongoDB, AWS',
+            });
+            expect(mapped.employeeCode).toBe('E001');
+            expect(mapped.jobRole).toBe('Architect');
+            expect(mapped.resourceType).toBe('Backend');
+            expect(mapped.availability).toBe('Available');
+            expect(mapped.skills).toEqual(['NodeJS', 'NestJS', 'MongoDB', 'AWS']);
+        });
+
+        it('googleSheetRowsToImportableResourceRows drops dummies from raw webhook rows', () => {
+            const importable = googleSheetRowsToImportableResourceRows([
+                {
+                    EID: 'E001',
+                    Name: 'Babu Reddy',
+                    Email: 'babur@wekancode.com',
+                    Role: 'Architect',
+                },
+                { EID: 'Z001', Name: 'z Dummy Architect', Email: '#ref!' },
+                { EID: 'E071', Name: '', Email: '' },
+            ]);
+            expect(importable).toHaveLength(1);
         });
     });
 });

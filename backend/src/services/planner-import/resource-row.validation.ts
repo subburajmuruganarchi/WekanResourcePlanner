@@ -11,6 +11,36 @@ export interface ResourceRowValidationIssue {
 }
 
 const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EXCEL_ERROR_RE = /^#(ref!|n\/a|value!|name\?|num!|div\/0!|null!)/i;
+
+export function isExcelFormulaError(value: string): boolean {
+    return EXCEL_ERROR_RE.test(value.trim());
+}
+
+/**
+ * Rows excluded from import (not validated, not counted as failures):
+ * - completely empty rows
+ * - placeholder slots (EID only, no Name)
+ * - dummy planning rows (Z-prefix / "dummy" in name)
+ * - Excel formula errors in email (#ref!, etc.)
+ */
+export function shouldSkipResourceRow(row: ResourceImportRow): boolean {
+    const eid = (row.employeeCode ?? '').trim();
+    const name = (row.name ?? '').trim();
+    const email = (row.email ?? '').trim();
+
+    if (!eid && !name) return true;
+    if (eid && !name) return true;
+    if (isDummyResource(name, eid)) return true;
+    if (email && isExcelFormulaError(email)) return true;
+
+    return false;
+}
+
+/** Keep only rows that will be imported into MongoDB. */
+export function filterImportableResourceRows(rows: ResourceImportRow[]): ResourceImportRow[] {
+    return rows.filter((row) => !shouldSkipResourceRow(row));
+}
 
 export function normalizeResourceEmail(raw: string): string {
     return raw.trim().toLowerCase();
@@ -66,6 +96,12 @@ export function validateResourceRow(row: ResourceImportRow): ResourceRowValidati
     return null;
 }
 
+export function validateImportableResourceRows(rows: ResourceImportRow[]): ResourceRowValidationIssue[] {
+    return filterImportableResourceRows(rows)
+        .map((row) => validateResourceRow(row))
+        .filter((issue): issue is ResourceRowValidationIssue => issue !== null);
+}
+
 export function validateResourceRows(rows: ResourceImportRow[]): ResourceRowValidationIssue[] {
     return rows
         .map((row) => validateResourceRow(row))
@@ -84,9 +120,9 @@ export class ResourceValidationError extends AppError {
     }
 }
 
-/** Fail fast before MongoDB transaction when any Resource row is invalid. */
+/** Fail fast before MongoDB transaction when any importable Resource row is invalid. */
 export function assertResourceRowsValid(rows: ResourceImportRow[]): void {
-    const issues = validateResourceRows(rows);
+    const issues = validateImportableResourceRows(rows);
     if (issues.length > 0) {
         throw new ResourceValidationError(issues);
     }
