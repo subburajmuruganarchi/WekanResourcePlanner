@@ -17,6 +17,33 @@ export async function assessStaffingRisk(projectId: string): Promise<StaffingRis
     const unfulfilledHeadcount = skillReqs.reduce((s, r) => s + Math.max(0, r.remainingHeadcount ?? 0), 0);
     const missingSkillSlots = skillReqs.filter((r) => (r.remainingHeadcount ?? 0) > 0).length;
 
+    const requiredSkills = skillReqs.map((r) => {
+        const headcount = r.originalHeadcount ?? 1;
+        const gap = Math.max(0, r.remainingHeadcount ?? 0);
+        return {
+            skill: r.skillName || 'Skill',
+            minLevel: r.minSkillLevel || '—',
+            headcount,
+            filled: Math.max(0, headcount - gap),
+            gap,
+        };
+    });
+
+    const roleEfforts = project.roleEfforts || [];
+    const roleGap = roleEfforts.reduce((s, r) => s + Math.max(0, r.remainingHeadcount ?? 0), 0);
+
+    const requiredRoles = roleEfforts.map((r) => ({
+        role: r.roleName || 'Role',
+        effortHours: (r.hoursPerDay ?? 8) * (r.requiredDays ?? 1),
+        headcount: r.originalHeadcount ?? 1,
+        gap: Math.max(0, r.remainingHeadcount ?? 0),
+    }));
+
+    const suggestedRoles = [
+        ...requiredSkills.filter((s) => s.gap > 0).map((s) => `${s.skill} (${s.gap} needed)`),
+        ...requiredRoles.filter((r) => r.gap > 0).map((r) => `${r.role} (${r.gap} open)`),
+    ].slice(0, 6);
+
     if (missingSkillSlots > 0) {
         score += Math.min(40, missingSkillSlots * 15);
         reasons.push(`${missingSkillSlots} skill requirement slot(s) still need headcount.`);
@@ -27,8 +54,6 @@ export async function assessStaffingRisk(projectId: string): Promise<StaffingRis
     }
 
     const teamSize = project.teamSize ?? 0;
-    const roleEfforts = project.roleEfforts || [];
-    const roleGap = roleEfforts.reduce((s, r) => s + Math.max(0, r.remainingHeadcount ?? 0), 0);
     if (roleGap > 0) {
         score += 20;
         reasons.push(`${roleGap} role effort position(s) unfilled.`);
@@ -62,5 +87,8 @@ export async function assessStaffingRisk(projectId: string): Promise<StaffingRis
         reasons,
         missingSkillSlots,
         unfulfilledHeadcount,
+        requiredSkills,
+        requiredRoles,
+        suggestedRoles,
     };
 }

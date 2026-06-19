@@ -17,12 +17,79 @@ export interface AllocationHeatmapData {
     projects: { id: string; name: string; code: string }[];
     employees: { id: string; name: string; totalPercent: number }[];
     cells: HeatmapCell[];
+    meta: {
+        totalEmployees: number;
+        totalProjects: number;
+        truncated: boolean;
+        employeeLimit: number;
+        projectLimit: number;
+    };
 }
 
-const MAX_EMPLOYEES = 14;
-const MAX_PROJECTS = 10;
+const DEFAULT_EMPLOYEE_LIMIT = 50;
+const DEFAULT_PROJECT_LIMIT = 25;
 
 type ProjectMeta = { id: string; name: string; code: string };
+
+function emptyHeatmap(): AllocationHeatmapData {
+    return {
+        projects: [],
+        employees: [],
+        cells: [],
+        meta: {
+            totalEmployees: 0,
+            totalProjects: 0,
+            truncated: false,
+            employeeLimit: DEFAULT_EMPLOYEE_LIMIT,
+            projectLimit: DEFAULT_PROJECT_LIMIT,
+        },
+    };
+}
+
+function applyHeatmapLimits(
+    allEmployees: { id: string; name: string; totalPercent: number }[],
+    allProjects: ProjectMeta[],
+    allCells: HeatmapCell[]
+): AllocationHeatmapData {
+    const employeeLimit = DEFAULT_EMPLOYEE_LIMIT;
+    const projectLimit = DEFAULT_PROJECT_LIMIT;
+    const totalEmployees = allEmployees.length;
+    const totalProjects = allProjects.length;
+
+    const employees = allEmployees.slice(0, employeeLimit);
+    const employeeIds = new Set(employees.map((e) => e.id));
+    const employeeCells = allCells.filter((c) => employeeIds.has(c.employeeId));
+
+    const projectWeight = new Map<string, number>();
+    for (const c of employeeCells) {
+        projectWeight.set(c.projectId, (projectWeight.get(c.projectId) ?? 0) + c.percent);
+    }
+
+    const projectOrder = [...projectWeight.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([id]) => id);
+
+    const projectMetaById = new Map(allProjects.map((p) => [p.id, p]));
+    const projects = projectOrder
+        .slice(0, projectLimit)
+        .map((id) => projectMetaById.get(id) ?? { id, name: 'Project', code: '' });
+
+    const projectIds = new Set(projects.map((p) => p.id));
+    const filteredCells = employeeCells.filter((c) => projectIds.has(c.projectId));
+
+    return {
+        projects,
+        employees,
+        cells: filteredCells,
+        meta: {
+            totalEmployees,
+            totalProjects,
+            truncated: totalEmployees > employeeLimit || totalProjects > projectLimit,
+            employeeLimit,
+            projectLimit,
+        },
+    };
+}
 
 function hoursToPercent(hours: number, weeks: number): number {
     return Math.min(100, Math.round((hours / (WEEKLY_CAPACITY * weeks)) * 100));
@@ -47,7 +114,7 @@ async function buildAllocationHeatmapFromWeekly(
         .lean();
 
     if (entries.length === 0) {
-        return { projects: [], employees: [], cells: [] };
+        return emptyHeatmap();
     }
 
     type CellAgg = {
@@ -108,35 +175,15 @@ async function buildAllocationHeatmapFromWeekly(
             name: c.empName,
             totalPercent: 0,
         };
-        et.totalPercent += pct;
+        et.totalPercent = Math.max(et.totalPercent, pct);
         employeeTotals.set(c.employeeId, et);
         projectMeta.set(c.projectId, { id: c.projectId, name: c.projName, code: c.projCode });
     }
 
-    const employees = [...employeeTotals.values()]
-        .sort((a, b) => b.totalPercent - a.totalPercent)
-        .slice(0, MAX_EMPLOYEES);
-    const employeeIds = new Set(employees.map((e) => e.id));
+    const allEmployees = [...employeeTotals.values()].sort((a, b) => b.totalPercent - a.totalPercent);
+    const allProjects = [...projectMeta.values()];
 
-    const employeeCells = cells.filter((c) => employeeIds.has(c.employeeId));
-
-    const projectWeight = new Map<string, number>();
-    for (const c of employeeCells) {
-        projectWeight.set(c.projectId, (projectWeight.get(c.projectId) ?? 0) + c.percent);
-    }
-
-    const projects = [...projectWeight.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, MAX_PROJECTS)
-        .map(([projectId]) => {
-            const meta = projectMeta.get(projectId);
-            return meta ?? { id: projectId, name: 'Project', code: '' };
-        });
-
-    const projectIds = new Set(projects.map((p) => p.id));
-    const filteredCells = employeeCells.filter((c) => projectIds.has(c.projectId));
-
-    return { projects, employees, cells: filteredCells };
+    return applyHeatmapLimits(allEmployees, allProjects, cells);
 }
 
 /** Read-only snapshot for dashboard heatmap (active allocations in period). */
@@ -215,47 +262,23 @@ async function buildAllocationHeatmapFromLegacyAllocations(
         projectTotals.set(projectId, pt);
     }
 
-    const employees = [...employeeTotals.values()]
+    const allEmployees = [...employeeTotals.values()]
         .map((e) => ({
             id: e.id,
             name: e.name,
             totalPercent: computePeakCommittedPercent(e.slices),
         }))
-        .sort((a, b) => b.totalPercent - a.totalPercent)
-        .slice(0, MAX_EMPLOYEES);
+        .sort((a, b) => b.totalPercent - a.totalPercent);
 
-    const employeeIds = new Set(employees.map((e) => e.id));
-    const employeeCells = cells.filter((c) => employeeIds.has(c.employeeId));
+    const allProjects = [...projectTotals.values()].map(({ id, name, code }) => ({ id, name, code }));
 
-    const projectWeight = new Map<string, { meta: ProjectMeta; weight: number }>();
-    for (const c of employeeCells) {
-        const meta = projectTotals.get(c.projectId);
-        if (!meta) continue;
-        const cur = projectWeight.get(c.projectId) ?? { meta, weight: 0 };
-        cur.weight += c.percent;
-        projectWeight.set(c.projectId, cur);
-    }
-
-    const projects = [...projectWeight.values()]
-        .sort((a, b) => b.weight - a.weight)
-        .slice(0, MAX_PROJECTS)
-        .map((p) => p.meta);
-
-    const projectIds = new Set(projects.map((p) => p.id));
-
-    const filteredCells = employeeCells.filter((c) => projectIds.has(c.projectId));
-
-    return {
-        projects: projects.map(({ id, name, code }) => ({ id, name, code })),
-        employees,
-        cells: filteredCells,
-    };
+    return applyHeatmapLimits(allEmployees, allProjects, cells);
 }
 
 /** Top active projects by staffing risk score (read-only). */
 export async function buildStaffingRiskSummary(limit = 6) {
     const { assessStaffingRisk } = await import('./ai/staffing-risk.service');
-    const active = await Project.find({ status: 'Active' }).select('_id project_name project_code').limit(30).lean();
+    const active = await Project.find({ status: 'Active' }).select('_id project_name project_code').lean();
 
     const assessed = await Promise.all(
         active.map(async (p) => {
@@ -267,7 +290,11 @@ export async function buildStaffingRiskSummary(limit = 6) {
                     code: p.project_code,
                     level: risk.level,
                     score: risk.score,
-                    reasons: risk.reasons.slice(0, 2),
+                    reasons: risk.reasons.slice(0, 3),
+                    requiredSkills: risk.requiredSkills,
+                    requiredRoles: risk.requiredRoles,
+                    suggestedRoles: risk.suggestedRoles,
+                    unfulfilledHeadcount: risk.unfulfilledHeadcount,
                 };
             } catch {
                 return null;
@@ -277,6 +304,7 @@ export async function buildStaffingRiskSummary(limit = 6) {
 
     return assessed
         .filter((r): r is NonNullable<typeof r> => r !== null)
+        .filter((r) => r.level !== 'LOW' || r.score >= 25)
         .sort((a, b) => b.score - a.score)
         .slice(0, limit);
 }

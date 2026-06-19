@@ -16,19 +16,8 @@ import { WeeklyPlannerFilters } from './components/weekly-planner-filters';
 import { WeeklyPlannerGrid } from './components/weekly-planner-grid';
 import { PlannerGridSearchBar } from '@/components/weekly-planner/planner-grid-search-bar';
 import { CapacitySummaryPanel } from './components/capacity-summary-panel';
-import { RoleGuard } from '@/components/shared/role-guard';
 import './weekly-planner-grid.css';
-import {
-    Save,
-    Undo2,
-    Loader2,
-    CalendarRange,
-    ChevronLeft,
-    ChevronRight,
-    AlertCircle,
-    RefreshCw,
-} from 'lucide-react';
-import { useUtilizationDashboardSummary } from '@/lib/use-utilization';
+import { CalendarRange, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 function defaultFilterDraft(): WeeklyGridFilters {
     const from = startOfWeek(new Date(), { weekStartsOn: 1 });
@@ -50,8 +39,7 @@ function employeeRoleLabel(emp: {
 
 export default function WeeklyPlannerPage() {
     const { user } = useAuth();
-    const canEdit = user?.role === 'Admin';
-    const readOnly = user?.role === 'Project Manager';
+    const canEdit = false;
 
     const { employees } = useEmployees();
     const { projects } = useProjects();
@@ -64,9 +52,6 @@ export default function WeeklyPlannerPage() {
     const [searchRole, setSearchRole] = useState('');
 
     const grid = useWeeklyAllocationGrid({ canEdit, pageSize: 500 });
-    const utilization = useUtilizationDashboardSummary();
-    const [syncingActuals, setSyncingActuals] = useState(false);
-    const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
     const visibleRows = useMemo(
         () =>
@@ -137,31 +122,6 @@ export default function WeeklyPlannerPage() {
         void grid.fetchGrid(d, 1);
     };
 
-    const handleSave = async () => {
-        await grid.saveBulk();
-    };
-
-    const handleSyncActuals = async () => {
-        setSyncingActuals(true);
-        setSyncMessage(null);
-        try {
-            const result = await utilization.syncActuals({
-                weekStartFrom: filterDraft.weekStartFrom,
-                weekStartTo: filterDraft.weekStartTo,
-                employeeId: filterDraft.employeeId,
-                projectId: filterDraft.projectId,
-            });
-            setSyncMessage(
-                `Synced actuals: ${result.cellsUpdated} updated, ${result.cellsCreated} created.`
-            );
-            await grid.fetchGrid(filterDraft, grid.pagination.page);
-        } catch (err) {
-            setSyncMessage(err instanceof Error ? err.message : 'Actuals sync failed');
-        } finally {
-            setSyncingActuals(false);
-        }
-    };
-
     return (
         <PageContainer className="max-w-[100%] space-y-6">
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
@@ -171,57 +131,15 @@ export default function WeeklyPlannerPage() {
                         <h1 className="text-2xl font-semibold text-gray-900">Weekly Resource Planner</h1>
                     </div>
                     <p className="text-sm text-gray-600 mt-1">
-                        Plan hours by resource and project across weeks. Legacy allocations are merged when enabled on the server.
+                        View planned hours, actuals, and variance by resource and project. Edit allocations in Resource Allocation.
                     </p>
                     <div className="flex gap-2 mt-2">
-                        {canEdit && (
-                            <Badge variant="success">Admin — editable</Badge>
-                        )}
-                        {readOnly && (
-                            <Badge variant="info">Project Manager — read only</Badge>
-                        )}
-                        {grid.hasDirty && (
-                            <Badge variant="warning">{grid.dirtyCount} unsaved change(s)</Badge>
+                        <Badge variant="info">Read-only view</Badge>
+                        {user?.role === 'Admin' && (
+                            <Badge variant="secondary">Use Resource Allocation to edit plans</Badge>
                         )}
                     </div>
                 </div>
-                <RoleGuard allowedRoles={['Admin']}>
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={handleSyncActuals}
-                            disabled={syncingActuals || grid.loading}
-                            title="Reconcile approved time entries into weekly actual hours"
-                        >
-                            {syncingActuals ? (
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                                <RefreshCw className="w-4 h-4 mr-2" />
-                            )}
-                            Sync actuals
-                        </Button>
-                        <Button
-                            variant="outline"
-                            onClick={() => grid.discardChanges()}
-                            disabled={!grid.hasDirty || grid.saving}
-                        >
-                            <Undo2 className="w-4 h-4 mr-2" />
-                            Discard
-                        </Button>
-                        <Button
-                            onClick={handleSave}
-                            disabled={!grid.hasDirty || grid.saving}
-                            className="bg-brand-500 hover:bg-brand-600"
-                        >
-                            {grid.saving ? (
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                                <Save className="w-4 h-4 mr-2" />
-                            )}
-                            Save changes
-                        </Button>
-                    </div>
-                </RoleGuard>
             </div>
 
             <WeeklyPlannerFilters
@@ -247,18 +165,6 @@ export default function WeeklyPlannerPage() {
                         )}
                     </div>
                 </div>
-            )}
-
-            {grid.saveMessage && (
-                <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
-                    {grid.saveMessage}
-                </p>
-            )}
-
-            {syncMessage && (
-                <p className="text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
-                    {syncMessage}
-                </p>
             )}
 
             <div className="flex flex-col gap-6">

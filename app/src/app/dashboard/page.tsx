@@ -18,7 +18,7 @@ import { useAuth } from '@/lib/auth-context';
 import { AiInsightPanel } from '@/components/ai/ai-insight-panel';
 import { useDashboardInsight } from '@/lib/use-ai-insights';
 import { useNavigate } from 'react-router-dom';
-import { AllocationHeatmap, type HeatmapCell } from '@/components/dashboard/allocation-heatmap';
+import { AllocationHeatmap, type HeatmapCell, type HeatmapMeta } from '@/components/dashboard/allocation-heatmap';
 import { StaffingRiskCards, type StaffingRiskItem } from '@/components/dashboard/staffing-risk-cards';
 import {
     PlannedVsActualPanel,
@@ -57,6 +57,7 @@ export default function Dashboard() {
         projects: { id: string; name: string; code: string }[];
         employees: { id: string; name: string; totalPercent: number }[];
         cells: HeatmapCell[];
+        meta?: HeatmapMeta;
     } | null>(null);
     const [heatmapLoading, setHeatmapLoading] = useState(true);
     const [staffingRisks, setStaffingRisks] = useState<StaffingRiskItem[]>([]);
@@ -108,6 +109,7 @@ export default function Dashboard() {
                     projects: { id: string; name: string; code: string }[];
                     employees: { id: string; name: string; totalPercent: number }[];
                     cells: HeatmapCell[];
+                    meta?: HeatmapMeta;
                 }>(`/dashboard/allocation-heatmap?${periodQuery}`)
                 .then((data) => setHeatmap(data))
                 .catch(() => setHeatmap(null))
@@ -304,8 +306,8 @@ export default function Dashboard() {
             )}
 
             {canSeeInsights && (
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                    <Card className="xl:col-span-2 p-6 border-gray-200">
+                <div className="space-y-6">
+                    <Card className="p-6 border-gray-200 scroll-mt-24" id="dashboard-allocation-heatmap">
                         <div className="flex items-center justify-between mb-4">
                             <div>
                                 <h3 className="text-sm font-semibold text-gray-900">Allocation heatmap</h3>
@@ -321,13 +323,16 @@ export default function Dashboard() {
                             projects={heatmap?.projects ?? []}
                             employees={heatmap?.employees ?? []}
                             cells={heatmap?.cells ?? []}
+                            meta={heatmap?.meta}
                             loading={heatmapLoading}
                         />
                     </Card>
 
-                    <Card className="p-6 border-gray-200 min-w-0 overflow-hidden">
+                    <Card className="p-6 border-gray-200 scroll-mt-24" id="dashboard-staffing-risk">
                         <h3 className="text-sm font-semibold text-gray-900 mb-1">Staffing risk</h3>
-                        <p className="text-xs text-gray-500 mb-4">Projects needing attention</p>
+                        <p className="text-xs text-gray-500 mb-4">
+                            Projects needing attention · current snapshot (not filtered by reporting period)
+                        </p>
                         <StaffingRiskCards risks={staffingRisks} loading={risksLoading} />
                     </Card>
                 </div>

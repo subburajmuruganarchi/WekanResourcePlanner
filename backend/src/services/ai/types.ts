@@ -42,6 +42,20 @@ export interface StaffingRiskAssessment {
     reasons: string[];
     missingSkillSlots: number;
     unfulfilledHeadcount: number;
+    requiredSkills: {
+        skill: string;
+        minLevel: string;
+        headcount: number;
+        filled: number;
+        gap: number;
+    }[];
+    requiredRoles: {
+        role: string;
+        effortHours: number;
+        headcount: number;
+        gap: number;
+    }[];
+    suggestedRoles: string[];
 }
 
 export interface ApprovalAnomaly {

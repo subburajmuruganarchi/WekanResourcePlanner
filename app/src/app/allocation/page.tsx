@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { format, parseISO, startOfWeek, addWeeks } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Loader2, Save, Undo2, AlertCircle, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
@@ -18,23 +18,12 @@ import {
 } from './components/allocation-weekly-grid';
 
 import { AllocationGridLegend } from './components/allocation-grid-legend';
+import { AllocationDraftRow } from './components/allocation-draft-row';
+import { AllocationSuggestionsPanel } from './components/allocation-suggestions-panel';
+import { buildPlanningWeekRange, filterWeeksFromCurrent } from '@/lib/planning-week-utils';
 import type { WeeklyGridFilters } from '@/types/weekly-allocation';
 
 const BENCH_PROJECT_CODE = 'BENCH';
-
-/** Rolling 52-week window anchored to today (avoids missing data when old projects stretch the range). */
-function buildAllocationWeekRange(): {
-    weekStartFrom: string;
-    weekStartTo: string;
-} {
-    const todayStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-    const from = addWeeks(todayStart, -16);
-    const to = addWeeks(from, 51);
-    return {
-        weekStartFrom: format(from, 'yyyy-MM-dd'),
-        weekStartTo: format(to, 'yyyy-MM-dd'),
-    };
-}
 
 function employeeRoleLabel(emp: {
     jobRole?: string;
@@ -54,6 +43,10 @@ export function Allocation() {
     const [weekWindowStart, setWeekWindowStart] = useState(0);
     const [searchProject, setSearchProject] = useState('');
     const [searchResource, setSearchResource] = useState('');
+    const [showDraftForm, setShowDraftForm] = useState(false);
+    const [draftProjectId, setDraftProjectId] = useState('');
+    const [draftEmployeeId, setDraftEmployeeId] = useState('');
+    const [draftError, setDraftError] = useState<string | null>(null);
     const WEEKS_VISIBLE = 8;
 
     const grid = useWeeklyAllocationGrid({
@@ -89,7 +82,7 @@ export function Allocation() {
 
     const gridFilters = useMemo((): WeeklyGridFilters | null => {
         if (projLoading) return null;
-        const range = buildAllocationWeekRange();
+        const range = buildPlanningWeekRange();
         return {
             ...range,
             utilization: 'all',
@@ -110,49 +103,33 @@ export function Allocation() {
         });
     }, [gridFilters, grid]);
 
-    useEffect(() => {
-        if (grid.loading || projLoading || projects.length === 0) return;
-
-        const missingProjects = projects.filter(
-            (project) => !grid.plannerRows.some((r) => r.projectId === project.id)
-        );
-        for (const project of missingProjects) {
-            grid.appendPlannerRow({
-                rowKey: `placeholder:${project.id}`,
-                employeeId: '',
-                employeeName: '',
-                projectId: project.id,
-                projectName: project.name,
-                projectCode: project.code,
-                weekCells: {},
-            });
-        }
-    }, [grid.loading, projLoading, projects, grid.plannerRows, grid]);
+    const planningWeeks = useMemo(() => filterWeeksFromCurrent(grid.weeks), [grid.weeks]);
 
     const visibleWeeks = useMemo(() => {
-        if (grid.weeks.length === 0) return [];
-        const start = Math.min(weekWindowStart, Math.max(0, grid.weeks.length - WEEKS_VISIBLE));
-        return grid.weeks.slice(start, start + WEEKS_VISIBLE);
-    }, [grid.weeks, weekWindowStart]);
+        if (planningWeeks.length === 0) return [];
+        const start = Math.min(weekWindowStart, Math.max(0, planningWeeks.length - WEEKS_VISIBLE));
+        return planningWeeks.slice(start, start + WEEKS_VISIBLE);
+    }, [planningWeeks, weekWindowStart]);
 
     const canScrollWeeksBack = weekWindowStart > 0;
-    const canScrollWeeksForward = weekWindowStart + WEEKS_VISIBLE < grid.weeks.length;
+    const canScrollWeeksForward = weekWindowStart + WEEKS_VISIBLE < planningWeeks.length;
 
     const displayRows = useMemo((): AllocationGridRow[] => {
         return grid.plannerRows
             .filter(
                 (row) =>
                     row.projectCode !== BENCH_PROJECT_CODE &&
-                    row.projectName !== 'Available / Bench'
+                    row.projectName !== 'Available / Bench' &&
+                    !row.rowKey.startsWith('draft:') &&
+                    !row.rowKey.startsWith('placeholder:')
             )
             .map((row) => ({
                 ...row,
                 employeeRole: row.employeeId
                     ? employeeRoleMap.get(row.employeeId) || '—'
                     : '—',
-                isDraft:
-                    row.rowKey.startsWith('draft:') || row.rowKey.startsWith('placeholder:'),
-                isNewRow: row.rowKey.startsWith('draft:'),
+                isDraft: false,
+                isNewRow: false,
             }))
             .sort((a, b) => {
                 const byProject = a.projectName.localeCompare(b.projectName, undefined, {
@@ -222,17 +199,44 @@ export function Allocation() {
     );
 
     const handleAddRow = useCallback(() => {
-        const draftKey = `draft:${Date.now()}`;
+        setDraftProjectId('');
+        setDraftEmployeeId('');
+        setDraftError(null);
+        setShowDraftForm(true);
+    }, []);
+
+    const handleCancelDraft = useCallback(() => {
+        setShowDraftForm(false);
+        setDraftProjectId('');
+        setDraftEmployeeId('');
+        setDraftError(null);
+    }, []);
+
+    const handleSaveDraftRow = useCallback(() => {
+        const project = projectOptions.find((p) => p.id === draftProjectId);
+        const emp = employeeOptions.find((e) => e.id === draftEmployeeId);
+        if (!project || !emp) {
+            setDraftError('Select both project and resource.');
+            return;
+        }
+
+        const newKey = rowKey(emp.id, project.id);
+        if (grid.plannerRows.some((r) => r.rowKey === newKey)) {
+            setDraftError('This resource is already allocated to that project.');
+            return;
+        }
+
         grid.appendPlannerRow({
-            rowKey: draftKey,
-            employeeId: '',
-            employeeName: '',
-            projectId: '',
-            projectName: '',
-            projectCode: '',
+            rowKey: newKey,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            projectId: project.id,
+            projectName: project.name,
+            projectCode: project.code,
             weekCells: {},
         });
-    }, [grid]);
+        handleCancelDraft();
+    }, [draftProjectId, draftEmployeeId, projectOptions, employeeOptions, grid, handleCancelDraft]);
 
     const handleSave = async () => {
         await grid.saveBulk();
@@ -272,13 +276,13 @@ export function Allocation() {
                             {' · '}
                             {filteredRows.filter((r) => r.employeeId).length} resource
                             {filteredRows.filter((r) => r.employeeId).length === 1 ? '' : 's'}
-                            {grid.weeks.length > 0 &&
-                                ` · ${format(parseISO(grid.weeks[0]), 'd MMM yyyy')} – ${format(parseISO(grid.weeks[grid.weeks.length - 1]), 'd MMM yyyy')}`}
+                            {planningWeeks.length > 0 &&
+                                ` · ${format(parseISO(planningWeeks[0]), 'd MMM yyyy')} – ${format(parseISO(planningWeeks[planningWeeks.length - 1]), 'd MMM yyyy')}`}
                         </span>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                        {grid.weeks.length > WEEKS_VISIBLE && (
+                        {planningWeeks.length > WEEKS_VISIBLE && (
                             <>
                                 <Button
                                     type="button"
@@ -294,8 +298,8 @@ export function Allocation() {
                                 </Button>
                                 <span className="text-xs text-gray-500">
                                     Weeks {weekWindowStart + 1}–
-                                    {Math.min(weekWindowStart + WEEKS_VISIBLE, grid.weeks.length)} of{' '}
-                                    {grid.weeks.length}
+                                    {Math.min(weekWindowStart + WEEKS_VISIBLE, planningWeeks.length)} of{' '}
+                                    {planningWeeks.length}
                                 </span>
                                 <Button
                                     type="button"
@@ -307,7 +311,7 @@ export function Allocation() {
                                         setWeekWindowStart((s) =>
                                             Math.min(
                                                 s + WEEKS_VISIBLE,
-                                                grid.weeks.length - WEEKS_VISIBLE
+                                                planningWeeks.length - WEEKS_VISIBLE
                                             )
                                         )
                                     }
@@ -378,9 +382,16 @@ export function Allocation() {
                     onResourceSearchChange={setSearchResource}
                 />
 
+                {gridFilters && (
+                    <AllocationSuggestionsPanel
+                        weekStartFrom={gridFilters.weekStartFrom}
+                        weekStartTo={gridFilters.weekStartTo}
+                    />
+                )}
+
                 <AllocationWeeklyGrid
                     rows={filteredRows}
-                    weeks={visibleWeeks.length > 0 ? visibleWeeks : grid.weeks}
+                    weeks={visibleWeeks.length > 0 ? visibleWeeks : planningWeeks}
                     employees={employeeOptions}
                     projects={projectOptions}
                     canEdit={canEditGrid}
@@ -390,6 +401,22 @@ export function Allocation() {
                     onProjectChange={handleProjectChange}
                     loading={grid.loading || projLoading}
                 />
+
+                {canEditGrid && (
+                    <AllocationDraftRow
+                        open={showDraftForm}
+                        projects={projectOptions}
+                        employees={employeeOptions}
+                        projectId={draftProjectId}
+                        employeeId={draftEmployeeId}
+                        error={draftError}
+                        saving={false}
+                        onProjectChange={setDraftProjectId}
+                        onEmployeeChange={setDraftEmployeeId}
+                        onSave={handleSaveDraftRow}
+                        onCancel={handleCancelDraft}
+                    />
+                )}
 
                 <AllocationGridLegend />
             </div>

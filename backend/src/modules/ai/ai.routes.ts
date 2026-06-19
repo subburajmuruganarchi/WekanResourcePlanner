@@ -22,6 +22,10 @@ router.get('/approval-anomalies', requireRole('Admin', 'Project Manager'), (req,
     aiController.approvalAnomalies(req, res, next)
 );
 
+router.get('/allocation-suggestions', requireRole('Admin', 'Project Manager'), (req, res, next) =>
+    aiController.allocationSuggestions(req, res, next)
+);
+
 router.get('/time-entry-suggestions', requireRole(), (req, res, next) =>
     aiController.timeEntrySuggestions(req, res, next)
 );

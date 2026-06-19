@@ -95,13 +95,13 @@ export function EmployeeListCards({ employees, onEdit }: EmployeeListCardsProps)
                                     </p>
                                     <div className="flex flex-wrap gap-1.5">
                                         {skills.map((skill, i) => (
-                                            <div
+                                            <Badge
                                                 key={`${skill.name}-${i}`}
-                                                className="inline-flex items-center gap-1 rounded-md border border-gray-100 bg-gray-50 px-2 py-1 text-xs"
+                                                variant="secondary"
+                                                className="text-xs font-medium"
                                             >
-                                                <span className="font-medium text-gray-800">{skill.name}</span>
-                                                <span className="text-gray-400">{skill.level}</span>
-                                            </div>
+                                                {skill.name}
+                                            </Badge>
                                         ))}
                                     </div>
                                 </div>

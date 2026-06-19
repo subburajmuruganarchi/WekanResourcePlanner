@@ -14,11 +14,7 @@ import {
 } from '../../services/weekly-capacity/weekly-capacity.engine';
 import { weeklyActualsSyncService } from '../../services/weekly-actuals/weekly-actuals-sync.service';
 import { AppError } from '../../common/errors/app-error';
-import {
-    pipelineOverrunProjects,
-    pipelineUnderutilizedEmployees,
-    pipelineUtilizationVarianceByProject,
-} from './utilization.aggregations';
+import { features } from '../../config/features';
 import type {
     UtilizationVarianceResponse,
     UtilizationVarianceRow,
@@ -90,13 +86,78 @@ export class UtilizationService {
                   ) / 100
                 : 0;
 
-        const underutilized = await WeeklyAllocationEntry.aggregate(
-            pipelineUnderutilizedEmployees(weekTo) as unknown as PipelineStage[]
-        );
+        const capacity = features.weeklyCapacityHours ?? 40;
 
-        const overrunProjects = await WeeklyAllocationEntry.aggregate(
-            pipelineOverrunProjects(weekTo) as unknown as PipelineStage[]
-        );
+        const projectTotals = new Map<
+            string,
+            {
+                projectId: string;
+                projectName?: string;
+                projectCode?: string;
+                plannedHours: number;
+                actualHours: number;
+            }
+        >();
+        const employeeWeekTotals = new Map<
+            string,
+            {
+                employeeId: string;
+                employeeName?: string;
+                plannedHours: number;
+                actualHours: number;
+            }
+        >();
+
+        for (const r of rows) {
+            const pt = projectTotals.get(r.projectId) ?? {
+                projectId: r.projectId,
+                projectName: r.projectName,
+                projectCode: r.projectCode,
+                plannedHours: 0,
+                actualHours: 0,
+            };
+            pt.plannedHours += r.plannedHours;
+            pt.actualHours += r.actualHours;
+            projectTotals.set(r.projectId, pt);
+
+            const ewKey = `${r.employeeId}:${r.weekStart}`;
+            const ew = employeeWeekTotals.get(ewKey) ?? {
+                employeeId: r.employeeId,
+                employeeName: r.employeeName,
+                plannedHours: 0,
+                actualHours: 0,
+            };
+            ew.plannedHours += r.plannedHours;
+            ew.actualHours += r.actualHours;
+            employeeWeekTotals.set(ewKey, ew);
+        }
+
+        const overrunProjects = [...projectTotals.values()]
+            .filter((p) => p.actualHours > p.plannedHours + 0.01)
+            .map((p) => ({
+                projectId: p.projectId,
+                projectName: p.projectName,
+                projectCode: p.projectCode,
+                plannedHours: Math.round(p.plannedHours * 100) / 100,
+                actualHours: Math.round(p.actualHours * 100) / 100,
+                overrunHours: Math.round((p.actualHours - p.plannedHours) * 100) / 100,
+            }))
+            .sort((a, b) => b.overrunHours - a.overrunHours);
+
+        const underutilizedEmployees = [...employeeWeekTotals.values()]
+            .filter(
+                (e) =>
+                    e.plannedHours >= capacity * 0.5 &&
+                    e.actualHours < e.plannedHours * 0.5
+            )
+            .map((e) => ({
+                employeeId: e.employeeId,
+                employeeName: e.employeeName,
+                plannedHours: Math.round(e.plannedHours * 100) / 100,
+                actualHours: Math.round(e.actualHours * 100) / 100,
+                varianceHours: Math.round((e.plannedHours - e.actualHours) * 100) / 100,
+            }))
+            .sort((a, b) => b.varianceHours - a.varianceHours);
 
         return {
             weekStartFrom: weekStartToIsoDate(weekFrom),
@@ -107,24 +168,11 @@ export class UtilizationService {
                 totalActualHours: Math.round(totalActual * 100) / 100,
                 totalVarianceHours: Math.round(totalVariance * 100) / 100,
                 avgVariancePercent,
-                underutilizedEmployeeCount: underutilized.length,
+                underutilizedEmployeeCount: underutilizedEmployees.length,
                 overrunProjectCount: overrunProjects.length,
             },
-            underutilizedEmployees: underutilized.map((u) => ({
-                employeeId: u.employeeId.toString(),
-                employeeName: u.employeeName,
-                plannedHours: u.plannedHours,
-                actualHours: u.actualHours,
-                varianceHours: u.varianceHours,
-            })),
-            overrunProjects: overrunProjects.map((p) => ({
-                projectId: p.projectId.toString(),
-                projectName: p.projectName,
-                projectCode: p.projectCode,
-                plannedHours: p.plannedHours,
-                actualHours: p.actualHours,
-                overrunHours: p.overrunHours,
-            })),
+            underutilizedEmployees,
+            overrunProjects,
         };
     }
 

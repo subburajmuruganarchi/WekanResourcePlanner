@@ -8,7 +8,6 @@ import {
     Clock,
     Target,
     FileBarChart,
-    List,
     Sparkles,
     ClipboardCheck,
     Shield,
@@ -27,7 +26,6 @@ const navItems = [
     { label: "OKRs", icon: Target, path: "/okrs" },
     { label: "Insights Center", icon: Sparkles, path: "/insights" },
     { label: "Reports", icon: FileBarChart, path: "/reports" },
-    { label: "Skill Master", icon: List, path: "/skills" },
     { label: "Inputs", icon: Upload, path: "/inputs" },
     { label: "User Control", icon: Shield, path: "/user-control" },
 ]
@@ -48,7 +46,6 @@ export function Sidebar({ className, ...props }: SidebarProps) {
         "/okrs": ["*"],
         "/reports": ["Admin", "Project Manager"],
         "/insights": ["Admin", "Project Manager"],
-        "/skills": ["Admin"],
         "/inputs": ["Admin"],
         "/user-control": ["Admin"],
     }

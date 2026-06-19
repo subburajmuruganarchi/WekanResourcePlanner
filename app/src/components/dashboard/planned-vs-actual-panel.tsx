@@ -56,12 +56,9 @@ interface PlannedVsActualPanelProps {
 
 
 
-/** Minimum bar width for log-scale chart (0h cannot render on log axis). */
-
+/** Minimum bar width for charts (0h shown as 0). */
 function chartHours(hours: number): number {
-
-    return hours > 0 ? hours : 0.5;
-
+    return Math.max(0, hours);
 }
 
 
@@ -239,17 +236,10 @@ export function PlannedVsActualPanel({
                                             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
 
                                             <XAxis
-
                                                 type="number"
-
-                                                scale="log"
-
-                                                domain={[0.5, 'auto']}
-
+                                                domain={[0, 'auto']}
                                                 tick={{ fontSize: 10 }}
-
-                                                tickFormatter={(v) => `${v >= 1 ? Math.round(v) : v}h`}
-
+                                                tickFormatter={(v) => `${Math.round(Number(v))}h`}
                                             />
 
                                             <YAxis

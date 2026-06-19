@@ -77,6 +77,30 @@ export class AiController {
         }
     }
 
+    async allocationSuggestions(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { weekStartFrom, weekStartTo, projectId } = req.query;
+            if (!weekStartFrom || !weekStartTo) {
+                res.status(400).json({
+                    status: 'error',
+                    message: 'weekStartFrom and weekStartTo are required',
+                });
+                return;
+            }
+            const { buildAllocationSuggestions } = await import(
+                '../../services/ai/allocation-suggestion.service'
+            );
+            const data = await buildAllocationSuggestions({
+                weekStartFrom: String(weekStartFrom),
+                weekStartTo: String(weekStartTo),
+                projectId: projectId ? String(projectId) : undefined,
+            });
+            res.json({ status: 'success', data });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async timeEntrySuggestions(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const { employeeId, week } = req.query;
