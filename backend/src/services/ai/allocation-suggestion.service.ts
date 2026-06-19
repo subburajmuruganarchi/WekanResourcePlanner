@@ -1,131 +1,257 @@
-import { format, parseISO } from 'date-fns';
-import { Project } from '../../modules/projects/project.model';
+import { addWeeks, format, parseISO, startOfWeek } from 'date-fns';
+import { projectService } from '../../modules/projects/project.service';
 import { WeeklyAllocationEntry } from '../../modules/weekly-allocations/weekly-allocation-entry.model';
 import { features } from '../../config/features';
 
 const WEEKLY_CAPACITY = features.weeklyCapacityHours ?? 40;
+const HOURS_PER_WORK_WEEK = 40; // 5 × 8h default when role uses hoursPerDay
 
-export interface AllocationSuggestion {
+export type AllocationSuggestionStatus = 'missing' | 'partial' | 'filled' | 'overload';
+
+export interface AllocationRoleWeekSuggestion {
     weekStart: string;
     weekLabel: string;
-    type: 'SHORTAGE' | 'OVERLOAD' | 'REDISTRIBUTE';
-    severity: 'info' | 'warning' | 'critical';
+    projectId: string;
+    projectName: string;
+    projectCode: string;
+    roleName: string;
+    skillName?: string;
+    headcountGap: number;
+    recommendedHours: number;
+    plannedHours: number;
+    hoursToPlan: number;
+    status: AllocationSuggestionStatus;
     message: string;
-    projectId?: string;
-    projectName?: string;
+}
+
+export interface AllocationSuggestionsResponse {
+    weekStartFrom: string;
+    weekStartTo: string;
+    items: AllocationRoleWeekSuggestion[];
+    summary: {
+        roleGaps: number;
+        projectsAffected: number;
+        weeksAffected: number;
+    };
+}
+
+function listWeekStarts(fromIso: string, toIso: string): string[] {
+    const out: string[] = [];
+    let cur = parseISO(fromIso);
+    const end = parseISO(toIso);
+    while (cur <= end) {
+        out.push(format(cur, 'yyyy-MM-dd'));
+        cur = addWeeks(cur, 1);
+    }
+    return out;
+}
+
+function weekOverlapsProject(weekStart: string, projectStart: string, projectEnd: string): boolean {
+    const week = parseISO(weekStart);
+    const weekEnd = addWeeks(week, 1);
+    const start = parseISO(projectStart);
+    const end = parseISO(projectEnd);
+    return week < end && weekEnd > start;
+}
+
+function rolesMatch(employeeRole: string | undefined, requiredRole: string): boolean {
+    if (!employeeRole?.trim()) return false;
+    const a = employeeRole.toLowerCase().trim();
+    const b = requiredRole.toLowerCase().trim();
+    return a === b || a.includes(b) || b.includes(a);
+}
+
+function round1(n: number): number {
+    return Math.round(n * 10) / 10;
 }
 
 export async function buildAllocationSuggestions(params: {
     weekStartFrom: string;
     weekStartTo: string;
     projectId?: string;
-}): Promise<AllocationSuggestion[]> {
-    const projectFilter: Record<string, unknown> = { status: 'Active' };
-    if (params.projectId) {
-        projectFilter._id = params.projectId;
-    }
+}): Promise<AllocationSuggestionsResponse> {
+    const currentMonday = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    const rangeFrom = params.weekStartFrom >= currentMonday ? params.weekStartFrom : currentMonday;
 
-    const projects = await Project.find(projectFilter)
-        .select('_id project_name project_code')
-        .lean();
+    const projects = await projectService.findAll({
+        status: 'Active',
+        ...(params.projectId ? {} : {}),
+    });
+    const activeProjects = params.projectId
+        ? projects.filter((p) => p.id === params.projectId)
+        : projects;
 
     const entries = await WeeklyAllocationEntry.find({
-        week_start: { $gte: params.weekStartFrom, $lte: params.weekStartTo },
+        week_start: { $gte: rangeFrom, $lte: params.weekStartTo },
         ...(params.projectId ? { project_id: params.projectId } : {}),
     })
-        .populate<{ employee_id: { job_role?: string; first_name?: string; last_name?: string } }>(
-            'employee_id',
-            'job_role first_name last_name'
-        )
+        .populate<{ employee_id: { job_role?: string } }>('employee_id', 'job_role')
         .lean();
 
-    const suggestions: AllocationSuggestion[] = [];
-    const weeks = new Set<string>();
-    for (const e of entries) {
-        weeks.add(format(new Date(e.week_start), 'yyyy-MM-dd'));
-    }
-
-    const weekList = [...weeks].sort();
-    if (weekList.length === 0) {
-        return [
-            {
-                weekStart: params.weekStartFrom,
-                weekLabel: format(parseISO(params.weekStartFrom), 'MMM d'),
-                type: 'SHORTAGE',
-                severity: 'info',
-                message: 'No weekly allocation data in this range — add rows in Resource Allocation.',
-            },
-        ];
-    }
-
-    // Employee overload by week
     const employeeWeekHours = new Map<string, number>();
+
     for (const entry of entries) {
-        const emp = entry.employee_id as { _id?: { toString: () => string } };
-        if (!emp?._id) continue;
+        const projectId = entry.project_id?.toString();
+        if (!projectId) continue;
         const week = format(new Date(entry.week_start), 'yyyy-MM-dd');
-        const key = `${emp._id.toString()}:${week}`;
-        employeeWeekHours.set(key, (employeeWeekHours.get(key) ?? 0) + (entry.planned_hours ?? 0));
-    }
+        const hours = entry.planned_hours ?? 0;
 
-    for (const [key, hours] of employeeWeekHours) {
-        if (hours <= WEEKLY_CAPACITY) continue;
-        const [, week] = key.split(':');
-        suggestions.push({
-            weekStart: week,
-            weekLabel: format(parseISO(week), 'MMM d'),
-            type: 'OVERLOAD',
-            severity: 'critical',
-            message: `Resource over ${WEEKLY_CAPACITY}h/week (${Math.round(hours)}h planned) — suggest redistribution.`,
-        });
-    }
-
-    // Project role gaps (simplified — compare weekly hours vs rough need)
-    for (const week of weekList) {
-        for (const project of projects) {
-            const projectId = project._id.toString();
-            const weekEntries = entries.filter(
-                (e) =>
-                    e.project_id?.toString() === projectId &&
-                    format(new Date(e.week_start), 'yyyy-MM-dd') === week
-            );
-            const totalHours = weekEntries.reduce((s, e) => s + (e.planned_hours ?? 0), 0);
-            if (weekEntries.length === 0 && projects.length <= 20) {
-                suggestions.push({
-                    weekStart: week,
-                    weekLabel: format(parseISO(week), 'MMM d'),
-                    type: 'SHORTAGE',
-                    severity: 'warning',
-                    projectId,
-                    projectName: project.project_name,
-                    message: `${project.project_name}: no resources planned for this week.`,
-                });
-            } else if (totalHours > WEEKLY_CAPACITY * 3) {
-                suggestions.push({
-                    weekStart: week,
-                    weekLabel: format(parseISO(week), 'MMM d'),
-                    type: 'REDISTRIBUTE',
-                    severity: 'warning',
-                    projectId,
-                    projectName: project.project_name,
-                    message: `${project.project_name}: ${Math.round(totalHours)}h planned — review for frontend/backend balance.`,
-                });
-            }
+        const empId = entry.employee_id?.toString();
+        if (empId) {
+            const ewKey = `${empId}:${week}`;
+            employeeWeekHours.set(ewKey, (employeeWeekHours.get(ewKey) ?? 0) + hours);
         }
     }
 
-    // Role bucket hints from employee job roles
-    const roleGapsByWeek = new Map<string, Map<string, number>>();
-    for (const entry of entries) {
-        const emp = entry.employee_id as { job_role?: string };
-        const week = format(new Date(entry.week_start), 'yyyy-MM-dd');
-        const role = emp?.job_role || 'General';
-        if (!roleGapsByWeek.has(week)) roleGapsByWeek.set(week, new Map());
-        const m = roleGapsByWeek.get(week)!;
-        m.set(role, (m.get(role) ?? 0) + (entry.planned_hours ?? 0));
+    const weeks = listWeekStarts(rangeFrom, params.weekStartTo);
+    const items: AllocationRoleWeekSuggestion[] = [];
+
+    for (const weekStart of weeks) {
+        const weekLabel = format(parseISO(weekStart), 'MMM d');
+
+        for (const project of activeProjects) {
+            if (!weekOverlapsProject(weekStart, project.startDate, project.endDate)) continue;
+
+            const roleEfforts = project.roleEfforts ?? [];
+            const skillReqs = project.skillRequirements ?? [];
+
+            const roleTargets = new Map<
+                string,
+                { roleName: string; skillName?: string; headcountGap: number; recommendedHours: number }
+            >();
+
+            for (const role of roleEfforts) {
+                const roleName = role.roleName || 'Role';
+                const headcount = role.originalHeadcount ?? 1;
+                const gap = Math.max(0, role.remainingHeadcount ?? 0);
+                const weeklyHours = round1((role.hoursPerDay ?? 8) * 5 * headcount);
+                const existing = roleTargets.get(roleName.toLowerCase());
+                if (existing) {
+                    existing.recommendedHours = round1(existing.recommendedHours + weeklyHours);
+                    existing.headcountGap = Math.max(existing.headcountGap, gap);
+                } else {
+                    roleTargets.set(roleName.toLowerCase(), {
+                        roleName,
+                        headcountGap: gap,
+                        recommendedHours: weeklyHours,
+                    });
+                }
+            }
+
+            for (const skill of skillReqs) {
+                const gap = Math.max(0, skill.remainingHeadcount ?? 0);
+                if (gap <= 0 && (skill.originalHeadcount ?? 0) <= 0) continue;
+                const roleName = skill.roleName || skill.skillName || 'Required role';
+                const skillName = skill.skillName;
+                const weeklyHours = round1(HOURS_PER_WORK_WEEK * Math.max(gap, skill.originalHeadcount ?? 1));
+                const key = roleName.toLowerCase();
+                const existing = roleTargets.get(key);
+                if (existing) {
+                    existing.skillName = skillName ?? existing.skillName;
+                    existing.headcountGap = Math.max(existing.headcountGap, gap);
+                    existing.recommendedHours = Math.max(existing.recommendedHours, weeklyHours);
+                } else {
+                    roleTargets.set(key, {
+                        roleName,
+                        skillName,
+                        headcountGap: gap,
+                        recommendedHours: weeklyHours,
+                    });
+                }
+            }
+
+            if (roleTargets.size === 0) continue;
+
+            for (const target of roleTargets.values()) {
+                let plannedHours = 0;
+                for (const entry of entries) {
+                    const entryProjectId = entry.project_id?.toString();
+                    if (!entryProjectId || entryProjectId !== project.id) continue;
+                    const entryWeek = format(new Date(entry.week_start), 'yyyy-MM-dd');
+                    if (entryWeek !== weekStart) continue;
+                    const empRole = (entry.employee_id as { job_role?: string })?.job_role;
+                    if (rolesMatch(empRole, target.roleName)) {
+                        plannedHours += entry.planned_hours ?? 0;
+                    }
+                }
+                plannedHours = round1(plannedHours);
+
+                const hoursToPlan = round1(Math.max(0, target.recommendedHours - plannedHours));
+                let status: AllocationSuggestionStatus = 'filled';
+                if (hoursToPlan <= 0.5 && target.headcountGap <= 0.01) {
+                    status = 'filled';
+                } else if (plannedHours <= 0.01) {
+                    status = 'missing';
+                } else {
+                    status = 'partial';
+                }
+
+                if (status === 'filled') continue;
+
+                const headcountPart =
+                    target.headcountGap > 0
+                        ? ` · ${round1(target.headcountGap)} headcount gap`
+                        : '';
+                const skillPart = target.skillName ? ` (${target.skillName})` : '';
+
+                items.push({
+                    weekStart,
+                    weekLabel,
+                    projectId: project.id,
+                    projectName: project.name,
+                    projectCode: project.code,
+                    roleName: target.roleName,
+                    skillName: target.skillName,
+                    headcountGap: round1(target.headcountGap),
+                    recommendedHours: target.recommendedHours,
+                    plannedHours,
+                    hoursToPlan,
+                    status,
+                    message: `Plan ${hoursToPlan}h for ${target.roleName}${skillPart} on ${project.name} (target ${target.recommendedHours}h/week, ${plannedHours}h scheduled${headcountPart}).`,
+                });
+            }
+        }
+
+        for (const [key, hours] of employeeWeekHours) {
+            if (!key.endsWith(`:${weekStart}`)) continue;
+            if (hours <= WEEKLY_CAPACITY) continue;
+            items.push({
+                weekStart,
+                weekLabel,
+                projectId: '',
+                projectName: 'All projects',
+                projectCode: '—',
+                roleName: 'Resource capacity',
+                headcountGap: 0,
+                recommendedHours: WEEKLY_CAPACITY,
+                plannedHours: round1(hours),
+                hoursToPlan: 0,
+                status: 'overload',
+                message: `A resource has ${round1(hours)}h planned this week (over ${WEEKLY_CAPACITY}h capacity) — redistribute hours.`,
+            });
+        }
     }
 
-    return suggestions
-        .sort((a, b) => a.weekStart.localeCompare(b.weekStart))
-        .slice(0, 30);
+    const gapItems = items.filter((i) => i.status !== 'overload');
+    const projectIds = new Set(gapItems.map((i) => i.projectId).filter(Boolean));
+    const weekSet = new Set(gapItems.map((i) => i.weekStart));
+
+    return {
+        weekStartFrom: rangeFrom,
+        weekStartTo: params.weekStartTo,
+        items: items
+            .sort((a, b) => {
+                const byWeek = a.weekStart.localeCompare(b.weekStart);
+                if (byWeek !== 0) return byWeek;
+                const byProject = a.projectName.localeCompare(b.projectName);
+                if (byProject !== 0) return byProject;
+                return b.hoursToPlan - a.hoursToPlan;
+            })
+            .slice(0, 50),
+        summary: {
+            roleGaps: gapItems.length,
+            projectsAffected: projectIds.size,
+            weeksAffected: weekSet.size,
+        },
+    };
 }

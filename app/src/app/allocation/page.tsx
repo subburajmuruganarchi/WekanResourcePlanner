@@ -389,19 +389,6 @@ export function Allocation() {
                     />
                 )}
 
-                <AllocationWeeklyGrid
-                    rows={filteredRows}
-                    weeks={visibleWeeks.length > 0 ? visibleWeeks : planningWeeks}
-                    employees={employeeOptions}
-                    projects={projectOptions}
-                    canEdit={canEditGrid}
-                    dirtyKeys={grid.dirtyKeys}
-                    onPlannedHoursChange={grid.updatePlannedHours}
-                    onEmployeeChange={handleEmployeeChange}
-                    onProjectChange={handleProjectChange}
-                    loading={grid.loading || projLoading}
-                />
-
                 {canEditGrid && (
                     <AllocationDraftRow
                         open={showDraftForm}
@@ -417,6 +404,19 @@ export function Allocation() {
                         onCancel={handleCancelDraft}
                     />
                 )}
+
+                <AllocationWeeklyGrid
+                    rows={filteredRows}
+                    weeks={visibleWeeks.length > 0 ? visibleWeeks : planningWeeks}
+                    employees={employeeOptions}
+                    projects={projectOptions}
+                    canEdit={canEditGrid}
+                    dirtyKeys={grid.dirtyKeys}
+                    onPlannedHoursChange={grid.updatePlannedHours}
+                    onEmployeeChange={handleEmployeeChange}
+                    onProjectChange={handleProjectChange}
+                    loading={grid.loading || projLoading}
+                />
 
                 <AllocationGridLegend />
             </div>
