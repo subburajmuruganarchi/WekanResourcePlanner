@@ -5,7 +5,6 @@ import {
     ModuleRegistry,
     type CellClassParams,
     type ColDef,
-    type ColGroupDef,
     type EditableCallbackParams,
     type ValueSetterParams,
 } from 'ag-grid-community';
@@ -145,16 +144,17 @@ export function AllocationWeeklyGrid({
         [employeeWeekTotals]
     );
 
-    const weekColumnDefs = useMemo((): (ColDef<AllocationGridRow> | ColGroupDef<AllocationGridRow>)[] => {
+    const weekColumnDefs = useMemo((): ColDef<AllocationGridRow>[] => {
         return weeks.map((weekStart) => {
             const header = format(parseISO(weekStart), 'MMM d');
             const getCell = (data: AllocationGridRow | undefined) => data?.weekCells[weekStart];
 
-            const planCol: ColDef<AllocationGridRow> = {
-                colId: `plan_${weekStart}`,
-                headerName: 'Plan',
-                width: 64,
-                minWidth: 56,
+            return {
+                colId: `week_${weekStart}`,
+                headerName: header,
+                headerTooltip: weekStart,
+                width: 72,
+                minWidth: 64,
                 editable: (params) =>
                     canEdit && !!params.data?.employeeId && !!params.data?.projectId,
                 type: 'numericColumn',
@@ -196,59 +196,6 @@ export function AllocationWeeklyGrid({
                     },
                 },
             };
-
-            const actualCol: ColDef<AllocationGridRow> = {
-                colId: `actual_${weekStart}`,
-                headerName: 'Act',
-                headerTooltip: 'Approved time entries (read-only)',
-                width: 56,
-                minWidth: 48,
-                editable: false,
-                type: 'numericColumn',
-                filter: false,
-                sortable: false,
-                suppressMovable: true,
-                valueGetter: (params) => getCell(params.data)?.actualHours ?? 0,
-                valueFormatter: (p) => formatHours(Number(p.value ?? 0)),
-                tooltipValueGetter: (p) => cellTooltip(getCell(p.data)),
-                cellClass: 'wp-cell-actual',
-            };
-
-            const deltaCol: ColDef<AllocationGridRow> = {
-                colId: `delta_${weekStart}`,
-                headerName: 'Δ',
-                headerTooltip: 'Actual − planned (positive = overrun on this project)',
-                width: 52,
-                minWidth: 44,
-                editable: false,
-                filter: false,
-                sortable: false,
-                suppressMovable: true,
-                valueGetter: (params) => {
-                    const cell = getCell(params.data);
-                    if (!cell) return 0;
-                    return cell.deltaHours ?? cell.actualHours - cell.plannedHours;
-                },
-                valueFormatter: (p) => {
-                    const v = Number(p.value ?? 0);
-                    if (Math.abs(v) < 0.01) return '—';
-                    const sign = v > 0 ? '+' : '';
-                    return `${sign}${formatHours(v)}`;
-                },
-                tooltipValueGetter: (p) => cellTooltip(getCell(p.data)),
-                cellClassRules: {
-                    'wp-cell-variance-over': (p) => Number(p.value ?? 0) > 0.01,
-                    'wp-cell-variance-under': (p) => Number(p.value ?? 0) < -0.01,
-                },
-            };
-
-            return {
-                groupId: `week_${weekStart}`,
-                headerName: header,
-                headerTooltip: weekStart,
-                marryChildren: true,
-                children: [planCol, actualCol, deltaCol],
-            };
         });
     }, [
         weeks,
@@ -260,7 +207,7 @@ export function AllocationWeeklyGrid({
         employeeWeekTotals,
     ]);
 
-    const columnDefs = useMemo((): (ColDef<AllocationGridRow> | ColGroupDef<AllocationGridRow>)[] => {
+    const columnDefs = useMemo((): ColDef<AllocationGridRow>[] => {
         const pinned: ColDef<AllocationGridRow>[] = [
             {
                 colId: 'project',

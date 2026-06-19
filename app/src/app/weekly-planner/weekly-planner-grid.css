@@ -108,3 +108,38 @@
 .wp-capacity-scroll::-webkit-scrollbar-thumb:hover {
     background-color: #9ca3af;
 }
+
+/* Shared grid colour guide (Resource Allocation + Weekly Planner) */
+.wp-legend-swatch {
+    display: inline-block;
+    width: 1.75rem;
+    height: 1.125rem;
+    border-radius: 0.25rem;
+    border: 1px solid #e5e7eb;
+    flex-shrink: 0;
+}
+
+.wp-legend-swatch--over {
+    background-color: #fef2f2;
+    border-color: #fecaca;
+}
+
+.wp-legend-swatch--high-util {
+    background-color: #eff6ff;
+    border-color: #bfdbfe;
+}
+
+.wp-legend-swatch--bench {
+    background-color: #f0fdf4;
+    border-color: #bbf7d0;
+}
+
+.wp-legend-swatch--dirty {
+    background-color: #fffbeb;
+    border-color: #f59e0b;
+}
+
+.wp-legend-swatch--default {
+    background-color: #ffffff;
+    border-color: #d1d5db;
+}

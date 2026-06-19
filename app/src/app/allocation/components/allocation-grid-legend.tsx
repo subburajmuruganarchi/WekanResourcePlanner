@@ -1,89 +1,77 @@
 import { Info } from 'lucide-react';
-import type { CSSProperties } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { DEFAULT_WEEKLY_CAPACITY_HOURS } from '@/lib/weekly-grid-pivot';
 
-interface LegendSwatchProps {
-    label: string;
-    description: string;
-    style: CSSProperties;
-    className?: string;
-}
-
-function LegendSwatch({ label, description, style, className }: LegendSwatchProps) {
-    return (
-        <div className="flex items-start gap-2 min-w-[200px]">
-            <span
-                className={`mt-0.5 h-5 w-8 shrink-0 rounded border border-gray-300 ${className ?? ''}`}
-                style={style}
-                aria-hidden
-            />
-            <div>
-                <p className="text-xs font-semibold text-gray-800">{label}</p>
-                <p className="text-xs text-gray-600">{description}</p>
-            </div>
-        </div>
-    );
-}
+const LEGEND_ITEMS = [
+    {
+        swatchClass: 'wp-legend-swatch--over',
+        label: 'Over capacity',
+        detail: `Total planned hours exceed ${DEFAULT_WEEKLY_CAPACITY_HOURS}h for that resource in the week.`,
+    },
+    {
+        swatchClass: 'wp-legend-swatch--high-util',
+        label: 'High utilization',
+        detail: 'Resource is at 80% or more of weekly capacity.',
+    },
+    {
+        swatchClass: 'wp-legend-swatch--bench',
+        label: 'No allocation',
+        detail: 'Resource has no planned hours in that week.',
+    },
+    {
+        swatchClass: 'wp-legend-swatch--dirty',
+        label: 'Unsaved change',
+        detail: 'Cell was edited — use Save changes to persist.',
+    },
+] as const;
 
 export function AllocationGridLegend() {
     return (
-        <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-gray-700">
-            <Info className="w-4 h-4 shrink-0 mt-0.5 text-gray-500" />
-            <div className="space-y-3 text-xs">
-                <div>
-                    <p className="font-semibold text-gray-900 mb-2">Plan column</p>
-                    <div className="flex flex-wrap gap-x-6 gap-y-3">
-                        <LegendSwatch
-                            label="Over capacity"
-                            description={`Resource total exceeds ${DEFAULT_WEEKLY_CAPACITY_HOURS} hrs/week across all projects.`}
-                            style={{ backgroundColor: '#fef2f2', color: '#b91c1c' }}
-                        />
-                        <LegendSwatch
-                            label="High utilization"
-                            description="Resource is at 80% or more of weekly capacity."
-                            style={{ backgroundColor: '#eff6ff' }}
-                        />
-                        <LegendSwatch
-                            label="Bench / no hours"
-                            description="Resource has no planned hours that week."
-                            style={{ backgroundColor: '#f0fdf4' }}
-                        />
-                        <LegendSwatch
-                            label="Unsaved change"
-                            description="Edited plan cell — save to persist to Weekly Planner."
-                            style={{
-                                backgroundColor: '#fffbeb',
-                                borderColor: '#f59e0b',
-                                borderWidth: 1,
-                            }}
-                        />
+        <Card className="border-gray-200 bg-white shadow-none" aria-labelledby="allocation-colour-guide">
+            <CardContent className="p-4 sm:p-5">
+                <div className="flex items-start gap-3">
+                    <Info className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" aria-hidden />
+                    <div className="min-w-0 flex-1 space-y-4">
+                        <div>
+                            <h2
+                                id="allocation-colour-guide"
+                                className="text-sm font-semibold text-gray-900"
+                            >
+                                Colour guide
+                            </h2>
+                            <p className="mt-1 text-xs text-gray-500">
+                                Highlights apply to weekly planned-hour cells in the table above.
+                            </p>
+                        </div>
+
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 list-none p-0 m-0">
+                            {LEGEND_ITEMS.map((item) => (
+                                <li
+                                    key={item.label}
+                                    className="flex items-start gap-2.5 rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2.5"
+                                >
+                                    <span
+                                        className={`wp-legend-swatch ${item.swatchClass} mt-0.5`}
+                                        aria-hidden
+                                    />
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-medium text-gray-900">{item.label}</p>
+                                        <p className="text-[11px] leading-snug text-gray-500 mt-0.5">
+                                            {item.detail}
+                                        </p>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+
+                        <p className="text-[11px] text-gray-500 border-t border-gray-100 pt-3">
+                            Standard weekly capacity is {DEFAULT_WEEKLY_CAPACITY_HOURS} hours per
+                            resource. Week columns show planned hours only — hover a cell for approved
+                            actuals and variance.
+                        </p>
                     </div>
                 </div>
-                <div>
-                    <p className="font-semibold text-gray-900 mb-2">Act and Δ columns</p>
-                    <div className="flex flex-wrap gap-x-6 gap-y-3">
-                        <LegendSwatch
-                            label="Actual (Act)"
-                            description="Approved time entries — read-only."
-                            style={{ backgroundColor: '#f8fafc', color: '#475569', fontStyle: 'italic' }}
-                        />
-                        <LegendSwatch
-                            label="Δ over plan"
-                            description="Actual hours exceed planned on this project."
-                            style={{ backgroundColor: '#fef2f2', color: '#b91c1c' }}
-                        />
-                        <LegendSwatch
-                            label="Δ under plan"
-                            description="Actual hours are below planned on this project."
-                            style={{ backgroundColor: '#fffbeb', color: '#b45309' }}
-                        />
-                    </div>
-                </div>
-                <p className="text-gray-500">
-                    Each week is grouped under its start date (e.g. Jun 15) with Plan, Act, and Δ
-                    sub-columns — same layout as Weekly Planner.
-                </p>
-            </div>
-        </div>
+            </CardContent>
+        </Card>
     );
 }
