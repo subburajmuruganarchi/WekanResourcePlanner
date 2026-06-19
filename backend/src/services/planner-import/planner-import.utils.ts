@@ -159,6 +159,18 @@ export function departmentLabel(resourceType: string, location: string): string 
     return resourceType || location || 'Engineering';
 }
 
+/** Reverse of projectCodeFromRow for WK-P101 → P101 (sheet PID column). */
+export function projectCodeToPid(projectCode: string): string | null {
+    const match = projectCode.trim().toUpperCase().match(/^WK-(P\d+)$/);
+    return match ? match[1] : null;
+}
+
+/** Sheet week column header matching parseWeekMonday input format, e.g. 9-Jun. */
+export function formatWeekSheetHeader(weekStart: Date): string {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${weekStart.getUTCDate()}-${months[weekStart.getUTCMonth()]}`;
+}
+
 export function parseWeekMonday(header: string): Date | null {
     const h = header.trim();
     const m1 = h.match(/^(\d{1,2})[-\s]([A-Za-z]{3,9})$/);

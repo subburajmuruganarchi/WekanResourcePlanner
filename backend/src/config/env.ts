@@ -41,6 +41,8 @@ const envSchema = z.object({
     GOOGLE_SHEET_ID: z.string().optional(),
     /** Google Apps Script web app URL — Admin "Full Sync" triggers POST {} here */
     GOOGLE_APPS_SCRIPT_WEB_APP_URL: z.string().url().optional(),
+    /** Apps Script web app URL for Mongo → Project_Allocation cell updates */
+    GOOGLE_SHEET_SYNC_URL: z.string().url().optional(),
     FRONTEND_URL: z
         .string({
             required_error: 'FRONTEND_URL is required for CORS',

@@ -1,6 +1,7 @@
 import { Types, startSession } from 'mongoose';
 import { features } from '../../config/features';
 import { AppError } from '../../common/errors/app-error';
+import { structuredLogger } from '../../common/logger';
 import { WeeklyAllocationSource, WeeklyAllocationStatus } from '../../common/types/enums';
 import {
     assertWeekRangeWithinLimit,
@@ -24,6 +25,7 @@ import {
 } from './weekly-allocation.types';
 import { WeeklyGridPutBodyInput } from './weekly-allocation.validators';
 import { weeklyAllocationSyncService, WeeklyAllocationSyncService } from './weekly-allocation-sync.service';
+import { syncAllocationToGoogleSheet } from '../google-sheet-sync/allocation-sheet-sync.service';
 import {
     WeeklyCapacityEngine,
     WeeklyHourCell,
@@ -576,6 +578,13 @@ export class WeeklyAllocationService {
             }
 
             await session.commitTransaction();
+
+            if (upserted + modified > 0) {
+                void syncAllocationToGoogleSheet(accepted).catch((err) => {
+                    const message = err instanceof Error ? err.message : String(err);
+                    structuredLogger.error('ALLOCATION SHEET SYNC BACKGROUND ERROR', { error: message });
+                });
+            }
         } catch (error) {
             await session.abortTransaction();
             throw error;
