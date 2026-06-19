@@ -16,6 +16,7 @@ import {
     type AllocationGridRow,
     type EmployeeOption,
 } from './components/allocation-weekly-grid';
+
 import { AllocationGridLegend } from './components/allocation-grid-legend';
 import type { WeeklyGridFilters } from '@/types/weekly-allocation';
 
