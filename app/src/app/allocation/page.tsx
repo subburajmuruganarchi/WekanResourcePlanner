@@ -16,8 +16,8 @@ import {
     type AllocationGridRow,
     type EmployeeOption,
 } from './components/allocation-weekly-grid';
+import { AllocationGridLegend } from './components/allocation-grid-legend';
 import type { WeeklyGridFilters } from '@/types/weekly-allocation';
-import './allocation-grid.css';
 
 const BENCH_PROJECT_CODE = 'BENCH';
 
@@ -389,6 +389,8 @@ export function Allocation() {
                     onProjectChange={handleProjectChange}
                     loading={grid.loading || projLoading}
                 />
+
+                <AllocationGridLegend />
             </div>
         </PageContainer>
     );

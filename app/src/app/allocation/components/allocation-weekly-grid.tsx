@@ -5,11 +5,12 @@ import {
     ModuleRegistry,
     type CellClassParams,
     type ColDef,
+    type ColGroupDef,
     type EditableCallbackParams,
     type ValueSetterParams,
 } from 'ag-grid-community';
 import { format, parseISO } from 'date-fns';
-import type { WeeklyPlannerGridRow } from '@/types/weekly-allocation';
+import type { WeeklyAllocationCell, WeeklyPlannerGridRow } from '@/types/weekly-allocation';
 import {
     computeEmployeeWeekTotals,
     cellKey,
@@ -18,7 +19,7 @@ import {
 
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
-import '../allocation-grid.css';
+import '../../weekly-planner/weekly-planner-grid.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -41,9 +42,37 @@ export interface AllocationGridRow extends WeeklyPlannerGridRow {
 }
 
 function formatHours(n: number): string {
-    if (n === 0) return '';
+    if (n === 0) return '—';
     const rounded = Math.round(n * 10) / 10;
     return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function formatPlanHours(n: number): string {
+    if (n === 0) return '';
+    return formatHours(n);
+}
+
+function cellTooltip(cell: WeeklyAllocationCell | undefined): string {
+    if (!cell) return 'No allocation for this week';
+    const plan = cell.plannedHours;
+    const actual = cell.actualHours;
+    const forecast = cell.forecastHours;
+    const planVar = cell.varianceHours ?? plan - actual;
+    const delta = cell.deltaHours ?? actual - plan;
+    const lines = [
+        `Planned: ${formatHours(plan)}h`,
+        `Actual (approved time): ${formatHours(actual)}h`,
+        `Forecast: ${formatHours(forecast)}h`,
+        `Variance (plan − actual): ${formatHours(planVar)}h`,
+        `Delta (actual − plan): ${delta >= 0 ? '+' : ''}${formatHours(delta)}h`,
+    ];
+    if (cell.variancePercent !== undefined) {
+        lines.push(`Variance %: ${cell.variancePercent}%`);
+    }
+    if (cell.isLegacy) {
+        lines.push('Legacy row — actuals sync when a weekly entry exists');
+    }
+    return lines.join('\n');
 }
 
 function isProjectEditable(row: AllocationGridRow | undefined): boolean {
@@ -105,24 +134,35 @@ export function AllocationWeeklyGrid({
         [employeeWeekTotals]
     );
 
-    const weekColumnDefs = useMemo((): ColDef<AllocationGridRow>[] => {
+    const utilizationPercent = useCallback(
+        (employeeId: string, weekStart: string) => {
+            if (!employeeId) return 0;
+            const total = employeeWeekTotals.get(`${employeeId}:${weekStart}`) ?? 0;
+            return DEFAULT_WEEKLY_CAPACITY_HOURS > 0
+                ? (total / DEFAULT_WEEKLY_CAPACITY_HOURS) * 100
+                : 0;
+        },
+        [employeeWeekTotals]
+    );
+
+    const weekColumnDefs = useMemo((): (ColDef<AllocationGridRow> | ColGroupDef<AllocationGridRow>)[] => {
         return weeks.map((weekStart) => {
-            const header = format(parseISO(weekStart), 'd MMM').toUpperCase();
-            return {
-                colId: `week_${weekStart}`,
-                headerName: header,
-                headerTooltip: weekStart,
-                headerClass: 'ra-header-week',
-                width: 76,
-                minWidth: 68,
-                editable: (params) => canEdit && !!params.data?.employeeId && !!params.data?.projectId,
+            const header = format(parseISO(weekStart), 'MMM d');
+            const getCell = (data: AllocationGridRow | undefined) => data?.weekCells[weekStart];
+
+            const planCol: ColDef<AllocationGridRow> = {
+                colId: `plan_${weekStart}`,
+                headerName: 'Plan',
+                width: 64,
+                minWidth: 56,
+                editable: (params) =>
+                    canEdit && !!params.data?.employeeId && !!params.data?.projectId,
                 type: 'numericColumn',
                 filter: false,
                 sortable: false,
                 suppressMovable: true,
-                cellClass: 'ra-week-cell',
-                valueGetter: (params) => params.data?.weekCells[weekStart]?.plannedHours ?? 0,
-                valueFormatter: (p) => formatHours(Number(p.value ?? 0)),
+                valueGetter: (params) => getCell(params.data)?.plannedHours ?? 0,
+                valueFormatter: (p) => formatPlanHours(Number(p.value ?? 0)),
                 valueSetter: (params: ValueSetterParams<AllocationGridRow>) => {
                     if (!params.data?.employeeId || !params.data?.projectId || !canEdit) return false;
                     const raw = params.newValue;
@@ -132,30 +172,100 @@ export function AllocationWeeklyGrid({
                     onPlannedHoursChange(params.data, weekStart, num);
                     return true;
                 },
+                tooltipValueGetter: (p) => cellTooltip(getCell(p.data)),
                 cellClassRules: {
-                    'ra-cell-dirty': (p: CellClassParams<AllocationGridRow>) => {
+                    'wp-cell-dirty': (p: CellClassParams<AllocationGridRow>) => {
                         if (!p.data?.employeeId) return false;
                         return dirtyKeys.has(
                             cellKey(p.data.employeeId, p.data.projectId, weekStart)
                         );
                     },
-                    'ra-cell-filled': (p: CellClassParams<AllocationGridRow>) =>
-                        Number(p.value ?? 0) > 0,
-                    'ra-cell-over': (p: CellClassParams<AllocationGridRow>) =>
+                    'wp-cell-over': (p: CellClassParams<AllocationGridRow>) =>
                         !!p.data?.employeeId &&
                         isOverAllocated(p.data.employeeId, weekStart),
+                    'wp-cell-high-util': (p: CellClassParams<AllocationGridRow>) => {
+                        if (!p.data?.employeeId) return false;
+                        const util = utilizationPercent(p.data.employeeId, weekStart);
+                        return util >= 80 && !isOverAllocated(p.data.employeeId, weekStart);
+                    },
+                    'wp-cell-bench': (p: CellClassParams<AllocationGridRow>) => {
+                        if (!p.data?.employeeId) return false;
+                        const total =
+                            employeeWeekTotals.get(`${p.data.employeeId}:${weekStart}`) ?? 0;
+                        return total === 0;
+                    },
                 },
             };
-        });
-    }, [weeks, canEdit, dirtyKeys, onPlannedHoursChange, isOverAllocated]);
 
-    const columnDefs = useMemo((): ColDef<AllocationGridRow>[] => {
+            const actualCol: ColDef<AllocationGridRow> = {
+                colId: `actual_${weekStart}`,
+                headerName: 'Act',
+                headerTooltip: 'Approved time entries (read-only)',
+                width: 56,
+                minWidth: 48,
+                editable: false,
+                type: 'numericColumn',
+                filter: false,
+                sortable: false,
+                suppressMovable: true,
+                valueGetter: (params) => getCell(params.data)?.actualHours ?? 0,
+                valueFormatter: (p) => formatHours(Number(p.value ?? 0)),
+                tooltipValueGetter: (p) => cellTooltip(getCell(p.data)),
+                cellClass: 'wp-cell-actual',
+            };
+
+            const deltaCol: ColDef<AllocationGridRow> = {
+                colId: `delta_${weekStart}`,
+                headerName: 'Δ',
+                headerTooltip: 'Actual − planned (positive = overrun on this project)',
+                width: 52,
+                minWidth: 44,
+                editable: false,
+                filter: false,
+                sortable: false,
+                suppressMovable: true,
+                valueGetter: (params) => {
+                    const cell = getCell(params.data);
+                    if (!cell) return 0;
+                    return cell.deltaHours ?? cell.actualHours - cell.plannedHours;
+                },
+                valueFormatter: (p) => {
+                    const v = Number(p.value ?? 0);
+                    if (Math.abs(v) < 0.01) return '—';
+                    const sign = v > 0 ? '+' : '';
+                    return `${sign}${formatHours(v)}`;
+                },
+                tooltipValueGetter: (p) => cellTooltip(getCell(p.data)),
+                cellClassRules: {
+                    'wp-cell-variance-over': (p) => Number(p.value ?? 0) > 0.01,
+                    'wp-cell-variance-under': (p) => Number(p.value ?? 0) < -0.01,
+                },
+            };
+
+            return {
+                groupId: `week_${weekStart}`,
+                headerName: header,
+                headerTooltip: weekStart,
+                marryChildren: true,
+                children: [planCol, actualCol, deltaCol],
+            };
+        });
+    }, [
+        weeks,
+        canEdit,
+        dirtyKeys,
+        onPlannedHoursChange,
+        isOverAllocated,
+        utilizationPercent,
+        employeeWeekTotals,
+    ]);
+
+    const columnDefs = useMemo((): (ColDef<AllocationGridRow> | ColGroupDef<AllocationGridRow>)[] => {
         const pinned: ColDef<AllocationGridRow>[] = [
             {
                 colId: 'project',
                 field: 'projectId',
                 headerName: 'Project',
-                headerClass: 'ra-header-project',
                 pinned: 'left',
                 width: 200,
                 minWidth: 160,
@@ -163,7 +273,7 @@ export function AllocationWeeklyGrid({
                 suppressMovable: true,
                 editable: (params: EditableCallbackParams<AllocationGridRow>) =>
                     canEdit && isProjectEditable(params.data),
-                cellClass: 'ra-pinned-project',
+                cellClass: 'wp-pinned-cell',
                 filter: false,
                 sort: 'asc',
                 sortIndex: 0,
@@ -193,7 +303,6 @@ export function AllocationWeeklyGrid({
                 colId: 'resource',
                 field: 'employeeId',
                 headerName: 'Resource',
-                headerClass: 'ra-header-resource',
                 pinned: 'left',
                 width: 200,
                 minWidth: 170,
@@ -201,7 +310,7 @@ export function AllocationWeeklyGrid({
                 suppressMovable: true,
                 editable: (params: EditableCallbackParams<AllocationGridRow>) =>
                     canEdit && !!params.data?.projectId,
-                cellClass: 'ra-pinned-resource',
+                cellClass: 'wp-pinned-cell',
                 filter: false,
                 cellEditor: 'agSelectCellEditor',
                 cellEditorParams: {
@@ -227,14 +336,13 @@ export function AllocationWeeklyGrid({
             {
                 field: 'employeeRole',
                 headerName: 'Resource Role',
-                headerClass: 'ra-header-resource',
                 pinned: 'left',
                 width: 180,
                 minWidth: 150,
                 lockPinned: true,
                 suppressMovable: true,
                 editable: false,
-                cellClass: 'ra-pinned-role',
+                cellClass: 'wp-pinned-cell',
                 filter: false,
                 valueFormatter: (params) => params.value || '—',
             },
@@ -267,7 +375,7 @@ export function AllocationWeeklyGrid({
 
     return (
         <div
-            className="ra-grid ag-theme-quartz w-full rounded-xl border border-gray-300 overflow-hidden shadow-sm"
+            className="wp-grid ag-theme-quartz w-full rounded-xl border border-gray-200 overflow-hidden"
             style={{ height: 'min(78vh, 720px)', width: '100%' }}
         >
             <AgGridReact<AllocationGridRow>
@@ -282,7 +390,7 @@ export function AllocationWeeklyGrid({
                 ensureDomOrder={false}
                 rowBuffer={20}
                 debounceVerticalScrollbar
-                suppressColumnVirtualisation={weeks.length <= 30}
+                suppressColumnVirtualisation={weeks.length <= 26}
                 singleClickEdit={canEdit}
                 stopEditingWhenCellsLoseFocus
                 tooltipShowDelay={400}
