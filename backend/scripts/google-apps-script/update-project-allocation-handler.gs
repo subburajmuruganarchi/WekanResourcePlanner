@@ -1,14 +1,61 @@
 /**
- * Paste into your live Apps Script doPost switch + replace updateProjectAllocationCells.
- * Keep existing import / full-sync cases unchanged.
+ * Merge into your live Google Apps Script Web App project.
+ * Existing full-sync / import doPost handlers must remain unchanged.
+ *
+ * Script property R360_SYNC_SECRET must match backend GOOGLE_SHEET_SYNC_SECRET.
  */
 
-// In doPost switch(action):
-//   case "PATCH_ALLOCATION_CELLS":
-//   case "UPDATE_PROJECT_ALLOCATION": // optional alias
-//     updateProjectAllocationCells(body.cells || body.updates);
-//     result.message = "Project Allocation sheet updated";
-//     break;
+function doPost(e) {
+  var secret = PropertiesService.getScriptProperties().getProperty('R360_SYNC_SECRET');
+  var body = {};
+  try {
+    body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  } catch (err) {
+    return jsonResponse({ status: 'FAILED', error: 'Invalid JSON body' });
+  }
+
+  if (secret) {
+    var headerKey =
+      (e && e.parameter && e.parameter['x-r360-sync-key']) ||
+      body.syncKey ||
+      null;
+    if (headerKey !== secret) {
+      return jsonResponse({ status: 'FAILED', error: 'Unauthorized' });
+    }
+  }
+
+  if (body.action === 'PATCH_ALLOCATION_CELLS' || body.action === 'UPDATE_PROJECT_ALLOCATION') {
+    return handleUpdateProjectAllocation(body);
+  }
+
+  // Delegate to your existing full-sync / import kickoff handler.
+  return handleExistingDoPost(e, body);
+}
+
+function handleUpdateProjectAllocation(payload) {
+  var cells = payload.cells || payload.updates || [];
+  Logger.log('PATCH_ALLOCATION_CELLS received, cells=' + cells.length);
+
+  if (cells.length === 0) {
+    return jsonResponse({ status: 'SUCCESS', applied: 0, failed: [] });
+  }
+
+  var applied = 0;
+  var failed = [];
+
+  try {
+    updateProjectAllocationCells(cells);
+    applied = cells.length;
+  } catch (err) {
+    failed.push({ reason: err.message || String(err) });
+  }
+
+  return jsonResponse({
+    status: failed.length === 0 ? 'SUCCESS' : applied > 0 ? 'PARTIAL' : 'FAILED',
+    applied: applied,
+    failed: failed,
+  });
+}
 
 function normalizeWeekHeaderLabel(value) {
   return String(value || '')
@@ -105,4 +152,15 @@ function updateProjectAllocationCells(cells) {
     sheet.getRange(targetRow, weekCol + 1).setValue(hours);
     Logger.log('Updated row ' + targetRow + ' col ' + (weekCol + 1));
   });
+}
+
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
+    ContentService.MimeType.JSON
+  );
+}
+
+/** Replace with your existing full-sync / import kickoff handler. */
+function handleExistingDoPost(e, body) {
+  return jsonResponse({ status: 'IGNORED', message: 'No handler matched' });
 }

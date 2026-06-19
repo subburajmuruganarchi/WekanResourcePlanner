@@ -4,7 +4,7 @@ import {
     googleSheetRowToAllocationRow,
     coerceWebhookRows,
 } from './adapters/google-sheet-row.adapter';
-import { isDummyResource, projectCodeFromRow, parseWeekMonday } from './planner-import.utils';
+import { isDummyResource, projectCodeFromRow, parseWeekMonday, formatWeekSheetHeader, projectCodeToPid } from './planner-import.utils';
 
 describe('google-sheet-row.adapter', () => {
     describe('Resource rows', () => {
@@ -156,6 +156,17 @@ describe('planner-import.utils', () => {
         const d = parseWeekMonday('5-Jan');
         expect(d).not.toBeNull();
         expect(d!.getUTCDay()).toBe(1);
+    });
+
+    it('formats week headers to match Project_Allocation columns', () => {
+        const d = parseWeekMonday('15 Jun');
+        expect(d).not.toBeNull();
+        expect(formatWeekSheetHeader(d!)).toBe('15 Jun');
+    });
+
+    it('maps WK project codes back to sheet PID', () => {
+        expect(projectCodeToPid('WK-P03')).toBe('P03');
+        expect(projectCodeToPid('WK-MYAPP')).toBeNull();
     });
 });
 

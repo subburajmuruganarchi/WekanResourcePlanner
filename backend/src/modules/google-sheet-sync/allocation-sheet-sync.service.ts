@@ -88,15 +88,22 @@ async function mapUpdatesToSheetCells(
     return cells;
 }
 
+function resolveSheetSyncUrl(): string | undefined {
+    return env.GOOGLE_SHEET_SYNC_URL ?? env.GOOGLE_APPS_SCRIPT_WEB_APP_URL;
+}
+
 async function postToGoogleSheetSync(payload: AllocationSheetSyncPayload): Promise<void> {
-    const url = env.GOOGLE_SHEET_SYNC_URL;
+    const url = resolveSheetSyncUrl();
     if (!url) {
-        structuredLogger.warn('ALLOCATION SHEET SYNC SKIPPED — GOOGLE_SHEET_SYNC_URL not configured');
+        structuredLogger.warn(
+            'ALLOCATION SHEET SYNC SKIPPED — set GOOGLE_SHEET_SYNC_URL or GOOGLE_APPS_SCRIPT_WEB_APP_URL'
+        );
         return;
     }
 
     structuredLogger.info('ALLOCATION SHEET SYNC START', {
         updateCount: payload.cells.length,
+        urlSource: env.GOOGLE_SHEET_SYNC_URL ? 'GOOGLE_SHEET_SYNC_URL' : 'GOOGLE_APPS_SCRIPT_WEB_APP_URL',
         cells: payload.cells,
     });
 
