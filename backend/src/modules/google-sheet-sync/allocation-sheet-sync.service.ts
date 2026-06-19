@@ -12,16 +12,18 @@ import {
 
 const SHEET_SYNC_TIMEOUT_MS = 30_000;
 
+/** Matches live Apps Script updateProjectAllocationCells() cell shape. */
 export interface AllocationSheetSyncCell {
     pid: string;
     eid: string;
-    weekStart: string;
+    weekHeader: string;
     plannedHours: number;
 }
 
 export interface AllocationSheetSyncPayload {
-    action: 'UPDATE_PROJECT_ALLOCATION';
-    updates: AllocationSheetSyncCell[];
+    action: 'PATCH_ALLOCATION_CELLS';
+    cells: AllocationSheetSyncCell[];
+    syncKey?: string;
 }
 
 async function mapUpdatesToSheetCells(
@@ -57,6 +59,8 @@ async function mapUpdatesToSheetCells(
             structuredLogger.warn('ALLOCATION SHEET SYNC SKIP — missing PID or EID', {
                 employeeId: u.employeeId,
                 projectId: u.projectId,
+                projectCode: proj?.project_code,
+                employeeCode: emp?.employee_code,
                 hasPid: !!pid,
                 hasEid: !!eid,
             });
@@ -76,7 +80,7 @@ async function mapUpdatesToSheetCells(
         cells.push({
             pid,
             eid,
-            weekStart: formatWeekSheetHeader(weekStartDate),
+            weekHeader: formatWeekSheetHeader(weekStartDate),
             plannedHours: u.plannedHours!,
         });
     }
@@ -92,7 +96,8 @@ async function postToGoogleSheetSync(payload: AllocationSheetSyncPayload): Promi
     }
 
     structuredLogger.info('ALLOCATION SHEET SYNC START', {
-        updateCount: payload.updates.length,
+        updateCount: payload.cells.length,
+        cells: payload.cells,
     });
 
     const controller = new AbortController();
@@ -102,7 +107,7 @@ async function postToGoogleSheetSync(payload: AllocationSheetSyncPayload): Promi
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
         };
-        const body: AllocationSheetSyncPayload & { syncKey?: string } = { ...payload };
+        const body: AllocationSheetSyncPayload = { ...payload };
         if (env.GOOGLE_SHEET_SYNC_SECRET) {
             headers['x-r360-sync-key'] = env.GOOGLE_SHEET_SYNC_SECRET;
             body.syncKey = env.GOOGLE_SHEET_SYNC_SECRET;
@@ -122,21 +127,21 @@ async function postToGoogleSheetSync(payload: AllocationSheetSyncPayload): Promi
             structuredLogger.error('ALLOCATION SHEET SYNC FAILED', {
                 httpStatus: response.status,
                 bodyPreview: text.slice(0, 500),
-                updateCount: payload.updates.length,
+                updateCount: payload.cells.length,
             });
             return;
         }
 
         structuredLogger.info('ALLOCATION SHEET SYNC SUCCESS', {
             httpStatus: response.status,
-            updateCount: payload.updates.length,
+            updateCount: payload.cells.length,
             bodyPreview: text.slice(0, 300),
         });
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         structuredLogger.error('ALLOCATION SHEET SYNC ERROR', {
             error: message,
-            updateCount: payload.updates.length,
+            updateCount: payload.cells.length,
         });
     } finally {
         clearTimeout(timeout);
@@ -151,11 +156,14 @@ export async function syncAllocationToGoogleSheet(
     updates: WeeklyGridBulkUpdateItem[]
 ): Promise<void> {
     const cells = await mapUpdatesToSheetCells(updates);
-    if (cells.length === 0) return;
+    if (cells.length === 0) {
+        structuredLogger.warn('ALLOCATION SHEET SYNC — no mappable cells after PID/EID resolution');
+        return;
+    }
 
     await postToGoogleSheetSync({
-        action: 'UPDATE_PROJECT_ALLOCATION',
-        updates: cells,
+        action: 'PATCH_ALLOCATION_CELLS',
+        cells,
     });
 }
 

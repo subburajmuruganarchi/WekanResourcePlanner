@@ -165,10 +165,10 @@ export function projectCodeToPid(projectCode: string): string | null {
     return match ? match[1] : null;
 }
 
-/** Sheet week column header matching parseWeekMonday input format, e.g. 9-Jun. */
+/** Sheet week column display header, e.g. 22 Jun (matches Project_Allocation tab). */
 export function formatWeekSheetHeader(weekStart: Date): string {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${weekStart.getUTCDate()}-${months[weekStart.getUTCMonth()]}`;
+    return `${weekStart.getUTCDate()} ${months[weekStart.getUTCMonth()]}`;
 }
 
 export function parseWeekMonday(header: string): Date | null {

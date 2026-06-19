@@ -1,171 +1,108 @@
 /**
- * Merge into your existing Google Apps Script Web App project.
- * Existing full-sync / import doPost handlers must remain unchanged.
- *
- * Validates x-r360-sync-key against Script Property R360_SYNC_SECRET
- * (same value as backend GOOGLE_SHEET_SYNC_SECRET).
+ * Paste into your live Apps Script doPost switch + replace updateProjectAllocationCells.
+ * Keep existing import / full-sync cases unchanged.
  */
 
-function doPost(e) {
-  var secret = PropertiesService.getScriptProperties().getProperty('R360_SYNC_SECRET');
-  var key = e && e.parameter ? e.parameter['x-r360-sync-key'] : null;
-  if (!key && e && e.postData && e.postData.contents) {
-    // Header may not be in parameter for JSON POST — check postData headers if available
-  }
-  // Prefer parsing body first for action routing
-  var body = {};
-  try {
-    body = JSON.parse(e.postData.contents || '{}');
-  } catch (err) {
-    return jsonResponse({ status: 'FAILED', error: 'Invalid JSON body' });
-  }
+// In doPost switch(action):
+//   case "PATCH_ALLOCATION_CELLS":
+//   case "UPDATE_PROJECT_ALLOCATION": // optional alias
+//     updateProjectAllocationCells(body.cells || body.updates);
+//     result.message = "Project Allocation sheet updated";
+//     break;
 
-  if (secret) {
-    var incomingKey = (e && e.parameter && e.parameter['x-r360-sync-key']) || null;
-    // Apps Script Web App: custom headers are not reliably exposed; use body.syncKey fallback
-    var bodyKey = body.syncKey || null;
-    var headerKey = incomingKey || bodyKey;
-    if (headerKey !== secret) {
-      return jsonResponse({ status: 'FAILED', error: 'Unauthorized' });
-    }
-  }
-
-  if (body.action === 'UPDATE_PROJECT_ALLOCATION') {
-    return handleUpdateProjectAllocation(body);
-  }
-
-  // Existing full-sync kickoff: { batchId, syncBatchId } — leave your current handler below
-  return handleExistingDoPost(e, body);
+function normalizeWeekHeaderLabel(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/-/g, ' ')
+    .toLowerCase();
 }
 
-/**
- * @param {Object} payload
- * @param {Array<{pid:string,eid:string,weekStart:string,plannedHours:number}>} payload.updates
- */
-function handleUpdateProjectAllocation(payload) {
-  Logger.log('UPDATE_PROJECT_ALLOCATION received, updates=' + (payload.updates || []).length);
-
-  var updates = payload.updates || [];
-  if (updates.length === 0) {
-    return jsonResponse({ status: 'SUCCESS', applied: 0, failed: [] });
+function formatHeaderAsWeekLabel(header, timezone) {
+  if (header instanceof Date && !isNaN(header.getTime())) {
+    return Utilities.formatDate(header, timezone, 'd MMM');
   }
-
-  var applied = 0;
-  var failed = [];
-
-  for (var i = 0; i < updates.length; i++) {
-    var cell = updates[i];
-    try {
-      updateProjectAllocationCell(cell);
-      applied++;
-    } catch (err) {
-      failed.push({
-        pid: cell.pid,
-        eid: cell.eid,
-        weekStart: cell.weekStart,
-        reason: err.message || String(err),
-      });
-    }
-  }
-
-  return jsonResponse({
-    status: failed.length === 0 ? 'SUCCESS' : applied > 0 ? 'PARTIAL' : 'FAILED',
-    applied: applied,
-    failed: failed,
-  });
+  return String(header || '').trim();
 }
 
-/**
- * Update a single Project_Allocation cell by PID + EID row and weekStart column header.
- *
- * @param {{pid:string,eid:string,weekStart:string,plannedHours:number}} payload
- */
-function updateProjectAllocationCell(payload) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Project_Allocation');
+function headerMatchesWeekColumn(header, weekHeader, timezone) {
+  var target = normalizeWeekHeaderLabel(weekHeader);
+  var candidate = normalizeWeekHeaderLabel(formatHeaderAsWeekLabel(header, timezone));
+  return candidate === target;
+}
+
+function updateProjectAllocationCells(cells) {
+  if (!cells || !cells.length) {
+    throw new Error('No cells provided');
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Project_Allocation');
   if (!sheet) {
-    throw new Error('Sheet Project_Allocation not found');
+    throw new Error('Project_Allocation sheet not found');
   }
 
-  var pid = String(payload.pid || '').trim().toUpperCase();
-  var eid = String(payload.eid || '').trim().toUpperCase();
-  var weekHeader = String(payload.weekStart || '').trim();
-  var hours = Number(payload.plannedHours);
-  if (!pid || !eid || !weekHeader) {
-    throw new Error('Missing pid, eid, or weekStart');
-  }
-  if (!Number.isFinite(hours)) {
-    throw new Error('Invalid plannedHours');
-  }
+  var timezone = ss.getSpreadsheetTimeZone();
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
 
-  var lastCol = sheet.getLastColumn();
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2 || lastCol < 1) {
-    throw new Error('Sheet has no data rows');
-  }
+  var pidCol = -1;
+  var eidCol = -1;
 
-  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  var pidCol = findColumnIndex(headers, ['PID', 'pid', 'P-id', 'P-Id', 'P_id']);
-  var eidCol = findColumnIndex(headers, ['EID', 'eid', 'E-id', 'E-Id', 'EmployeeCode']);
-  if (pidCol < 0 || eidCol < 0) {
-    throw new Error('PID or EID column not found');
-  }
-
-  var weekCol = findWeekColumnIndex(headers, weekHeader);
-  if (weekCol < 0) {
-    throw new Error('Week column not found: ' + weekHeader);
-  }
-
-  var data = sheet.getRange(2, 1, lastRow, lastCol).getValues();
-  var targetRow = -1;
-  for (var r = 0; r < data.length; r++) {
-    var rowPid = String(data[r][pidCol] || '').trim().toUpperCase();
-    var rowEid = String(data[r][eidCol] || '').trim().toUpperCase();
-    if (rowPid === pid && rowEid === eid) {
-      targetRow = r + 2;
-      break;
-    }
-  }
-
-  if (targetRow < 0) {
-    throw new Error('Row not found for PID=' + pid + ' EID=' + eid);
-  }
-
-  sheet.getRange(targetRow, weekCol + 1).setValue(hours);
-  Logger.log(
-    'Updated Project_Allocation PID=' + pid + ' EID=' + eid + ' week=' + weekHeader + ' hours=' + hours
-  );
-}
-
-function findColumnIndex(headers, aliases) {
-  var normalized = aliases.map(function (a) {
-    return String(a).trim().toLowerCase();
+  headers.forEach(function (h, i) {
+    var col = String(h).trim().toLowerCase();
+    if (col === 'pid' || col === 'p-id' || col === 'p_id') pidCol = i;
+    if (col === 'eid' || col === 'e-id' || col === 'e_id') eidCol = i;
   });
-  for (var c = 0; c < headers.length; c++) {
-    var h = String(headers[c] || '').trim().toLowerCase();
-    if (normalized.indexOf(h) >= 0) return c;
+
+  if (pidCol === -1 || eidCol === -1) {
+    throw new Error('PID/EID columns missing on Project_Allocation');
   }
-  return -1;
-}
 
-function findWeekColumnIndex(headers, weekHeader) {
-  var target = String(weekHeader).trim().toLowerCase();
-  for (var c = 0; c < headers.length; c++) {
-    var h = String(headers[c] || '').trim();
-    if (h.toLowerCase() === target) return c;
-    // tolerate "9 Jun" vs "9-Jun"
-    if (h.replace(/\s+/g, '-').toLowerCase() === target.replace(/\s+/g, '-')) return c;
-  }
-  return -1;
-}
+  cells.forEach(function (cell) {
+    var weekHeader = cell.weekHeader || cell.weekStart;
+    var pid = String(cell.pid || '').trim().toUpperCase();
+    var eid = String(cell.eid || '').trim().toUpperCase();
+    var hours = Number(cell.plannedHours);
 
-function jsonResponse(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
-    ContentService.MimeType.JSON
-  );
-}
+    Logger.log(
+      'PATCH_ALLOCATION_CELLS pid=' + pid + ' eid=' + eid + ' week=' + weekHeader + ' hours=' + hours
+    );
 
-/** Placeholder — replace with your existing doPost logic for full sync / import kickoff. */
-function handleExistingDoPost(e, body) {
-  // ... existing implementation ...
-  return jsonResponse({ status: 'IGNORED', message: 'No handler matched' });
+    if (!pid || !eid || !weekHeader) {
+      throw new Error('Missing pid, eid, or weekHeader');
+    }
+    if (!Number.isFinite(hours)) {
+      throw new Error('Invalid plannedHours for ' + pid + '/' + eid);
+    }
+
+    var weekCol = -1;
+    for (var i = 0; i < headers.length; i++) {
+      if (headerMatchesWeekColumn(headers[i], weekHeader, timezone)) {
+        weekCol = i;
+        break;
+      }
+    }
+
+    if (weekCol === -1) {
+      throw new Error('Week column missing: ' + weekHeader);
+    }
+
+    var targetRow = -1;
+    for (var r = 1; r < data.length; r++) {
+      var rowPid = String(data[r][pidCol] || '').trim().toUpperCase();
+      var rowEid = String(data[r][eidCol] || '').trim().toUpperCase();
+      if (rowPid === pid && rowEid === eid) {
+        targetRow = r + 1;
+        break;
+      }
+    }
+
+    if (targetRow === -1) {
+      throw new Error('Row not found for PID=' + pid + ' EID=' + eid);
+    }
+
+    sheet.getRange(targetRow, weekCol + 1).setValue(hours);
+    Logger.log('Updated row ' + targetRow + ' col ' + (weekCol + 1));
+  });
 }
