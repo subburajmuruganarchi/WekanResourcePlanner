@@ -26,6 +26,10 @@ interface UseWeeklyAllocationGridOptions {
     canEdit: boolean;
     /** When true, loads every page and merges rows (for allocation matrix). */
     fetchAllPages?: boolean;
+    /** When true, saves succeed even if an employee exceeds weekly capacity across projects. */
+    allowOverAllocation?: boolean;
+    /** When true, include active projects with role gaps but no assigned resource yet. */
+    includeUnstaffedProjects?: boolean;
 }
 
 function buildQueryString(params: WeeklyGridFetchParams): string {
@@ -36,6 +40,7 @@ function buildQueryString(params: WeeklyGridFetchParams): string {
     q.set('limit', String(params.limit ?? 500));
     q.set('includeCapacitySummary', params.includeCapacitySummary ? 'true' : 'false');
     if (params.excludeBench) q.set('excludeBench', 'true');
+    if (params.includeUnstaffedProjects) q.set('includeUnstaffedProjects', 'true');
     if (params.employeeId) q.set('employeeId', params.employeeId);
     if (params.projectId) q.set('projectId', params.projectId);
     return q.toString();
@@ -97,6 +102,7 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
                     limit: pageSize,
                     includeCapacitySummary: true,
                     excludeBench: nextFilters.excludeBench,
+                    includeUnstaffedProjects: options.includeUnstaffedProjects,
                 };
 
                 const fetchPage = (p: number) =>
@@ -137,7 +143,7 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
                 setLoading(false);
             }
         },
-        [pageSize, options.fetchAllPages]
+        [pageSize, options.fetchAllPages, options.includeUnstaffedProjects]
     );
 
     const displayRows = useMemo(() => {
@@ -219,10 +225,11 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
         setSaveMessage(null);
 
         try {
+            const allowOverAllocation = options.allowOverAllocation ?? false;
             const result = await api.put<WeeklyGridBulkSaveResult>('/weekly-allocations/grid', {
                 updates,
                 validateCapacity: true,
-                allowOverAllocation: false,
+                allowOverAllocation,
             });
 
             if (result.rejected.length > 0) {
@@ -256,6 +263,7 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
             rollbackSnapshotRef.current = null;
         }
     }, [
+        options.allowOverAllocation,
         options.canEdit,
         plannerRows,
         filters,

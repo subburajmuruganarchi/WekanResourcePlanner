@@ -54,6 +54,8 @@ export function Allocation() {
         canEdit: canEditGrid,
         pageSize: 500,
         fetchAllPages: true,
+        allowOverAllocation: true,
+        includeUnstaffedProjects: true,
     });
 
     const projectOptions = useMemo(
@@ -129,8 +131,7 @@ export function Allocation() {
                 (row) =>
                     row.projectCode !== BENCH_PROJECT_CODE &&
                     row.projectName !== 'Available / Bench' &&
-                    !row.rowKey.startsWith('draft:') &&
-                    !row.rowKey.startsWith('placeholder:')
+                    !row.rowKey.startsWith('draft:')
             )
             .map((row) => ({
                 ...row,
@@ -141,6 +142,11 @@ export function Allocation() {
                 employeeRole: row.employeeId
                     ? employeeRoleMap.get(row.employeeId) || '—'
                     : '—',
+                employeeName: row.employeeId
+                    ? row.employeeName
+                    : row.rowKey.startsWith('placeholder:')
+                      ? 'Unassigned'
+                      : row.employeeName,
                 isDraft: false,
                 isNewRow: false,
             }))

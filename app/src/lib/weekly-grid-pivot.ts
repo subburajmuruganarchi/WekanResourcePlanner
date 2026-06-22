@@ -11,6 +11,7 @@ export function cellKey(employeeId: string, projectId: string, weekStart: string
 }
 
 export function rowKey(employeeId: string, projectId: string): string {
+    if (!employeeId) return `placeholder:${projectId}`;
     return `${employeeId}:${projectId}`;
 }
 
@@ -23,9 +24,9 @@ export function pivotGridRows(apiRows: WeeklyAllocationGridRow[]): WeeklyPlanner
         let row = map.get(key);
         if (!row) {
             row = {
-                rowKey: key,
+                rowKey: rowKey(r.employeeId, r.projectId),
                 employeeId: r.employeeId,
-                employeeName: r.employeeName?.trim() || r.employeeId,
+                employeeName: r.employeeName?.trim() || (r.employeeId ? r.employeeId : ''),
                 projectId: r.projectId,
                 projectName: r.projectName?.trim() || 'Project',
                 projectCode: r.projectCode?.trim() || '',
@@ -36,7 +37,7 @@ export function pivotGridRows(apiRows: WeeklyAllocationGridRow[]): WeeklyPlanner
         }
 
         row.weekCells[r.weekStart] = {
-            id: r.id.startsWith('legacy:') ? undefined : r.id,
+            id: r.id.startsWith('legacy:') || r.id.startsWith('unstaffed:') ? undefined : r.id,
             allocationId: r.allocationId,
             employeeId: r.employeeId,
             projectId: r.projectId,

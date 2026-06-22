@@ -52,7 +52,11 @@ export default function WeeklyPlannerPage() {
     const [searchResource, setSearchResource] = useState('');
     const [searchRole, setSearchRole] = useState('');
 
-    const grid = useWeeklyAllocationGrid({ canEdit, pageSize: 500 });
+    const grid = useWeeklyAllocationGrid({
+        canEdit,
+        pageSize: 500,
+        includeUnstaffedProjects: true,
+    });
 
     const visibleRows = useMemo(
         () =>
@@ -88,7 +92,12 @@ export default function WeeklyPlannerPage() {
                     row.projectType ||
                     projectTypeById.get(row.projectId) ||
                     '—',
-                employeeRole: employeeRoleMap.get(row.employeeId) || '—',
+                employeeRole: row.employeeId ? employeeRoleMap.get(row.employeeId) || '—' : '—',
+                employeeName: row.employeeId
+                    ? row.employeeName
+                    : row.rowKey.startsWith('placeholder:')
+                      ? 'Unassigned'
+                      : row.employeeName,
             }))
             .filter((row) =>
                 matchesPlannerGridSearch(row, {

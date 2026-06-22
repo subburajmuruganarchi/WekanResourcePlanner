@@ -1,7 +1,7 @@
 import { AllocationImportRow } from './types/allocation-row.dto';
 import { isDummyResource } from './planner-import.utils';
 
-/** Rows excluded from allocation import (dummy placeholders, empty, zero hours). */
+/** Rows excluded from allocation import (dummy placeholders, empty assignments). */
 export function shouldSkipAllocationRow(row: AllocationImportRow): boolean {
     const pid = (row.pid ?? '').trim();
     const projectName = (row.projectName ?? '').trim();
@@ -10,7 +10,10 @@ export function shouldSkipAllocationRow(row: AllocationImportRow): boolean {
 
     if (!pid && !projectName && !eid && !resourceName) return true;
     if (isDummyResource(resourceName, eid)) return true;
-    if (row.weeklyHours.length === 0) return true;
+
+    const hasAssignment =
+        !!(pid || projectName) && !!(eid || resourceName);
+    if (!hasAssignment) return true;
 
     return false;
 }

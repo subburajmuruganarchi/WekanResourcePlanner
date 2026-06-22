@@ -38,8 +38,28 @@ describe('allocation-row.validation', () => {
         expect(shouldSkipAllocationRow(allocRow())).toBe(false);
     });
 
-    it('skips rows with zero weekly hours', () => {
-        expect(shouldSkipAllocationRow(allocRow({ weeklyHours: [] }))).toBe(true);
+    it('keeps assigned rows even when weekly hours are all zero', () => {
+        expect(
+            shouldSkipAllocationRow(
+                allocRow({
+                    weeklyHours: [{ weekStart: new Date('2026-06-22T00:00:00.000Z'), hours: 0 }],
+                })
+            )
+        ).toBe(false);
+    });
+
+    it('skips rows with no assignment identity', () => {
+        expect(
+            shouldSkipAllocationRow(
+                allocRow({
+                    pid: '',
+                    projectName: '',
+                    employeeCode: '',
+                    resourceName: '',
+                    weeklyHours: [],
+                })
+            )
+        ).toBe(true);
     });
 
     it('filters dummy rows from batch like P58:Z018', () => {

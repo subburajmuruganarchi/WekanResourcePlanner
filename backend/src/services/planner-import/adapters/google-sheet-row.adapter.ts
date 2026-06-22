@@ -270,8 +270,8 @@ export function googleSheetRowToAllocationRow(
     const weeklyHours: AllocationWeekHour[] = [];
     for (const header of weekHeaderKeys) {
         const raw = row[header];
-        const hours = Number(raw);
-        if (!Number.isFinite(hours) || hours <= 0) continue;
+        const parsed = Number(raw);
+        const hours = Number.isFinite(parsed) ? parsed : 0;
         const monday = parseWeekMonday(header);
         if (monday) weeklyHours.push({ weekStart: monday, hours });
     }

@@ -2,7 +2,7 @@ import { Types, startSession } from 'mongoose';
 import { features } from '../../config/features';
 import { AppError } from '../../common/errors/app-error';
 import { structuredLogger } from '../../common/logger';
-import { WeeklyAllocationSource, WeeklyAllocationStatus } from '../../common/types/enums';
+import { ProjectStatus, WeeklyAllocationSource, WeeklyAllocationStatus } from '../../common/types/enums';
 import {
     assertWeekRangeWithinLimit,
     endOfUtcWeek,
@@ -13,6 +13,8 @@ import {
 } from '../../common/utils/week.util';
 import { Employee } from '../employees/employee.model';
 import { Project } from '../projects/project.model';
+import { ProjectRoleEffort } from '../projects/project-role-effort.model';
+import { ProjectSkillRequirement } from '../projects/project-skill-requirement.model';
 import { ProjectAllocation } from '../allocations/allocation.model';
 import { WeeklyAllocationEntry, IWeeklyAllocationEntry } from './weekly-allocation-entry.model';
 import {
@@ -40,7 +42,19 @@ const UNASSIGNED_BENCH_PROJECT_CODE = 'BENCH';
 
 export class WeeklyAllocationService {
     private static pivotRowKey(employeeId: string, projectId: string): string {
+        if (!employeeId) return `placeholder:${projectId}`;
         return `${employeeId}:${projectId}`;
+    }
+
+    private static parsePivotKey(pivotKey: string): { employeeId: string; projectId: string } {
+        if (pivotKey.startsWith('placeholder:')) {
+            return { employeeId: '', projectId: pivotKey.slice('placeholder:'.length) };
+        }
+        const idx = pivotKey.indexOf(':');
+        return {
+            employeeId: pivotKey.slice(0, idx),
+            projectId: pivotKey.slice(idx + 1),
+        };
     }
 
     private createSyntheticEmptyCell(
@@ -50,7 +64,9 @@ export class WeeklyAllocationService {
         names?: { employeeName?: string; projectName?: string; projectCode?: string; projectType?: string }
     ): WeeklyAllocationEntryDto {
         return {
-            id: `empty:${employeeId}:${projectId}:${weekStart}`,
+            id: employeeId
+                ? `empty:${employeeId}:${projectId}:${weekStart}`
+                : `unstaffed:${projectId}:${weekStart}`,
             employeeId,
             projectId,
             employeeName: names?.employeeName,
@@ -202,6 +218,33 @@ export class WeeklyAllocationService {
                 employeeIds.add(cell.employeeId);
                 projectIds.add(cell.projectId);
             }
+
+            // Ensure assigned employee×project rows appear even when all weekly hours are 0.
+            const pivotKeysFromCells = new Set<string>();
+            for (const cell of rowMap.values()) {
+                pivotKeysFromCells.add(
+                    WeeklyAllocationService.pivotRowKey(cell.employeeId, cell.projectId)
+                );
+            }
+            for (const alloc of legacyAllocs) {
+                const empId = alloc.employee_id.toString();
+                const projId = alloc.project_id.toString();
+                const pivotKey = WeeklyAllocationService.pivotRowKey(empId, projId);
+                if (pivotKeysFromCells.has(pivotKey)) continue;
+
+                for (const weekIso of weekIsoList) {
+                    const weekStart = startOfUtcWeek(parseWeekStartParam(weekIso));
+                    const key = WeeklyAllocationSyncService.cellKey(empId, projId, weekStart);
+                    if (rowMap.has(key)) continue;
+                    rowMap.set(
+                        key,
+                        this.createSyntheticEmptyCell(empId, projId, weekIso, undefined)
+                    );
+                }
+                employeeIds.add(empId);
+                projectIds.add(projId);
+                pivotKeysFromCells.add(pivotKey);
+            }
         }
 
         // Group flat cells into employee × project pivot rows.
@@ -230,7 +273,9 @@ export class WeeklyAllocationService {
                 .lean();
 
             const employeesWithRows = new Set(
-                [...pivotMap.keys()].map((key) => key.split(':')[0])
+                [...pivotMap.keys()]
+                    .map((key) => WeeklyAllocationService.parsePivotKey(key).employeeId)
+                    .filter(Boolean)
             );
 
             for (const emp of activeEmployees) {
@@ -263,6 +308,60 @@ export class WeeklyAllocationService {
             }
         }
 
+        if (
+            query.includeUnstaffedProjects &&
+            !query.projectIds?.length &&
+            !query.employeeIds?.length
+        ) {
+            const staffedProjectIds = new Set(
+                [...pivotMap.keys()].map(
+                    (key) => WeeklyAllocationService.parsePivotKey(key).projectId
+                )
+            );
+
+            const candidateProjects = await Project.find({
+                status: ProjectStatus.ACTIVE,
+                is_active: { $ne: false },
+                start_date: { $lte: endOfUtcWeek(weekTo) },
+                end_date: { $gte: weekFrom },
+                project_code: { $ne: UNASSIGNED_BENCH_PROJECT_CODE },
+            })
+                .select('_id project_name project_code project_type billing_type')
+                .lean();
+
+            const candidateIds = candidateProjects.map((p) => p._id);
+            const [roleProjectIds, skillProjectIds] = await Promise.all([
+                ProjectRoleEffort.distinct('project_id', { project_id: { $in: candidateIds } }),
+                ProjectSkillRequirement.distinct('project_id', { project_id: { $in: candidateIds } }),
+            ]);
+            const withStaffingNeeds = new Set([
+                ...roleProjectIds.map((id) => id.toString()),
+                ...skillProjectIds.map((id) => id.toString()),
+            ]);
+
+            for (const proj of candidateProjects) {
+                const projectId = proj._id.toString();
+                if (staffedProjectIds.has(projectId)) continue;
+                if (!withStaffingNeeds.has(projectId)) continue;
+
+                const pivotKey = WeeklyAllocationService.pivotRowKey('', projectId);
+                const weekMap = new Map<string, WeeklyAllocationEntryDto>();
+                const names = {
+                    projectName: proj.project_name,
+                    projectCode: proj.project_code,
+                    projectType: deriveProjectTypeLabel(proj.project_type, proj.billing_type),
+                };
+                for (const weekIso of weekIsoList) {
+                    weekMap.set(
+                        weekIso,
+                        this.createSyntheticEmptyCell('', projectId, weekIso, names)
+                    );
+                }
+                pivotMap.set(pivotKey, weekMap);
+                projectIds.add(projectId);
+            }
+        }
+
         const [employees, projects] = await Promise.all([
             Employee.find({ _id: { $in: [...employeeIds] } })
                 .select('first_name last_name')
@@ -292,17 +391,27 @@ export class WeeklyAllocationService {
         });
 
         const sortedPivotKeys = [...pivotMap.keys()].sort((a, b) => {
-            const [empA, projA] = a.split(':');
-            const [empB, projB] = b.split(':');
-            const e = (empNameById.get(empA) || empA).localeCompare(empNameById.get(empB) || empB);
-            if (e !== 0) return e;
+            const pa = WeeklyAllocationService.parsePivotKey(a);
+            const pb = WeeklyAllocationService.parsePivotKey(b);
             const projNameA =
-                projById.get(projA)?.name ||
-                (projA === UNASSIGNED_BENCH_PROJECT_ID ? UNASSIGNED_BENCH_PROJECT_NAME : projA);
+                projById.get(pa.projectId)?.name ||
+                (pa.projectId === UNASSIGNED_BENCH_PROJECT_ID
+                    ? UNASSIGNED_BENCH_PROJECT_NAME
+                    : pa.projectId);
             const projNameB =
-                projById.get(projB)?.name ||
-                (projB === UNASSIGNED_BENCH_PROJECT_ID ? UNASSIGNED_BENCH_PROJECT_NAME : projB);
-            return projNameA.localeCompare(projNameB);
+                projById.get(pb.projectId)?.name ||
+                (pb.projectId === UNASSIGNED_BENCH_PROJECT_ID
+                    ? UNASSIGNED_BENCH_PROJECT_NAME
+                    : pb.projectId);
+            const byProject = projNameA.localeCompare(projNameB);
+            if (byProject !== 0) return byProject;
+            if (!pa.employeeId && pb.employeeId) return 1;
+            if (pa.employeeId && !pb.employeeId) return -1;
+            if (!pa.employeeId || !pb.employeeId) return 0;
+            const e = (empNameById.get(pa.employeeId) || pa.employeeId).localeCompare(
+                empNameById.get(pb.employeeId) || pb.employeeId
+            );
+            return e;
         });
 
         const totalPivotRows = sortedPivotKeys.length;
@@ -331,7 +440,7 @@ export class WeeklyAllocationService {
         const expandPivotKeys = (keys: string[]): WeeklyAllocationEntryDto[] => {
             const expanded: WeeklyAllocationEntryDto[] = [];
             for (const pivotKey of keys) {
-                const [employeeId, projectId] = pivotKey.split(':');
+                const { employeeId, projectId } = WeeklyAllocationService.parsePivotKey(pivotKey);
                 const weekMap = pivotMap.get(pivotKey)!;
                 const names = {
                     employeeName: empNameById.get(employeeId),

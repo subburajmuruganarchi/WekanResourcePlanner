@@ -1714,30 +1714,15 @@ var allocation = {
         allocation[weekLabel] = num;
       });
 
-      // ======================================
-      // CHECK IF ANY WORK EXISTS
-      // ======================================
-      var hasAnyWork = headers.some(function (header, index) {
-        if (!isDateColumn(header)) return false;
-        return parseFloat(row[index]) > 0;
-      });
-
-      // if (
-      //   allocation.PID &&
-      //   allocation.ProjectName &&
-      //   allocation.EID &&
-      //   hasAnyWork
-      // ) {
         if (
   allocation.PID &&
   allocation.ProjectName &&
-  allocation.Resource &&
-  hasAnyWork
-){
+  allocation.Resource
+) {
         rows.push(allocation);
       } else {
         Logger.log(
-          "Skipping allocation (invalid/empty weeks): " +
+          "Skipping allocation (missing PID, project, resource, or EID): " +
           JSON.stringify(allocation)
         );
       }

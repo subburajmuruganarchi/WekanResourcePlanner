@@ -31,6 +31,7 @@ export class WeeklyAllocationController {
                 limit: parsed.limit,
                 includeCapacitySummary: parsed.includeCapacitySummary ?? false,
                 excludeBench: parsed.excludeBench ?? false,
+                includeUnstaffedProjects: parsed.includeUnstaffedProjects ?? false,
             });
 
             res.json({ status: 'success', data });

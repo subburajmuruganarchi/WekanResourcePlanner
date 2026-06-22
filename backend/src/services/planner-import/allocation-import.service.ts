@@ -22,6 +22,26 @@ import {
 import { CreatedByRole, WeeklyAllocationSource, WeeklyAllocationStatus } from '../../common/types/enums';
 import { structuredLogger } from '../../common/logger';
 
+function allocationMetricsFromWeeklyHours(weeklyHours: AllocationImportRow['weeklyHours']) {
+    const sorted = [...weeklyHours].sort(
+        (a, b) => a.weekStart.getTime() - b.weekStart.getTime()
+    );
+    const maxHours = sorted.reduce((max, week) => Math.max(max, week.hours), 0);
+    return {
+        startDate: sorted[0].weekStart,
+        endDate: sorted[sorted.length - 1].weekStart,
+        maxHours,
+        percent: Math.min(100, Math.round((maxHours / HOURS_PER_WEEK) * 100)),
+    };
+}
+
+function isActiveAllocationRow(row: AllocationImportRow): boolean {
+    return (
+        !row.activeFlag.toLowerCase().includes('not') &&
+        !row.projectStatus.toLowerCase().includes('completed')
+    );
+}
+
 export interface AllocationImportOutput extends SheetImportResult {
     allocationsUpserted: number;
     weeklyEntriesUpserted: number;
@@ -148,7 +168,7 @@ async function importAllocationRowsBulk(
         }
 
         if (row.weeklyHours.length === 0) {
-            failOrSkipRow(writeOpts, skippedRows, identifier, 'No weekly hours');
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'No week columns in row');
             continue;
         }
 
@@ -157,14 +177,10 @@ async function importAllocationRowsBulk(
             throw new Error(`Job role not prepared: ${row.jobRole || 'Consultant'}`);
         }
 
-        const latest = row.weeklyHours[row.weeklyHours.length - 1];
-        const percent = Math.min(100, Math.round((latest.hours / HOURS_PER_WEEK) * 100));
-        const startDate = row.weeklyHours[0].weekStart;
-        const endDate = row.weeklyHours[row.weeklyHours.length - 1].weekStart;
-        const isActive =
-            !row.activeFlag.toLowerCase().includes('not') &&
-            !row.projectStatus.toLowerCase().includes('completed') &&
-            percent > 0;
+        const { startDate, endDate, maxHours, percent } = allocationMetricsFromWeeklyHours(
+            row.weeklyHours
+        );
+        const isActive = isActiveAllocationRow(row);
         const skillId = ctx.employeePrimarySkill.get(employeeId.toString()) || defaultSkillId;
 
         prepared.push({
@@ -177,7 +193,7 @@ async function importAllocationRowsBulk(
             startDate,
             endDate,
             isActive,
-            allocationReason: `${SEED_TAG} from Project_Allocation (${latest.hours}h/wk, ${row.resourceType || row.projectType})`,
+            allocationReason: `${SEED_TAG} from Project_Allocation (${maxHours}h/wk, ${row.resourceType || row.projectType})`,
             weeklyHours: row.weeklyHours,
         });
     }
@@ -411,7 +427,7 @@ async function importAllocationRowsSequential(
         }
 
         if (row.weeklyHours.length === 0) {
-            failOrSkipRow(writeOpts, skippedRows, identifier, 'No weekly hours');
+            failOrSkipRow(writeOpts, skippedRows, identifier, 'No week columns in row');
             continue;
         }
 
@@ -422,14 +438,10 @@ async function importAllocationRowsSequential(
                 ctx.jobRoleIds.set(row.jobRole, jobRoleId);
             }
 
-            const latest = row.weeklyHours[row.weeklyHours.length - 1];
-            const percent = Math.min(100, Math.round((latest.hours / HOURS_PER_WEEK) * 100));
-            const startDate = row.weeklyHours[0].weekStart;
-            const endDate = row.weeklyHours[row.weeklyHours.length - 1].weekStart;
-            const isActive =
-                !row.activeFlag.toLowerCase().includes('not') &&
-                !row.projectStatus.toLowerCase().includes('completed') &&
-                percent > 0;
+            const { startDate, endDate, maxHours, percent } = allocationMetricsFromWeeklyHours(
+                row.weeklyHours
+            );
+            const isActive = isActiveAllocationRow(row);
             const skillId = ctx.employeePrimarySkill.get(employeeId.toString()) || defaultSkillId;
 
             const allocationDoc = await ProjectAllocation.findOneAndUpdate(
@@ -445,7 +457,7 @@ async function importAllocationRowsSequential(
                         allocation_percent: percent,
                         is_active: isActive,
                         ...(ctx.syncBatchId ? { last_sync_batch_id: ctx.syncBatchId } : {}),
-                        allocation_reason: `${SEED_TAG} from Project_Allocation (${latest.hours}h/wk, ${row.resourceType || row.projectType})`,
+                        allocation_reason: `${SEED_TAG} from Project_Allocation (${maxHours}h/wk, ${row.resourceType || row.projectType})`,
                         created_by_role: CreatedByRole.ADMIN,
                     },
                 },

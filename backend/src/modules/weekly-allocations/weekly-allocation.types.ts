@@ -90,4 +90,6 @@ export interface WeeklyGridQuery {
     limit: number;
     includeCapacitySummary: boolean;
     excludeBench?: boolean;
+    /** Include active projects with role requirements but no allocation rows yet. */
+    includeUnstaffedProjects?: boolean;
 }

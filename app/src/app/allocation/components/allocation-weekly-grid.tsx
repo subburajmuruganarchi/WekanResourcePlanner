@@ -272,7 +272,9 @@ export function AllocationWeeklyGrid({
                 },
                 valueFormatter: (params) => {
                     if (!params.value) {
-                        return params.data?.isDraft || params.data?.isNewRow
+                        return params.data?.isDraft ||
+                            params.data?.isNewRow ||
+                            params.data?.rowKey.startsWith('placeholder:')
                             ? 'Select resource…'
                             : '—';
                     }

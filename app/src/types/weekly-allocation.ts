@@ -143,4 +143,5 @@ export interface WeeklyGridFetchParams {
     limit?: number;
     includeCapacitySummary?: boolean;
     excludeBench?: boolean;
+    includeUnstaffedProjects?: boolean;
 }
