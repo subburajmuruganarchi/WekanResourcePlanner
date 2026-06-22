@@ -84,7 +84,8 @@ app.use(
     })
 );
 
-app.use(express.json());
+/** Sheet sync webhooks send full tab rows with ~50 week columns per row. */
+app.use(express.json({ limit: '50mb' }));
 app.use(mongoSanitize());
 
 app.use(requestIdMiddleware);

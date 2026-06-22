@@ -1740,45 +1740,86 @@ var allocation = {
   Logger.log("First Payload:");
   Logger.log(JSON.stringify(rows[0]));
 
-try {
+  return postSheetRowsToWebhook(tabName, rows, url, key);
+}
 
-  var response = UrlFetchApp.fetch(
-    url + "/api/google-sheet-sync/webhook",
-    {
-      method: "post",
-      contentType: "application/json",
-      headers: {
-        "X-R360-SYNC-KEY": key
-      },
-      payload: JSON.stringify({
-        sheet: tabName,
-        rows: rows
-      }),
-      muteHttpExceptions: true
+/** Max rows per webhook POST — keeps payload under server limits. */
+var SHEET_SYNC_BATCH_SIZE = 50;
+
+function isWebhookSuccess(response) {
+  return response && (response.status === 'SUCCESS' || response.syncCompleted === true);
+}
+
+function postSheetRowsToWebhook(tabName, rows, url, key, syncBatchId) {
+  url = url || PropertiesService.getScriptProperties().getProperty('R360_SYNC_URL');
+  key = key || PropertiesService.getScriptProperties().getProperty('R360_SYNC_KEY');
+
+  if (!url || !key) {
+    throw new Error('R360_SYNC_URL and R360_SYNC_KEY must be set in Script Properties');
+  }
+
+  if (rows.length <= SHEET_SYNC_BATCH_SIZE) {
+    return sendSheetWebhookBatch(tabName, rows, url, key, syncBatchId);
+  }
+
+  var lastResponse;
+  var batchCount = Math.ceil(rows.length / SHEET_SYNC_BATCH_SIZE);
+
+  for (var offset = 0; offset < rows.length; offset += SHEET_SYNC_BATCH_SIZE) {
+    var batch = rows.slice(offset, offset + SHEET_SYNC_BATCH_SIZE);
+    var batchNum = Math.floor(offset / SHEET_SYNC_BATCH_SIZE) + 1;
+    Logger.log('Sending batch ' + batchNum + ' of ' + batchCount + ' (' + batch.length + ' rows)');
+
+    lastResponse = sendSheetWebhookBatch(tabName, batch, url, key, syncBatchId);
+
+    if (!isWebhookSuccess(lastResponse)) {
+      throw new Error(
+        'Batch ' + batchNum + ' failed: ' + JSON.stringify(lastResponse)
+      );
     }
-  );
+  }
 
-  var responseText = response.getContentText();
-
-  Logger.log("Webhook Response:");
-  Logger.log(responseText);
-
-  return JSON.parse(responseText);
-
-}
-catch(e){
-
-  Logger.log(
-    "Webhook Error: " + e.message
-  );
-
-  return {
-    status:"error",
-    message:e.message
-  };
-
+  return lastResponse;
 }
 
+function sendSheetWebhookBatch(tabName, rows, url, key, syncBatchId) {
+  try {
+    var headers = {
+      'X-R360-SYNC-KEY': key
+    };
+    if (syncBatchId) {
+      headers['X-Sync-Batch-Id'] = syncBatchId;
+    }
+
+    var response = UrlFetchApp.fetch(
+      url + '/api/google-sheet-sync/webhook',
+      {
+        method: 'post',
+        contentType: 'application/json',
+        headers: headers,
+        payload: JSON.stringify({
+          sheet: tabName,
+          rows: rows,
+          syncBatchId: syncBatchId || undefined
+        }),
+        muteHttpExceptions: true
+      }
+    );
+
+    var responseText = response.getContentText();
+
+    Logger.log('Webhook Response:');
+    Logger.log(responseText);
+
+    return JSON.parse(responseText);
+  } catch (e) {
+    Logger.log('Webhook Error: ' + e.message);
+
+    return {
+      status: 'error',
+      message: e.message
+    };
+  }
 }
 
 // ======================================

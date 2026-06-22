@@ -70,17 +70,24 @@ async function bulkWriteChunked<T extends Parameters<typeof ProjectAllocation.bu
     ops: T,
     sessionOpts: ReturnType<typeof mongooseSessionOpts>,
     chunkSize = IMPORT_BULK_CHUNK_SIZE
-): Promise<{ upserted: number; modified: number }> {
+): Promise<{ upserted: number; modified: number; matched: number }> {
     let upserted = 0;
     let modified = 0;
+    let matched = 0;
     for (let i = 0; i < ops.length; i += chunkSize) {
         const chunk = ops.slice(i, i + chunkSize);
         if (chunk.length === 0) continue;
         const result = await model.bulkWrite(chunk, { ordered: true, ...sessionOpts });
         upserted += result.upsertedCount ?? 0;
         modified += result.modifiedCount ?? 0;
+        matched += result.matchedCount ?? 0;
     }
-    return { upserted, modified };
+    return { upserted, modified, matched };
+}
+
+/** Upserts count as acknowledged when inserted or matched (unchanged updates still match). */
+function bulkWriteAcknowledged(result: { upserted: number; matched: number }): number {
+    return result.upserted + result.matched;
 }
 
 export async function importAllocationRows(
@@ -232,9 +239,10 @@ async function importAllocationRowsBulk(
         sessionOpts
     );
 
-    if (allocWriteResult.upserted + allocWriteResult.modified !== prepared.length) {
+    const allocAcknowledged = bulkWriteAcknowledged(allocWriteResult);
+    if (allocAcknowledged !== prepared.length) {
         throw new Error(
-            `Allocation bulkWrite mismatch: expected ${prepared.length}, got ${allocWriteResult.upserted + allocWriteResult.modified}`
+            `Allocation bulkWrite mismatch: expected ${prepared.length}, got ${allocAcknowledged}`
         );
     }
 
@@ -266,6 +274,7 @@ async function importAllocationRowsBulk(
         }
 
         for (const week of p.weeklyHours) {
+            if (week.hours <= 0) continue;
             weeklyOps.push({
                 updateOne: {
                     filter: {
@@ -323,7 +332,7 @@ async function importAllocationRowsBulk(
             weeklyOps,
             sessionOpts
         );
-        weeklyWriteCount = weeklyResult.upserted + weeklyResult.modified;
+        weeklyWriteCount = bulkWriteAcknowledged(weeklyResult);
         if (weeklyWriteCount !== weeklyOps.length) {
             throw new Error(
                 `Weekly allocation bulkWrite mismatch: expected ${weeklyOps.length}, got ${weeklyWriteCount}`
@@ -466,6 +475,7 @@ async function importAllocationRowsSequential(
             allocationsUpserted++;
 
             for (const week of row.weeklyHours) {
+                if (week.hours <= 0) continue;
                 weeklyBulkOps.push({
                     updateOne: {
                         filter: {
