@@ -15,6 +15,7 @@ import type { WeeklyPlannerGridRow } from '@/types/weekly-allocation';
 import { WeeklyPlannerFilters } from './components/weekly-planner-filters';
 import { WeeklyPlannerGrid } from './components/weekly-planner-grid';
 import { PlannerGridSearchBar } from '@/components/weekly-planner/planner-grid-search-bar';
+import { projectTypeLabel } from '@/lib/project-type-label';
 import { CapacitySummaryPanel } from './components/capacity-summary-panel';
 import './weekly-planner-grid.css';
 import { CalendarRange, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -71,10 +72,22 @@ export default function WeeklyPlannerPage() {
         return map;
     }, [employees]);
 
+    const projectTypeById = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const p of projects) {
+            map.set(p.id, projectTypeLabel(p.type, p.billingType));
+        }
+        return map;
+    }, [projects]);
+
     const gridDisplayRows = useMemo(() => {
         return visibleRows
             .map((row) => ({
                 ...row,
+                projectType:
+                    row.projectType ||
+                    projectTypeById.get(row.projectId) ||
+                    '—',
                 employeeRole: employeeRoleMap.get(row.employeeId) || '—',
             }))
             .filter((row) =>
@@ -93,7 +106,7 @@ export default function WeeklyPlannerPage() {
                     sensitivity: 'base',
                 });
             });
-    }, [visibleRows, employeeRoleMap, searchProject, searchResource, searchRole]);
+    }, [visibleRows, employeeRoleMap, projectTypeById, searchProject, searchResource, searchRole]);
     const effectiveCapacity = useMemo(() => {
         if (grid.capacitySummary.length > 0) return grid.capacitySummary;
         if (grid.weeks.length === 0) return [];

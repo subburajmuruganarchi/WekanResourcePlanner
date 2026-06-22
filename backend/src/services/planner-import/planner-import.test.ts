@@ -4,7 +4,8 @@ import {
     googleSheetRowToAllocationRow,
     coerceWebhookRows,
 } from './adapters/google-sheet-row.adapter';
-import { isDummyResource, projectCodeFromRow, parseWeekMonday, formatWeekSheetHeader, projectCodeToPid } from './planner-import.utils';
+import { isDummyResource, projectCodeFromRow, parseWeekMonday, formatWeekSheetHeader, projectCodeToPid, inferSkillLevel, deriveProjectTypeLabel } from './planner-import.utils';
+import { SkillLevel, BillingType } from '../../common/types/enums';
 
 describe('google-sheet-row.adapter', () => {
     describe('Resource rows', () => {
@@ -167,6 +168,17 @@ describe('planner-import.utils', () => {
     it('maps WK project codes back to sheet PID', () => {
         expect(projectCodeToPid('WK-P03')).toBe('P03');
         expect(projectCodeToPid('WK-MYAPP')).toBeNull();
+    });
+
+    it('always infers expert skill level for imports', () => {
+        expect(inferSkillLevel('SDE II (Backend)', 0)).toBe(SkillLevel.EXPERT);
+        expect(inferSkillLevel('SDE II (Backend)', 2)).toBe(SkillLevel.EXPERT);
+    });
+
+    it('derives project type labels', () => {
+        expect(deriveProjectTypeLabel('Customer')).toBe('Customer');
+        expect(deriveProjectTypeLabel(undefined, BillingType.NON_BILLABLE)).toBe('Internal');
+        expect(deriveProjectTypeLabel(undefined, BillingType.BILLABLE)).toBe('Customer');
     });
 });
 

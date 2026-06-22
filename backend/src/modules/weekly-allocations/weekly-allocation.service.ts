@@ -26,6 +26,7 @@ import {
 import { WeeklyGridPutBodyInput } from './weekly-allocation.validators';
 import { weeklyAllocationSyncService, WeeklyAllocationSyncService } from './weekly-allocation-sync.service';
 import { syncAllocationToGoogleSheet } from '../google-sheet-sync/allocation-sheet-sync.service';
+import { deriveProjectTypeLabel } from '../../services/planner-import/planner-import.utils';
 import {
     WeeklyCapacityEngine,
     WeeklyHourCell,
@@ -46,7 +47,7 @@ export class WeeklyAllocationService {
         employeeId: string,
         projectId: string,
         weekStart: string,
-        names?: { employeeName?: string; projectName?: string; projectCode?: string }
+        names?: { employeeName?: string; projectName?: string; projectCode?: string; projectType?: string }
     ): WeeklyAllocationEntryDto {
         return {
             id: `empty:${employeeId}:${projectId}:${weekStart}`,
@@ -55,6 +56,7 @@ export class WeeklyAllocationService {
             employeeName: names?.employeeName,
             projectName: names?.projectName,
             projectCode: names?.projectCode,
+            projectType: names?.projectType,
             weekStart,
             plannedHours: 0,
             actualHours: 0,
@@ -266,7 +268,7 @@ export class WeeklyAllocationService {
                 .select('first_name last_name')
                 .lean(),
             Project.find({ _id: { $in: [...projectIds].filter((id) => id !== UNASSIGNED_BENCH_PROJECT_ID) } })
-                .select('project_name project_code')
+                .select('project_name project_code project_type billing_type')
                 .lean(),
         ]);
 
@@ -276,12 +278,17 @@ export class WeeklyAllocationService {
         const projById = new Map(
             projects.map((p) => [
                 p._id.toString(),
-                { name: p.project_name, code: p.project_code },
+                {
+                    name: p.project_name,
+                    code: p.project_code,
+                    type: deriveProjectTypeLabel(p.project_type, p.billing_type),
+                },
             ])
         );
         projById.set(UNASSIGNED_BENCH_PROJECT_ID, {
             name: UNASSIGNED_BENCH_PROJECT_NAME,
             code: UNASSIGNED_BENCH_PROJECT_CODE,
+            type: undefined,
         });
 
         const sortedPivotKeys = [...pivotMap.keys()].sort((a, b) => {
@@ -317,6 +324,8 @@ export class WeeklyAllocationService {
                 (cell.projectId === UNASSIGNED_BENCH_PROJECT_ID
                     ? UNASSIGNED_BENCH_PROJECT_CODE
                     : undefined),
+            projectType:
+                cell.projectType ?? projById.get(cell.projectId)?.type,
         });
 
         const expandPivotKeys = (keys: string[]): WeeklyAllocationEntryDto[] => {
@@ -336,6 +345,7 @@ export class WeeklyAllocationService {
                         (projectId === UNASSIGNED_BENCH_PROJECT_ID
                             ? UNASSIGNED_BENCH_PROJECT_CODE
                             : undefined),
+                    projectType: projById.get(projectId)?.type,
                 };
                 for (const weekIso of weekIsoList) {
                     const cell =

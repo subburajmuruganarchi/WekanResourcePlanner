@@ -29,6 +29,7 @@ export function pivotGridRows(apiRows: WeeklyAllocationGridRow[]): WeeklyPlanner
                 projectId: r.projectId,
                 projectName: r.projectName?.trim() || 'Project',
                 projectCode: r.projectCode?.trim() || '',
+                projectType: r.projectType?.trim() || undefined,
                 weekCells: {},
             };
             map.set(key, row);

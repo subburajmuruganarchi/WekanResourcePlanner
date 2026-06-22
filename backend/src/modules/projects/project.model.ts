@@ -15,6 +15,8 @@ export interface IProject extends Document {
     end_date: Date;
     billing_type?: BillingType;
     delivery_model?: DeliveryModel;
+    /** Sheet "Project Type" e.g. Customer, Internal, Projected */
+    project_type?: string;
     projected_total_hours?: number;
     project_logo?: string;
     // MCP Explainability Fields
@@ -38,6 +40,7 @@ const ProjectSchema = new Schema<IProject>({
     end_date: { type: Date, required: true },
     billing_type: { type: String, enum: Object.values(BillingType) },
     delivery_model: { type: String, enum: Object.values(DeliveryModel) },
+    project_type: { type: String, trim: true, index: true, sparse: true },
     projected_total_hours: { type: Number },
     project_logo: { type: String, trim: true },
     // MCP Explainability Fields

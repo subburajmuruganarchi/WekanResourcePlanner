@@ -9,6 +9,7 @@ import {
 } from '../allocations/allocation-availability.util';
 import { Types } from 'mongoose';
 import { AppError } from '../../common/errors/app-error';
+import { SkillLevel } from '../../common/types/enums';
 import { getEmployeesAllocatedToManagedProjects } from '../../common/utils/pm-scope.util';
 
 export interface EmployeeListParams {
@@ -280,7 +281,7 @@ export class EmployeeService {
             position: emp.position,
             skills: skills.map(s => ({
                 name: (s.skill_id as { name: string })?.name || 'Unknown',
-                skillLevel: s.skill_level,
+                skillLevel: SkillLevel.EXPERT,
                 yearsOfExperience: s.experience_years || 0,
                 isPrimary: s.is_primary || false
             })),

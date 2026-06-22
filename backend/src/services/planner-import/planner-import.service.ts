@@ -27,7 +27,7 @@ import {
     importResourceRows,
     prepareResourceImportReferences,
 } from './resource-import.service';
-import { importProjectRows, prepareProjectImportReferences, applyProjectStatusFromAllocationRows, applyProjectStatusFromProjectRows } from './project-import.service';
+import { importProjectRows, prepareProjectImportReferences, applyProjectStatusFromAllocationRows, applyProjectStatusFromProjectRows, applyProjectTypeFromAllocationRows } from './project-import.service';
 import { importAllocationRows, prepareAllocationImportReferences } from './allocation-import.service';
 import { cleanupJunkSkills, PASSWORD_PLAIN } from './planner-import.utils';
 import { ImportContext } from './types/import-context.types';
@@ -393,6 +393,7 @@ async function runPostImportStatusRepair(params: {
     }
     if (params.allocationRows?.length) {
         await applyProjectStatusFromAllocationRows(params.allocationRows);
+        await applyProjectTypeFromAllocationRows(params.allocationRows);
     }
 }
 

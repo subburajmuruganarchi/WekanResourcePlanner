@@ -150,6 +150,7 @@ async function importProjectRowsBulk(
             start_date: p.start,
             end_date: p.end,
             billing_type: mapBilling(p.row.type),
+            project_type: p.row.type?.trim() || undefined,
             business_goal: p.businessGoal,
             is_active: true,
         };
@@ -346,6 +347,7 @@ async function importProjectRowsSequential(
                 start_date: start,
                 end_date: end,
                 billing_type: mapBilling(row.type),
+                project_type: row.type?.trim() || undefined,
                 business_goal: businessGoal,
                 is_active: true,
             };
@@ -472,12 +474,20 @@ const PROJECT_STATUS_RANK: Record<ProjectStatus, number> = {
 function projectStatusUpdateFields(
     status: ProjectStatus,
     projectType = ''
-): { status: ProjectStatus; is_active: boolean; priority: ReturnType<typeof mapPriority> } {
-    return {
+): {
+    status: ProjectStatus;
+    is_active: boolean;
+    priority: ReturnType<typeof mapPriority>;
+    project_type?: string;
+} {
+    const trimmedType = projectType.trim();
+    const fields = {
         status,
         is_active: status === ProjectStatus.ACTIVE || status === ProjectStatus.PLANNING,
         priority: mapPriority(projectType, status),
+        ...(trimmedType ? { project_type: trimmedType } : {}),
     };
+    return fields;
 }
 
 /** Apply column-4 / sheet status after project import commits. */
@@ -539,6 +549,39 @@ export async function applyProjectStatusFromAllocationRows(
         structuredLogger.info('PROJECT STATUS REPAIRED FROM ALLOCATION', {
             projectsUpdated: updated,
             distinctPids: statusByPid.size,
+        });
+    }
+
+    return updated;
+}
+
+/** Repair project_type from allocation rows (reliable "Project Type" column). */
+export async function applyProjectTypeFromAllocationRows(
+    rows: AllocationImportRow[],
+    writeOpts?: ImportWriteOptions
+): Promise<number> {
+    const typeByPid = new Map<string, string>();
+
+    for (const row of rows) {
+        if (!row.pid || !row.projectType?.trim()) continue;
+        typeByPid.set(row.pid.toUpperCase(), row.projectType.trim());
+    }
+
+    let updated = 0;
+    for (const [pid, projectType] of typeByPid) {
+        const code = projectCodeFromRow(pid, '');
+        const res = await Project.updateMany(
+            { project_code: code },
+            { $set: { project_type: projectType } },
+            mongooseSessionOpts(writeOpts)
+        );
+        updated += res.modifiedCount;
+    }
+
+    if (updated > 0) {
+        structuredLogger.info('PROJECT TYPE REPAIRED FROM ALLOCATION', {
+            projectsUpdated: updated,
+            distinctPids: typeByPid.size,
         });
     }
 

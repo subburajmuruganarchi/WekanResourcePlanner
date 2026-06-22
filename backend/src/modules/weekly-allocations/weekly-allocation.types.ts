@@ -8,6 +8,7 @@ export interface WeeklyAllocationEntryDto {
     projectId: string;
     projectName?: string;
     projectCode?: string;
+    projectType?: string;
     weekStart: string;
     plannedHours: number;
     actualHours: number;

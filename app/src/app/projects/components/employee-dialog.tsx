@@ -64,7 +64,7 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
     })
 
     const [selectedSkills, setSelectedSkills] = useState<SkillEntry[]>([
-        { skillId: '', skillType: 'Primary', level: 'Beginner', experienceYears: 0 }
+        { skillId: '', skillType: 'Primary', level: 'Expert', experienceYears: 0 }
     ])
 
     const [error, setError] = useState<string | null>(null)
@@ -124,7 +124,7 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
     }
 
     const handleAddSkill = () => {
-        setSelectedSkills([...selectedSkills, { skillId: '', skillType: 'Secondary', level: 'Beginner', experienceYears: 0 }])
+        setSelectedSkills([...selectedSkills, { skillId: '', skillType: 'Secondary', level: 'Expert', experienceYears: 0 }])
     }
 
     const handleRemoveSkill = (index: number) => {

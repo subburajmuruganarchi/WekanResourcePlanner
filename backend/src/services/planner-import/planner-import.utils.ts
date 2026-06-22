@@ -102,12 +102,18 @@ export function roleProfile(jobRoleName: string): RoleProfile {
     return { level: SkillLevel.INTERMEDIATE, years: 3 };
 }
 
-export function inferSkillLevel(jobRoleName: string, skillIndex: number): SkillLevel {
-    const base = roleProfile(jobRoleName).level;
-    if (skillIndex === 0) return base;
-    if (base === SkillLevel.EXPERT) return SkillLevel.INTERMEDIATE;
-    if (base === SkillLevel.INTERMEDIATE) return SkillLevel.BEGINNER;
-    return SkillLevel.BEGINNER;
+/** Fallback when project_type was not imported yet. */
+export function deriveProjectTypeLabel(projectType?: string, billingType?: string): string | undefined {
+    const trimmed = projectType?.trim();
+    if (trimmed) return trimmed;
+    const billing = billingType?.trim().toLowerCase();
+    if (billing === 'non-billable') return 'Internal';
+    if (billing === 'billable') return 'Customer';
+    return undefined;
+}
+
+export function inferSkillLevel(_jobRoleName: string, _skillIndex: number): SkillLevel {
+    return SkillLevel.EXPERT;
 }
 
 export function inferExperienceYears(jobRoleName: string, skillIndex: number): number {

@@ -37,6 +37,7 @@ export interface WeeklyAllocationGridRow {
     projectId: string;
     projectName?: string;
     projectCode?: string;
+    projectType?: string;
     weekStart: string;
     plannedHours: number;
     actualHours: number;
@@ -118,6 +119,7 @@ export interface WeeklyPlannerGridRow {
     projectId: string;
     projectName: string;
     projectCode: string;
+    projectType?: string;
     weekCells: Record<string, WeeklyAllocationCell>;
 }
 

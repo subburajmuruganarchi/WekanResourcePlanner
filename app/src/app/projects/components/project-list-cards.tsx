@@ -98,6 +98,11 @@ export function ProjectListCards({ projects, onEdit, onOpen }: ProjectListCardsP
                                 <Badge variant="outline" className={cn('text-[10px]', statusStyles(project.status))}>
                                     {project.status}
                                 </Badge>
+                                {project.type && (
+                                    <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-700 border-slate-200">
+                                        {project.type}
+                                    </Badge>
+                                )}
                                 <Badge variant="outline" className={cn('text-[10px]', priorityStyles(project.priority))}>
                                     {project.priority}
                                 </Badge>

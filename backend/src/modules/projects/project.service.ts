@@ -7,6 +7,7 @@ import { Role } from '../roles/role.model';
 import { Skill } from '../skills/skill.model';
 import { Types } from 'mongoose';
 import { AppError } from '../../common/errors/app-error';
+import { deriveProjectTypeLabel } from '../../services/planner-import/planner-import.utils';
 
 export interface ProjectListParams {
     status?: string;
@@ -28,6 +29,7 @@ export interface ProjectResponse {
     priority: string;
     billingType?: string;
     deliveryModel?: string;
+    type?: string;
     projectLogo?: string;
     projectedTotalHours?: number;
     businessGoal?: string;
@@ -65,6 +67,7 @@ interface PopulatedProject {
     priority: string;
     billing_type?: string;
     delivery_model?: string;
+    project_type?: string;
     project_logo?: string;
     projected_total_hours?: number;
     business_goal?: string;
@@ -419,6 +422,7 @@ export class ProjectService {
             priority: proj.priority || 'Medium',
             billingType: proj.billing_type,
             deliveryModel: proj.delivery_model,
+            type: deriveProjectTypeLabel(proj.project_type, proj.billing_type),
             projectLogo: proj.project_logo,
             projectedTotalHours: proj.projected_total_hours,
             businessGoal: proj.business_goal,

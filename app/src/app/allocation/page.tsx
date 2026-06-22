@@ -21,6 +21,7 @@ import { AllocationGridLegend } from './components/allocation-grid-legend';
 import { AllocationDraftRow } from './components/allocation-draft-row';
 import { AllocationSuggestionsPanel } from './components/allocation-suggestions-panel';
 import { buildPlanningWeekRange, filterWeeksFromCurrent } from '@/lib/planning-week-utils';
+import { projectTypeLabel } from '@/lib/project-type-label';
 import type { WeeklyGridFilters } from '@/types/weekly-allocation';
 
 const BENCH_PROJECT_CODE = 'BENCH';
@@ -62,6 +63,14 @@ export function Allocation() {
                 .sort((a, b) => a.name.localeCompare(b.name)),
         [projects]
     );
+
+    const projectTypeById = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const p of projects) {
+            map.set(p.id, projectTypeLabel(p.type, p.billingType));
+        }
+        return map;
+    }, [projects]);
 
     const employeeOptions = useMemo((): EmployeeOption[] => {
         return employees
@@ -125,6 +134,10 @@ export function Allocation() {
             )
             .map((row) => ({
                 ...row,
+                projectType:
+                    row.projectType ||
+                    projectTypeById.get(row.projectId) ||
+                    '—',
                 employeeRole: row.employeeId
                     ? employeeRoleMap.get(row.employeeId) || '—'
                     : '—',
@@ -142,7 +155,7 @@ export function Allocation() {
                     sensitivity: 'base',
                 });
             });
-    }, [grid.plannerRows, employeeRoleMap]);
+    }, [grid.plannerRows, employeeRoleMap, projectTypeById]);
 
     const filteredRows = useMemo(() => {
         return displayRows.filter((row) =>

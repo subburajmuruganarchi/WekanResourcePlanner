@@ -5,7 +5,10 @@ import { Project } from '../projects/project.model';
 import { ProjectSkillRequirement } from '../projects/project-skill-requirement.model';
 import { ProjectRoleEffort } from '../projects/project-role-effort.model';
 import { Types, startSession } from 'mongoose';
+import { SkillLevel } from '../../common/types/enums';
 import { computeAvailabilityInPeriod } from './allocation-availability.util';
+
+const EMPLOYEE_SKILL_DISPLAY_LEVEL = SkillLevel.EXPERT;
 
 export interface RankingRequest {
     projectId: string;
@@ -707,7 +710,7 @@ export class AllocationService {
         for (const s of sorted.slice(0, 6)) {
             const name = (s.skill_id as { name: string })?.name;
             if (name && !displaySkills.some((d) => d.name === name)) {
-                displaySkills.push({ name, level: s.skill_level });
+                displaySkills.push({ name, level: EMPLOYEE_SKILL_DISPLAY_LEVEL });
             }
         }
 
@@ -769,7 +772,7 @@ export class AllocationService {
                 matchedSkill = primaryMatch;
                 matchingSkills = [{
                     name: (primaryMatch.skill_id as { name: string }).name,
-                    level: primaryMatch.skill_level
+                    level: EMPLOYEE_SKILL_DISPLAY_LEVEL
                 }];
                 skillMatchScore = 40;
                 skillMatch = true;
@@ -783,7 +786,7 @@ export class AllocationService {
                     matchedSkill = secondaryMatch;
                     matchingSkills = [{
                         name: (secondaryMatch.skill_id as { name: string }).name,
-                        level: secondaryMatch.skill_level
+                        level: EMPLOYEE_SKILL_DISPLAY_LEVEL
                     }];
                     skillMatchScore = 30;
                     skillMatch = true;
@@ -808,7 +811,7 @@ export class AllocationService {
                     if (!matchingSkills.find(s => s.name === skillNameStr)) {
                         matchingSkills.push({
                             name: skillNameStr,
-                            level: empSkill.skill_level
+                            level: EMPLOYEE_SKILL_DISPLAY_LEVEL
                         });
                     }
 
@@ -830,7 +833,7 @@ export class AllocationService {
             if (matchedSkill) {
                 matchingSkills = [{
                     name: (matchedSkill.skill_id as { name: string }).name,
-                    level: matchedSkill.skill_level
+                    level: EMPLOYEE_SKILL_DISPLAY_LEVEL
                 }];
             }
             skillMatch = true;
@@ -840,7 +843,7 @@ export class AllocationService {
         ({ matchingSkills, matchedSkill } = this.fillDisplaySkills(skills, matchingSkills, matchedSkill));
 
         const skillName = (matchedSkill?.skill_id as { name: string })?.name || 'No skills on profile';
-        const skillLevel = matchedSkill?.skill_level || '—';
+        const skillLevel = EMPLOYEE_SKILL_DISPLAY_LEVEL;
         const empExpYears = this.resolveExperienceYears(skills, matchingSkills, matchedSkill);
 
         // Calculate availability over the requested period

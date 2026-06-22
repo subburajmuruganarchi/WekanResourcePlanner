@@ -109,6 +109,7 @@ export interface Project {
     priority: ProjectPriority;
     billingType?: string;
     deliveryModel?: string;
+    type?: string;
     projectLogo?: string;
     clientName?: string;
     projectedTotalHours?: number;

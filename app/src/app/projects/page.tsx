@@ -59,6 +59,7 @@ function matchesProjectSearch(project: Project, query: string): boolean {
     const haystack = [
         project.name,
         project.code,
+        project.type,
         project.owner,
         project.managerName,
     ]
