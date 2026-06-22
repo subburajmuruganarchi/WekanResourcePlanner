@@ -5,7 +5,6 @@ import {
     LayoutDashboard,
     FolderKanban,
     Users,
-    CalendarRange,
     Clock,
     ClipboardCheck,
     FileBarChart,
@@ -39,7 +38,7 @@ const navGroups: NavGroup[] = [
             { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
             { label: 'Resource Planning', icon: Users, path: '/allocation' },
             { label: 'Projects', icon: FolderKanban, path: '/projects' },
-            { label: 'Weekly Planner', icon: CalendarRange, path: '/weekly-planner' },
+            { label: 'Capacity Forecast', icon: BarChart3, path: '/weekly-planner' },
         ],
     },
     {
@@ -54,8 +53,9 @@ const navGroups: NavGroup[] = [
     {
         title: 'Intelligence',
         items: [
-            { label: 'AI Insights', icon: Sparkles, path: '/insights' },
-            { label: 'Forecasting', icon: BarChart3, path: '/dashboard' },
+            { label: 'AI Recommendations', icon: Sparkles, path: '/insights' },
+            { label: 'Risk Detection', icon: Shield, path: '/dashboard' },
+            { label: 'Forecasting', icon: BarChart3, path: '/weekly-planner' },
         ],
     },
     {
