@@ -1,4 +1,4 @@
-import type { ColDef } from 'ag-grid-community';
+import type { ColDef, ColDefField } from 'ag-grid-community';
 import { CollapsibleColumnHeader } from './collapsible-column-header';
 import type { PlannerCollapsibleColumn } from '@/lib/use-planner-grid-column-visibility';
 
@@ -39,7 +39,7 @@ export function buildProjectTypeColumnDef<T extends { projectType?: string }>(
 
     return {
         colId: 'projectType',
-        field: 'projectType',
+        field: 'projectType' as ColDefField<T>,
         headerName: 'Type',
         headerComponent: CollapsibleColumnHeader,
         headerComponentParams: {
@@ -74,7 +74,7 @@ export function buildEmployeeRoleColumnDef<T extends { employeeRole?: string }>(
 
     return {
         colId: 'employeeRole',
-        field: 'employeeRole',
+        field: 'employeeRole' as ColDefField<T>,
         headerName: 'Resource Role',
         headerComponent: CollapsibleColumnHeader,
         headerComponentParams: {
