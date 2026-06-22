@@ -12,6 +12,7 @@ import {
     inferExperienceYears,
     upsertJobRole,
     upsertSkill,
+    employeeCodeLookupKeys,
 } from './planner-import.utils';
 import { ImportWriteOptions, mongooseSessionOpts, failOrSkipRow, IMPORT_BULK_CHUNK_SIZE } from './types/import-write.options';
 import { structuredLogger } from '../../common/logger';
@@ -245,7 +246,9 @@ async function importResourceRowsBulk(
         }
         ctx.employeeByEmail.set(p.row.email.toLowerCase(), id);
         if (p.row.employeeCode) {
-            ctx.employeeByCode.set(p.row.employeeCode.toUpperCase(), id);
+            for (const key of employeeCodeLookupKeys(p.row.employeeCode)) {
+                ctx.employeeByCode.set(key, id);
+            }
         }
     }
 
@@ -365,7 +368,11 @@ async function importResourceRowsSequential(
 
             employeesUpserted++;
             ctx.employeeByEmail.set(email, emp!._id);
-            if (row.employeeCode) ctx.employeeByCode.set(row.employeeCode.toUpperCase(), emp!._id);
+            if (row.employeeCode) {
+                for (const key of employeeCodeLookupKeys(row.employeeCode)) {
+                    ctx.employeeByCode.set(key, emp!._id);
+                }
+            }
 
             const skillIdsForEmployee: Types.ObjectId[] = [];
             for (let i = 0; i < row.skills.length; i++) {

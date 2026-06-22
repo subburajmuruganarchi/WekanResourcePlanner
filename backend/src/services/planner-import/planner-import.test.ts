@@ -4,7 +4,7 @@ import {
     googleSheetRowToAllocationRow,
     coerceWebhookRows,
 } from './adapters/google-sheet-row.adapter';
-import { isDummyResource, projectCodeFromRow, parseWeekMonday, formatWeekSheetHeader, projectCodeToPid, inferSkillLevel, deriveProjectTypeLabel, mapProjectStatus } from './planner-import.utils';
+import { isDummyResource, projectCodeFromRow, parseWeekMonday, formatWeekSheetHeader, projectCodeToPid, inferSkillLevel, deriveProjectTypeLabel, mapProjectStatus, normalizeEmployeeCode, employeeCodeLookupKeys } from './planner-import.utils';
 import { SkillLevel, BillingType, ProjectStatus } from '../../common/types/enums';
 
 describe('google-sheet-row.adapter', () => {
@@ -164,6 +164,13 @@ describe('planner-import.utils', () => {
         expect(mapProjectStatus('In Progress')).toBe(ProjectStatus.ACTIVE);
         expect(mapProjectStatus('completed')).toBe(ProjectStatus.COMPLETED);
         expect(mapProjectStatus('')).toBe(ProjectStatus.PLANNING);
+    });
+
+    it('normalizes employee codes for allocation lookup', () => {
+        expect(normalizeEmployeeCode('e059')).toBe('E59');
+        expect(employeeCodeLookupKeys('E059')).toEqual(
+            expect.arrayContaining(['E59', 'E059', 'E0059'])
+        );
     });
 
     it('formats week headers to match Project_Allocation columns', () => {

@@ -3,6 +3,7 @@ import { EmployeeSkill } from '../../modules/employees/employee-skill.model';
 import { Project } from '../../modules/projects/project.model';
 import { ImportContext } from './types/import-context.types';
 import { ImportWriteOptions } from './types/import-write.options';
+import { employeeCodeLookupKeys } from './planner-import.utils';
 
 /** Rebuild in-memory lookup maps from MongoDB (for standalone Project/Allocation sheet sync). */
 export async function hydrateContextFromDatabase(
@@ -22,7 +23,9 @@ export async function hydrateContextFromDatabase(
     for (const emp of employees) {
         ctx.employeeByEmail.set(emp.email.toLowerCase(), emp._id);
         if (emp.employee_code) {
-            ctx.employeeByCode.set(emp.employee_code.toUpperCase(), emp._id);
+            for (const key of employeeCodeLookupKeys(emp.employee_code)) {
+                ctx.employeeByCode.set(key, emp._id);
+            }
         }
     }
 

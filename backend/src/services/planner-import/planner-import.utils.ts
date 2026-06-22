@@ -37,6 +37,34 @@ export function parseName(full: string): { first: string; last: string } {
     return { first: parts[0], last: parts.slice(1).join(' ') };
 }
 
+/** Canonical sheet EID form, e.g. e059 → E059. */
+export function normalizeEmployeeCode(code: string): string {
+    const trimmed = code.trim().toUpperCase();
+    const match = trimmed.match(/^E(\d+)$/i);
+    if (match) return `E${parseInt(match[1], 10)}`;
+    return trimmed;
+}
+
+/** Lookup keys for E059 vs E59 vs sheet padding mismatches. */
+export function employeeCodeLookupKeys(code: string): string[] {
+    const normalized = normalizeEmployeeCode(code);
+    const keys = new Set<string>([normalized, code.trim().toUpperCase()]);
+    const match = normalized.match(/^E(\d+)$/i);
+    if (match) {
+        const num = parseInt(match[1], 10);
+        keys.add(`E${num}`);
+        keys.add(`E${String(num).padStart(3, '0')}`);
+        keys.add(`E${String(num).padStart(4, '0')}`);
+    }
+    return [...keys];
+}
+
+/** Stable import email when Resource row is missing or invalid. */
+export function allocationImportEmail(employeeCode: string): string {
+    const slug = normalizeEmployeeCode(employeeCode).replace(/[^A-Z0-9]/g, '').toLowerCase() || 'unknown';
+    return `${slug}@import.wekan.local`;
+}
+
 export function mapProjectStatus(sheetStatus: string): ProjectStatus {
     const s = sheetStatus.trim().toLowerCase();
     if (!s) return ProjectStatus.PLANNING;

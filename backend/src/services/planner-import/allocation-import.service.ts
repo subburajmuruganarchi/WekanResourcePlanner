@@ -19,8 +19,24 @@ import {
     failOrSkipRow,
     IMPORT_BULK_CHUNK_SIZE,
 } from './types/import-write.options';
+import {
+    ensureEmployeeForAllocationRow,
+    resolveEmployeeForAllocationRow,
+} from './allocation-employee-resolver';
 import { CreatedByRole, WeeklyAllocationSource, WeeklyAllocationStatus } from '../../common/types/enums';
 import { structuredLogger } from '../../common/logger';
+
+async function resolveAllocationEmployeeId(
+    row: AllocationImportRow,
+    ctx: ImportContext,
+    writeOpts?: ImportWriteOptions
+): Promise<Types.ObjectId | null> {
+    let employeeId = await resolveEmployeeForAllocationRow(row, ctx, writeOpts);
+    if (!employeeId) {
+        employeeId = await ensureEmployeeForAllocationRow(row, ctx, writeOpts);
+    }
+    return employeeId;
+}
 
 function allocationMetricsFromWeeklyHours(weeklyHours: AllocationImportRow['weeklyHours']) {
     const sorted = [...weeklyHours].sort(
@@ -157,13 +173,7 @@ async function importAllocationRowsBulk(
             continue;
         }
 
-        let employeeId = ctx.employeeByCode.get(row.employeeCode);
-        if (!employeeId) {
-            const emailGuess = [...ctx.employeeByEmail.keys()].find((e) =>
-                e.startsWith(row.resourceName.split(' ')[0].toLowerCase())
-            );
-            if (emailGuess) employeeId = ctx.employeeByEmail.get(emailGuess);
-        }
+        let employeeId = await resolveAllocationEmployeeId(row, ctx, writeOpts);
         if (!employeeId) {
             failOrSkipRow(
                 writeOpts,
@@ -418,13 +428,7 @@ async function importAllocationRowsSequential(
             continue;
         }
 
-        let employeeId = ctx.employeeByCode.get(row.employeeCode);
-        if (!employeeId) {
-            const emailGuess = [...ctx.employeeByEmail.keys()].find((e) =>
-                e.startsWith(row.resourceName.split(' ')[0].toLowerCase())
-            );
-            if (emailGuess) employeeId = ctx.employeeByEmail.get(emailGuess);
-        }
+        let employeeId = await resolveAllocationEmployeeId(row, ctx, writeOpts);
         if (!employeeId) {
             failOrSkipRow(
                 writeOpts,
