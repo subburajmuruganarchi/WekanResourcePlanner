@@ -10,7 +10,7 @@ import { CommandPalette, type CommandItem } from './command-palette';
 
 const routeTitles: Record<string, { title: string; breadcrumb: string[] }> = {
     '/dashboard': { title: 'Resource Intelligence', breadcrumb: ['Workspace', 'Dashboard'] },
-    '/allocation': { title: 'Resource Allocation', breadcrumb: ['Workspace', 'Resource Planning'] },
+    '/allocation': { title: 'Resource Planning', breadcrumb: ['Workspace', 'Allocation'] },
     '/projects': { title: 'Projects', breadcrumb: ['Workspace', 'Projects'] },
     '/weekly-planner': { title: 'Weekly Planner', breadcrumb: ['Workspace', 'Planner'] },
     '/time-entry': { title: 'Time Tracking', breadcrumb: ['Operations', 'Time'] },

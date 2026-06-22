@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { AlertCircle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Loader2, Save, Undo2, AlertCircle, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageContainer } from '@/components/layout/page-container';
+import { Button } from '@/components/ui/button';
 import { useProjects } from '@/lib/use-projects';
 import { useAuth } from '@/lib/auth-context';
 import { useEmployees } from '@/lib/use-employees';
@@ -10,42 +10,19 @@ import { useWeeklyAllocationGrid } from '@/lib/use-weekly-allocation-grid';
 import { rowKey } from '@/lib/weekly-grid-pivot';
 import { matchesPlannerGridSearch } from '@/lib/planner-grid-search';
 import { subscribeWeeklyGridUpdated } from '@/lib/weekly-grid-sync';
-import { buildPlanningWeekRange, filterWeeksFromCurrent } from '@/lib/planning-week-utils';
-import { projectTypeLabel } from '@/lib/project-type-label';
-import type { WeeklyGridFilters } from '@/types/weekly-allocation';
+import { PlannerGridSearchBar } from '@/components/weekly-planner/planner-grid-search-bar';
 import {
+    AllocationWeeklyGrid,
     type AllocationGridRow,
     type EmployeeOption,
 } from './components/allocation-weekly-grid';
+import { AllocationGridLegend } from './components/allocation-grid-legend';
 import { AllocationDraftRow } from './components/allocation-draft-row';
-import { AllocationHeader } from './components/resource-allocation/AllocationHeader';
-import { CapacityCards } from './components/resource-allocation/CapacityCards';
-import { ViewSwitcher } from './components/resource-allocation/ViewSwitcher';
-import { TimelinePlanner } from './components/resource-allocation/TimelinePlanner';
-import { ResourceGrid } from './components/resource-allocation/ResourceGrid';
-import { HeatmapView } from './components/resource-allocation/HeatmapView';
-import { CapacityView } from './components/resource-allocation/CapacityView';
-import {
-    FilterPanel,
-    applyWorkspaceFilters,
-} from './components/resource-allocation/FilterPanel';
-import { AIInsightPanel } from './components/resource-allocation/AIInsightPanel';
-import { CapacityStatusBar } from './components/resource-allocation/CapacityStatusBar';
-import { SaveConfirmDialog } from './components/resource-allocation/SaveConfirmDialog';
-import {
-    computeAllocationMetrics,
-    deriveAIInsights,
-    exportRowsToCsv,
-} from './components/resource-allocation/allocation-metrics';
-import {
-    DEFAULT_WORKSPACE_FILTERS,
-    type AllocationViewMode,
-    type AllocationWorkspaceFilters,
-} from './components/resource-allocation/types';
-import './resource-allocation.css';
+import { buildPlanningWeekRange, filterWeeksFromCurrent } from '@/lib/planning-week-utils';
+import { projectTypeLabel } from '@/lib/project-type-label';
+import type { WeeklyGridFilters } from '@/types/weekly-allocation';
 
 const BENCH_PROJECT_CODE = 'BENCH';
-const WEEKS_VISIBLE = 8;
 
 function employeeRoleLabel(emp: {
     jobRole?: string;
@@ -56,25 +33,20 @@ function employeeRoleLabel(emp: {
 }
 
 export function Allocation() {
-    const navigate = useNavigate();
     const { user } = useAuth();
     const canEditGrid = user?.role === 'Admin';
 
     const { projects, loading: projLoading } = useProjects();
     const { employees } = useEmployees();
 
-    const [viewMode, setViewMode] = useState<AllocationViewMode>('timeline');
     const [weekWindowStart, setWeekWindowStart] = useState(0);
     const [searchProject, setSearchProject] = useState('');
     const [searchResource, setSearchResource] = useState('');
-    const [workspaceFilters, setWorkspaceFilters] =
-        useState<AllocationWorkspaceFilters>(DEFAULT_WORKSPACE_FILTERS);
     const [showDraftForm, setShowDraftForm] = useState(false);
     const [draftProjectId, setDraftProjectId] = useState('');
     const [draftEmployeeId, setDraftEmployeeId] = useState('');
     const [draftError, setDraftError] = useState<string | null>(null);
-    const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-    const [aiPanelCollapsed, setAiPanelCollapsed] = useState(false);
+    const WEEKS_VISIBLE = 8;
 
     const grid = useWeeklyAllocationGrid({
         canEdit: canEditGrid,
@@ -162,7 +134,9 @@ export function Allocation() {
             .map((row) => ({
                 ...row,
                 projectType:
-                    row.projectType || projectTypeById.get(row.projectId) || '—',
+                    row.projectType ||
+                    projectTypeById.get(row.projectId) ||
+                    '—',
                 employeeRole: row.employeeId
                     ? employeeRoleMap.get(row.employeeId) || '—'
                     : '—',
@@ -187,28 +161,14 @@ export function Allocation() {
             });
     }, [grid.plannerRows, employeeRoleMap, projectTypeById]);
 
-    const weeksForView = visibleWeeks.length > 0 ? visibleWeeks : planningWeeks;
-
     const filteredRows = useMemo(() => {
-        const searched = displayRows.filter((row) =>
+        return displayRows.filter((row) =>
             matchesPlannerGridSearch(row, {
                 project: searchProject,
                 resource: searchResource,
             })
         );
-        return applyWorkspaceFilters(searched, workspaceFilters, weeksForView, employees);
-    }, [displayRows, searchProject, searchResource, workspaceFilters, weeksForView, employees]);
-
-    const metrics = useMemo(
-        () =>
-            computeAllocationMetrics(filteredRows, weeksForView, grid.capacitySummary),
-        [filteredRows, weeksForView, grid.capacitySummary]
-    );
-
-    const aiInsights = useMemo(
-        () => deriveAIInsights(filteredRows, weeksForView, grid.capacitySummary, employeeRoleMap),
-        [filteredRows, weeksForView, grid.capacitySummary, employeeRoleMap]
-    );
+    }, [displayRows, searchProject, searchResource]);
 
     const handleEmployeeChange = useCallback(
         (row: AllocationGridRow, employeeId: string) => {
@@ -216,7 +176,11 @@ export function Allocation() {
             if (!emp) return;
 
             const newKey = rowKey(employeeId, row.projectId);
-            if (grid.plannerRows.some((r) => r.rowKey === newKey && r.rowKey !== row.rowKey)) {
+            if (
+                grid.plannerRows.some(
+                    (r) => r.rowKey === newKey && r.rowKey !== row.rowKey
+                )
+            ) {
                 return;
             }
 
@@ -232,12 +196,21 @@ export function Allocation() {
 
             if (row.employeeId) {
                 const newKey = rowKey(row.employeeId, projectId);
-                if (grid.plannerRows.some((r) => r.rowKey === newKey && r.rowKey !== row.rowKey)) {
+                if (
+                    grid.plannerRows.some(
+                        (r) => r.rowKey === newKey && r.rowKey !== row.rowKey
+                    )
+                ) {
                     return;
                 }
             }
 
-            grid.changeRowProject(row.rowKey, project.id, project.name, project.code);
+            grid.changeRowProject(
+                row.rowKey,
+                project.id,
+                project.name,
+                project.code
+            );
         },
         [projectOptions, grid]
     );
@@ -282,178 +255,181 @@ export function Allocation() {
         handleCancelDraft();
     }, [draftProjectId, draftEmployeeId, projectOptions, employeeOptions, grid, handleCancelDraft]);
 
-    const handleConfirmSave = async () => {
+    const handleSave = async () => {
         await grid.saveBulk();
-        setSaveDialogOpen(false);
     };
 
-    const handleAiReview = useCallback(
-        (insight: { type: string }) => {
-            if (insight.type === 'risk') {
-                setWorkspaceFilters((f) => ({ ...f, availability: 'overloaded', utilizationMin: 85 }));
-                setViewMode('capacity');
-            } else if (insight.type === 'skill-gap') {
-                setViewMode('grid');
-            } else {
-                setViewMode('timeline');
-            }
-        },
-        []
-    );
-
-    const weekNavLabel =
-        planningWeeks.length > WEEKS_VISIBLE
-            ? `Weeks ${weekWindowStart + 1}–${Math.min(weekWindowStart + WEEKS_VISIBLE, planningWeeks.length)} of ${planningWeeks.length}`
-            : planningWeeks.length > 0
-              ? `${format(parseISO(planningWeeks[0]), 'd MMM')} – ${format(parseISO(planningWeeks[planningWeeks.length - 1]), 'd MMM yyyy')}`
-              : '';
-
-    const loading = grid.loading || projLoading;
-
     return (
-        <PageContainer className="space-y-5 max-w-[1800px]">
-            <AllocationHeader
-                canEdit={canEditGrid}
-                dirtyCount={grid.dirtyCount}
-                saving={grid.saving}
-                onAddAllocation={handleAddRow}
-                onImport={() => navigate('/inputs')}
-                onExport={() => exportRowsToCsv(filteredRows, weeksForView)}
-                onAiOptimize={() => setViewMode('heatmap')}
-                onSave={() => setSaveDialogOpen(true)}
-                onDiscard={() => grid.discardChanges()}
-                addDisabled={projLoading || projects.length === 0}
-                weekNav={
-                    planningWeeks.length > 0
-                        ? {
-                              label: weekNavLabel,
-                              canBack: canScrollWeeksBack,
-                              canForward: canScrollWeeksForward,
-                              onBack: () =>
-                                  setWeekWindowStart((s) => Math.max(0, s - WEEKS_VISIBLE)),
-                              onForward: () =>
-                                  setWeekWindowStart((s) =>
-                                      Math.min(
-                                          s + WEEKS_VISIBLE,
-                                          planningWeeks.length - WEEKS_VISIBLE
-                                      )
-                                  ),
-                          }
-                        : undefined
-                }
-            />
+        <PageContainer className="space-y-4">
+            <div>
+                <h1 className="text-2xl font-semibold text-gray-900">Resource Allocation</h1>
+                <p className="text-sm text-gray-600 mt-1">
+                    Allocate resources to projects based on skills, availability, and experience.
+                </p>
+            </div>
 
-            <CapacityCards metrics={metrics} loading={loading} />
+            <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {canEditGrid && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-9 gap-1"
+                                onClick={handleAddRow}
+                                disabled={projLoading || projects.length === 0}
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add row
+                            </Button>
+                        )}
+                        <span className="text-sm text-gray-500">
+                            {new Set(filteredRows.map((r) => r.projectId).filter(Boolean)).size}{' '}
+                            project
+                            {new Set(filteredRows.map((r) => r.projectId).filter(Boolean)).size === 1
+                                ? ''
+                                : 's'}
+                            {' · '}
+                            {filteredRows.filter((r) => r.employeeId).length} resource
+                            {filteredRows.filter((r) => r.employeeId).length === 1 ? '' : 's'}
+                            {planningWeeks.length > 0 &&
+                                ` · ${format(parseISO(planningWeeks[0]), 'd MMM yyyy')} – ${format(parseISO(planningWeeks[planningWeeks.length - 1]), 'd MMM yyyy')}`}
+                        </span>
+                    </div>
 
-            {grid.error && (
-                <div
-                    className="flex items-start gap-2 text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm"
-                    role="alert"
-                >
-                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                    <div>
-                        <p className="font-medium">Could not load allocation workspace</p>
-                        <p>{grid.error}</p>
-                        {grid.error.includes('disabled') && (
-                            <p className="mt-1 text-xs">
-                                Enable{' '}
-                                <code className="bg-red-100 px-1 rounded">
-                                    FEATURE_WEEKLY_ALLOCATIONS_ENABLED=true
-                                </code>{' '}
-                                on the backend and restart.
-                            </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {planningWeeks.length > WEEKS_VISIBLE && (
+                            <>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    disabled={!canScrollWeeksBack}
+                                    onClick={() =>
+                                        setWeekWindowStart((s) => Math.max(0, s - WEEKS_VISIBLE))
+                                    }
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </Button>
+                                <span className="text-xs text-gray-500">
+                                    Weeks {weekWindowStart + 1}–
+                                    {Math.min(weekWindowStart + WEEKS_VISIBLE, planningWeeks.length)} of{' '}
+                                    {planningWeeks.length}
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    disabled={!canScrollWeeksForward}
+                                    onClick={() =>
+                                        setWeekWindowStart((s) =>
+                                            Math.min(
+                                                s + WEEKS_VISIBLE,
+                                                planningWeeks.length - WEEKS_VISIBLE
+                                            )
+                                        )
+                                    }
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </Button>
+                            </>
+                        )}
+
+                        {canEditGrid && (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => grid.discardChanges()}
+                                    disabled={!grid.hasDirty || grid.saving}
+                                >
+                                    <Undo2 className="w-4 h-4 mr-1" />
+                                    Discard
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    onClick={() => void handleSave()}
+                                    disabled={!grid.hasDirty || grid.saving}
+                                    className="bg-brand-500 hover:bg-brand-600"
+                                >
+                                    {grid.saving ? (
+                                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                    ) : (
+                                        <Save className="w-4 h-4 mr-1" />
+                                    )}
+                                    Save changes
+                                </Button>
+                            </>
                         )}
                     </div>
                 </div>
-            )}
 
-            {grid.saveMessage && (
-                <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2">
-                    {grid.saveMessage} Changes sync to Weekly Planner automatically.
-                </p>
-            )}
+                {grid.error && (
+                    <div className="flex items-start gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm">
+                        <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                        <div>
+                            <p className="font-medium">Could not load allocation grid</p>
+                            <p>{grid.error}</p>
+                            {grid.error.includes('disabled') && (
+                                <p className="mt-1 text-xs">
+                                    Enable{' '}
+                                    <code className="bg-red-100 px-1 rounded">
+                                        FEATURE_WEEKLY_ALLOCATIONS_ENABLED=true
+                                    </code>{' '}
+                                    on the backend and restart.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
 
-            <div className="flex flex-col xl:flex-row gap-5 items-start">
-                <div className="flex-1 min-w-0 space-y-4 w-full">
-                    <FilterPanel
-                        filters={workspaceFilters}
-                        onChange={setWorkspaceFilters}
-                        projects={projectOptions}
-                        employees={employees}
-                        projectSearch={searchProject}
-                        resourceSearch={searchResource}
-                        onProjectSearchChange={setSearchProject}
-                        onResourceSearchChange={setSearchResource}
-                    />
+                {grid.saveMessage && (
+                    <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
+                        {grid.saveMessage} Changes sync to Weekly Planner automatically.
+                    </p>
+                )}
 
-                    <ViewSwitcher value={viewMode} onChange={setViewMode} />
-
-                    {canEditGrid && (
-                        <AllocationDraftRow
-                            open={showDraftForm}
-                            projects={projectOptions}
-                            employees={employeeOptions}
-                            projectId={draftProjectId}
-                            employeeId={draftEmployeeId}
-                            error={draftError}
-                            saving={false}
-                            onProjectChange={setDraftProjectId}
-                            onEmployeeChange={setDraftEmployeeId}
-                            onSave={handleSaveDraftRow}
-                            onCancel={handleCancelDraft}
-                        />
-                    )}
-
-                    {viewMode === 'timeline' && (
-                        <TimelinePlanner rows={filteredRows} weeks={weeksForView} loading={loading} />
-                    )}
-
-                    {viewMode === 'grid' && (
-                        <ResourceGrid
-                            rows={filteredRows}
-                            weeks={weeksForView}
-                            employees={employeeOptions}
-                            projects={projectOptions}
-                            canEdit={canEditGrid}
-                            dirtyKeys={grid.dirtyKeys}
-                            onPlannedHoursChange={grid.updatePlannedHours}
-                            onEmployeeChange={handleEmployeeChange}
-                            onProjectChange={handleProjectChange}
-                            loading={loading}
-                        />
-                    )}
-
-                    {viewMode === 'heatmap' && (
-                        <HeatmapView rows={filteredRows} weeks={weeksForView} loading={loading} />
-                    )}
-
-                    {viewMode === 'capacity' && (
-                        <CapacityView
-                            capacitySummary={grid.capacitySummary}
-                            weeks={weeksForView}
-                            loading={loading}
-                        />
-                    )}
-
-                    <CapacityStatusBar />
-                </div>
-
-                <AIInsightPanel
-                    insights={aiInsights}
-                    onReview={handleAiReview}
-                    onApply={() => setViewMode('timeline')}
-                    collapsed={aiPanelCollapsed}
-                    onToggle={() => setAiPanelCollapsed((c) => !c)}
+                <PlannerGridSearchBar
+                    projectSearch={searchProject}
+                    resourceSearch={searchResource}
+                    onProjectSearchChange={setSearchProject}
+                    onResourceSearchChange={setSearchResource}
                 />
-            </div>
 
-            <SaveConfirmDialog
-                open={saveDialogOpen}
-                dirtyCount={grid.dirtyCount}
-                saving={grid.saving}
-                onConfirm={() => void handleConfirmSave()}
-                onCancel={() => setSaveDialogOpen(false)}
-            />
+                {canEditGrid && (
+                    <AllocationDraftRow
+                        open={showDraftForm}
+                        projects={projectOptions}
+                        employees={employeeOptions}
+                        projectId={draftProjectId}
+                        employeeId={draftEmployeeId}
+                        error={draftError}
+                        saving={false}
+                        onProjectChange={setDraftProjectId}
+                        onEmployeeChange={setDraftEmployeeId}
+                        onSave={handleSaveDraftRow}
+                        onCancel={handleCancelDraft}
+                    />
+                )}
+
+                <AllocationWeeklyGrid
+                    rows={filteredRows}
+                    weeks={visibleWeeks.length > 0 ? visibleWeeks : planningWeeks}
+                    employees={employeeOptions}
+                    projects={projectOptions}
+                    canEdit={canEditGrid}
+                    dirtyKeys={grid.dirtyKeys}
+                    onPlannedHoursChange={grid.updatePlannedHours}
+                    onEmployeeChange={handleEmployeeChange}
+                    onProjectChange={handleProjectChange}
+                    loading={grid.loading || projLoading}
+                />
+
+                <AllocationGridLegend />
+            </div>
         </PageContainer>
     );
 }
