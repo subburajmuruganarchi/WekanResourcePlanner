@@ -20,6 +20,13 @@
     font-weight: 500;
 }
 
+.wp-grid .wp-col-collapsed {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    text-align: center;
+    overflow: hidden;
+}
+
 .wp-grid .wp-cell-dirty {
     background-color: #fffbeb !important;
     border: 1px solid #f59e0b !important;

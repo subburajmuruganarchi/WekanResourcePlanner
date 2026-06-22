@@ -15,6 +15,11 @@ import {
     cellKey,
     DEFAULT_WEEKLY_CAPACITY_HOURS,
 } from '@/lib/weekly-grid-pivot';
+import { usePlannerGridColumnVisibility } from '@/lib/use-planner-grid-column-visibility';
+import {
+    buildEmployeeRoleColumnDef,
+    buildProjectTypeColumnDef,
+} from '@/components/weekly-planner/planner-collapsible-columns';
 
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
@@ -75,6 +80,7 @@ export function WeeklyPlannerGrid({
     loading,
 }: WeeklyPlannerGridProps) {
     const gridRef = useRef<AgGridReact<WeeklyPlannerDisplayRow>>(null);
+    const columnVisibility = usePlannerGridColumnVisibility();
 
     const employeeWeekTotals = useMemo(
         () => computeEmployeeWeekTotals(rows, weeks),
@@ -227,20 +233,7 @@ export function WeeklyPlannerGrid({
                 sort: 'asc',
                 sortIndex: 0,
             },
-            {
-                field: 'projectType',
-                headerName: 'Type',
-                pinned: 'left',
-                width: 110,
-                minWidth: 90,
-                lockPinned: true,
-                suppressMovable: true,
-                cellClass: 'wp-pinned-cell',
-                filter: false,
-                sort: 'asc',
-                sortIndex: 1,
-                valueFormatter: (p) => p.value || '—',
-            },
+            buildProjectTypeColumnDef<WeeklyPlannerDisplayRow>(columnVisibility),
             {
                 field: 'employeeName',
                 headerName: 'Resource',
@@ -252,21 +245,10 @@ export function WeeklyPlannerGrid({
                 cellClass: 'wp-pinned-cell',
                 filter: false,
             },
-            {
-                field: 'employeeRole',
-                headerName: 'Resource Role',
-                pinned: 'left',
-                width: 160,
-                minWidth: 130,
-                lockPinned: true,
-                suppressMovable: true,
-                cellClass: 'wp-pinned-cell',
-                filter: false,
-                valueFormatter: (p) => p.value || '—',
-            },
+            buildEmployeeRoleColumnDef<WeeklyPlannerDisplayRow>(columnVisibility),
         ];
         return [...pinned, ...weekColumnDefs];
-    }, [weekColumnDefs]);
+    }, [weekColumnDefs, columnVisibility.collapsed, columnVisibility.isExpanded, columnVisibility.toggle]);
 
     const defaultColDef = useMemo<ColDef>(
         () => ({

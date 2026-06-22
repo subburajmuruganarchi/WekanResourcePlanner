@@ -1,18 +1,15 @@
-import bcrypt from 'bcryptjs';
 import { Types } from 'mongoose';
 import { Employee } from '../../modules/employees/employee.model';
 import { EmployeeSkill } from '../../modules/employees/employee-skill.model';
 import { ResourceImportRow, R360AccessImportRow } from './types/resource-row.dto';
-import { ImportContext, ACCESS_ROLES, createEmptyImportContext } from './types/import-context.types';
+import { ImportContext, createEmptyImportContext } from './types/import-context.types';
 import { SheetImportResult, SkippedRow } from './types/import-result.types';
 import {
-    PASSWORD_PLAIN,
     parseName,
     isDummyResource,
     departmentLabel,
     inferSkillLevel,
     inferExperienceYears,
-    upsertAccessRole,
     upsertJobRole,
     upsertSkill,
 } from './planner-import.utils';
@@ -23,8 +20,9 @@ import {
     validateResourceRow,
     ResourceRowValidationIssue,
 } from './resource-row.validation';
+import { ensureDefaultSystemUsers, PROTECTED_SYSTEM_EMAILS } from '../../modules/employees/default-users.bootstrap';
 
-const PROTECTED_EMAILS = ['admin@r360.com', 'pm@r360.com'];
+const PROTECTED_EMAILS = [...PROTECTED_SYSTEM_EMAILS];
 
 export interface ResourceImportOutput extends SheetImportResult {
     employeesUpserted: number;
@@ -37,48 +35,14 @@ export async function bootstrapImportContext(
     writeOpts?: ImportWriteOptions
 ): Promise<ImportContext> {
     const partial = createEmptyImportContext();
-    const passwordHash = await bcrypt.hash(PASSWORD_PLAIN, 10);
-    const sessionOpts = mongooseSessionOpts(writeOpts);
-
-    const adminRoleId = await upsertAccessRole(ACCESS_ROLES.ADMIN, writeOpts);
-    const pmRoleId = await upsertAccessRole(ACCESS_ROLES.PM, writeOpts);
-    const employeeRoleId = await upsertAccessRole(ACCESS_ROLES.EMPLOYEE, writeOpts);
-
-    const defaultAdmin = await Employee.findOneAndUpdate(
-        { email: 'admin@r360.com' },
-        {
-            $set: {
-                first_name: 'R360',
-                last_name: 'Admin',
-                role_id: adminRoleId,
-                status: 'Active',
-                is_active: true,
-                employee_code: 'WK-ADMIN',
-                department: 'Delivery',
-                ...(syncId ? { last_sync_id: syncId } : {}),
-            },
-            $setOnInsert: { password: passwordHash },
-        },
-        { upsert: true, new: true, ...sessionOpts }
-    );
-
-    const defaultPm = await Employee.findOneAndUpdate(
-        { email: 'pm@r360.com' },
-        {
-            $set: {
-                first_name: 'R360',
-                last_name: 'PM',
-                role_id: pmRoleId,
-                status: 'Active',
-                is_active: true,
-                employee_code: 'WK-PM',
-                department: 'Delivery',
-                ...(syncId ? { last_sync_id: syncId } : {}),
-            },
-            $setOnInsert: { password: passwordHash },
-        },
-        { upsert: true, new: true, ...sessionOpts }
-    );
+    const {
+        adminRoleId,
+        pmRoleId,
+        employeeRoleId,
+        defaultAdminId,
+        pmFallbackId,
+        passwordHash,
+    } = await ensureDefaultSystemUsers(syncId, writeOpts);
 
     return {
         ...partial,
@@ -86,8 +50,8 @@ export async function bootstrapImportContext(
         adminRoleId,
         pmRoleId,
         employeeRoleId,
-        defaultAdminId: defaultAdmin!._id,
-        pmFallbackId: defaultPm!._id,
+        defaultAdminId,
+        pmFallbackId,
         passwordHash,
     };
 }

@@ -12,6 +12,7 @@
         "test": "jest",
         "migrate:roles": "ts-node src/scripts/normalize-role-names.ts",
         "seed:dev": "ts-node scripts/seed-dev-data.ts",
+        "seed:default-users": "ts-node scripts/seed-default-users.ts",
         "seed:planner": "ts-node scripts/seed-from-planner-sheet.ts",
         "seed:resource": "ts-node scripts/seed-from-planner-sheet.ts --resource-only",
         "sync:weekly-legacy": "ts-node scripts/sync-weekly-from-legacy-allocations.ts",

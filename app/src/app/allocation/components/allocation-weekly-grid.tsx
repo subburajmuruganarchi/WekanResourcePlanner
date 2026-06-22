@@ -15,6 +15,11 @@ import {
     cellKey,
     DEFAULT_WEEKLY_CAPACITY_HOURS,
 } from '@/lib/weekly-grid-pivot';
+import { usePlannerGridColumnVisibility } from '@/lib/use-planner-grid-column-visibility';
+import {
+    buildEmployeeRoleColumnDef,
+    buildProjectTypeColumnDef,
+} from '@/components/weekly-planner/planner-collapsible-columns';
 
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
@@ -105,6 +110,7 @@ export function AllocationWeeklyGrid({
     loading,
 }: AllocationWeeklyGridProps) {
     const gridRef = useRef<AgGridReact<AllocationGridRow>>(null);
+    const columnVisibility = usePlannerGridColumnVisibility();
 
     const employeeIds = useMemo(() => employees.map((e) => e.id), [employees]);
     const projectIds = useMemo(() => projects.map((p) => p.id), [projects]);
@@ -246,21 +252,7 @@ export function AllocationWeeklyGrid({
                     return true;
                 },
             },
-            {
-                field: 'projectType',
-                headerName: 'Type',
-                pinned: 'left',
-                width: 110,
-                minWidth: 90,
-                lockPinned: true,
-                suppressMovable: true,
-                editable: false,
-                cellClass: 'wp-pinned-cell',
-                filter: false,
-                sort: 'asc',
-                sortIndex: 1,
-                valueFormatter: (params) => params.value || '—',
-            },
+            buildProjectTypeColumnDef<AllocationGridRow>(columnVisibility),
             {
                 colId: 'resource',
                 field: 'employeeId',
@@ -295,19 +287,7 @@ export function AllocationWeeklyGrid({
                     return true;
                 },
             },
-            {
-                field: 'employeeRole',
-                headerName: 'Resource Role',
-                pinned: 'left',
-                width: 180,
-                minWidth: 150,
-                lockPinned: true,
-                suppressMovable: true,
-                editable: false,
-                cellClass: 'wp-pinned-cell',
-                filter: false,
-                valueFormatter: (params) => params.value || '—',
-            },
+            buildEmployeeRoleColumnDef<AllocationGridRow>(columnVisibility),
         ];
         return [...pinned, ...weekColumnDefs];
     }, [
@@ -319,6 +299,9 @@ export function AllocationWeeklyGrid({
         projectNameById,
         onEmployeeChange,
         onProjectChange,
+        columnVisibility.collapsed,
+        columnVisibility.isExpanded,
+        columnVisibility.toggle,
     ]);
 
     const defaultColDef = useMemo<ColDef>(

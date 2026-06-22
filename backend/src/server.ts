@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { app } from './app';
 import { env } from './config/env';
 import { logger } from './common/logger';
+import { ensureDefaultSystemUsers } from './modules/employees/default-users.bootstrap';
 
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 3000;
@@ -41,6 +42,13 @@ const startServer = async () => {
     try {
         // Connect to MongoDB with retry
         await connectWithRetry();
+
+        try {
+            await ensureDefaultSystemUsers();
+            logger.info('Default system users ready (admin@r360.com, pm@r360.com)');
+        } catch (bootstrapErr) {
+            logger.error('Failed to ensure default system users', { error: bootstrapErr });
+        }
 
         // Start Server
         const server = app.listen(env.PORT, '0.0.0.0', () => {
