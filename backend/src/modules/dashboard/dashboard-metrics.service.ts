@@ -2,7 +2,7 @@ import { Project } from '../projects/project.model';
 import { Employee } from '../employees/employee.model';
 import { ProjectAllocation } from '../allocations/allocation.model';
 import { TimeEntry } from '../time-entries/time-entry.model';
-import { TimeEntryStatus } from '../../common/types/enums';
+import { TimeEntryStatus, ProjectStatus } from '../../common/types/enums';
 import { WeeklyAllocationEntry } from '../weekly-allocations/weekly-allocation-entry.model';
 import { features } from '../../config/features';
 import { computePeakCommittedPercent } from '../allocations/allocation-availability.util';
@@ -19,6 +19,14 @@ export interface DashboardMetrics {
     pendingApprovals: number;
     rejectedHours: number;
     periodLabel?: string;
+}
+
+/** Operational projects for dashboard counts and staffing risk (not completed / on hold). */
+export function activeDashboardProjectFilter(): Record<string, unknown> {
+    return {
+        is_active: true,
+        status: { $in: [ProjectStatus.ACTIVE, ProjectStatus.PLANNING] },
+    };
 }
 
 /** UTC Monday 00:00 through Sunday 23:59:59.999 for current week. */
@@ -83,7 +91,7 @@ async function computeAvgUtilizationForPeriod(period: DashboardPeriodRange): Pro
 
 /** Single source of truth for dashboard stat cards and AI insight metrics. */
 export async function collectDashboardMetrics(period: DashboardPeriodRange): Promise<DashboardMetrics> {
-    const activeProjects = await Project.countDocuments({ status: 'Active' });
+    const activeProjects = await Project.countDocuments(activeDashboardProjectFilter());
 
     const totalEmployees = await Employee.countDocuments({
         $or: [{ is_active: true }, { status: 'Active' }],

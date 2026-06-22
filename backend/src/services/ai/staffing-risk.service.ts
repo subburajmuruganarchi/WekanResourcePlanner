@@ -67,7 +67,10 @@ export async function assessStaffingRisk(projectId: string): Promise<StaffingRis
     if (teamSize === 0 && skillReqs.length > 0) {
         score += 25;
         reasons.push('No team allocated despite defined skill requirements.');
-    } else if (allocatedPct < 50 && project.status === 'Active') {
+    } else if (
+        allocatedPct < 50 &&
+        (project.status === 'Active' || project.status === 'Planning')
+    ) {
         score += 15;
         reasons.push('Low total allocation percent on active project.');
     }

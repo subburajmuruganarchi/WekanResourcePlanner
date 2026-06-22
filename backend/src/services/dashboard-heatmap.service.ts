@@ -3,6 +3,7 @@ import { Project } from '../modules/projects/project.model';
 import { WeeklyAllocationEntry } from '../modules/weekly-allocations/weekly-allocation-entry.model';
 import { computePeakCommittedPercent } from '../modules/allocations/allocation-availability.util';
 import type { DashboardPeriodRange } from '../modules/dashboard/dashboard-period.util';
+import { activeDashboardProjectFilter } from '../modules/dashboard/dashboard-metrics.service';
 import { features } from '../config/features';
 
 const WEEKLY_CAPACITY = features.weeklyCapacityHours ?? 40;
@@ -278,7 +279,9 @@ async function buildAllocationHeatmapFromLegacyAllocations(
 /** Top active projects by staffing risk score (read-only). */
 export async function buildStaffingRiskSummary(limit = 6) {
     const { assessStaffingRisk } = await import('./ai/staffing-risk.service');
-    const active = await Project.find({ status: 'Active' }).select('_id project_name project_code').lean();
+    const active = await Project.find(activeDashboardProjectFilter())
+        .select('_id project_name project_code')
+        .lean();
 
     const assessed = await Promise.all(
         active.map(async (p) => {
@@ -304,7 +307,6 @@ export async function buildStaffingRiskSummary(limit = 6) {
 
     return assessed
         .filter((r): r is NonNullable<typeof r> => r !== null)
-        .filter((r) => r.level !== 'LOW' || r.score >= 25)
         .sort((a, b) => b.score - a.score)
         .slice(0, limit);
 }

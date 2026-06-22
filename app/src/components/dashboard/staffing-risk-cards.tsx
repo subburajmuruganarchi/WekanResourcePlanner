@@ -69,7 +69,7 @@ export function StaffingRiskCards({ risks, loading }: { risks: StaffingRiskItem[
     if (risks.length === 0) {
         return (
             <p className="text-sm text-gray-500 py-6 text-center border border-dashed border-gray-200 rounded-lg">
-                No active projects with elevated staffing risk.
+                No operational projects found. Sync Project and Project_Allocation sheets, then refresh.
             </p>
         );
     }

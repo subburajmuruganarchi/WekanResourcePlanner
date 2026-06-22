@@ -39,9 +39,29 @@ export function parseName(full: string): { first: string; last: string } {
 
 export function mapProjectStatus(sheetStatus: string): ProjectStatus {
     const s = sheetStatus.trim().toLowerCase();
-    if (s === 'active') return ProjectStatus.ACTIVE;
-    if (s === 'completed') return ProjectStatus.COMPLETED;
-    if (s === 'proposal lost' || s === 'lost') return ProjectStatus.ON_HOLD;
+    if (!s) return ProjectStatus.PLANNING;
+    if (
+        s === 'active' ||
+        s === 'in progress' ||
+        s === 'in-progress' ||
+        s === 'ongoing' ||
+        s === 'live' ||
+        s === 'started'
+    ) {
+        return ProjectStatus.ACTIVE;
+    }
+    if (s === 'completed' || s === 'done' || s === 'closed') return ProjectStatus.COMPLETED;
+    if (
+        s === 'proposal lost' ||
+        s === 'lost' ||
+        s === 'on hold' ||
+        s === 'on-hold' ||
+        s === 'onhold' ||
+        s === 'hold'
+    ) {
+        return ProjectStatus.ON_HOLD;
+    }
+    if (s === 'planning' || s === 'planned' || s === 'proposal') return ProjectStatus.PLANNING;
     return ProjectStatus.PLANNING;
 }
 

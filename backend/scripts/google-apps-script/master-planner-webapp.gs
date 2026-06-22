@@ -1691,7 +1691,13 @@ var allocation = {
   Resource: obj.Resource || "",
   ResourceRole: obj["Resource Role"] || "",
   ResourceType: obj["Resource Type"] || "",
-  Active: obj.Active || ""
+  Active: obj.Active || "",
+
+  // Project metadata — used by backend to repair project status/type after allocation sync
+  "Project Status": obj["Project Status"] || "",
+  "Project Type": obj["Project Type"] || "",
+  ProjectStatus: obj["Project Status"] || "",
+  ProjectType: obj["Project Type"] || ""
 };
 
       // ======================================
@@ -1882,6 +1888,12 @@ switch (value.toLowerCase().trim()) {
 
       case "active":
         return "Active";
+
+      case "project status":
+        return "Project Status";
+
+      case "project type":
+        return "Project Type";
 
       default:
         return value;

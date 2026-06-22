@@ -1,6 +1,6 @@
 import { Project } from '../../modules/projects/project.model';
 import { ProjectAllocation } from '../../modules/allocations/allocation.model';
-import { collectDashboardMetrics } from '../../modules/dashboard/dashboard-metrics.service';
+import { collectDashboardMetrics, activeDashboardProjectFilter } from '../../modules/dashboard/dashboard-metrics.service';
 import type { DashboardPeriodRange } from '../../modules/dashboard/dashboard-period.util';
 import { projectService } from '../../modules/projects/project.service';
 import { DashboardInsight, DashboardStatsSnapshot } from './types';
@@ -59,7 +59,7 @@ async function countOverAllocatedEmployees(): Promise<number> {
 }
 
 async function countProjectsWithSkillGaps(): Promise<number> {
-    const projects = await Project.find({ status: 'Active' }).select('_id').lean();
+    const projects = await Project.find(activeDashboardProjectFilter()).select('_id').lean();
     let count = 0;
     for (const p of projects) {
         const detail = await projectService.findById(p._id.toString());
