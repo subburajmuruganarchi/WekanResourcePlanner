@@ -1,11 +1,16 @@
 @import "tailwindcss";
+@import "./styles/enterprise-tokens.css";
 
-@theme {
-  --color-brand-50: #FEF2F2;
-  --color-brand-100: #FEE2E2;
-  --color-brand-500: #EF4444;
-  --color-brand-600: #DC2626;
-  --color-brand-700: #B91C1C;
+@layer base {
+  html {
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    color: #111827;
+    background-color: #f8fafc;
+  }
 }
 
 .sidebar-nav-scroll {

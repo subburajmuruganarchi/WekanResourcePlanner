@@ -1,123 +1,190 @@
-import { Bell, CheckCircle2, AlertCircle, Info, Check, LogOut } from "lucide-react"
-import { useNavigate } from "react-router-dom"
-import { useNotifications } from "@/lib/use-notifications"
-import { useAuth } from "@/lib/auth-context"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Button } from "@/components/ui/button"
-import { formatDistanceToNow } from "date-fns"
+import { Bell, CheckCircle2, AlertCircle, Info, Check, LogOut, HelpCircle, Search } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useNotifications } from '@/lib/use-notifications';
+import { useAuth } from '@/lib/auth-context';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { formatDistanceToNow } from 'date-fns';
+import { GlobalSearch } from './global-search';
+import { CommandPalette, type CommandItem } from './command-palette';
+
+const routeTitles: Record<string, { title: string; breadcrumb: string[] }> = {
+    '/dashboard': { title: 'Resource Intelligence', breadcrumb: ['Workspace', 'Dashboard'] },
+    '/allocation': { title: 'Resource Planning', breadcrumb: ['Workspace', 'Allocation'] },
+    '/projects': { title: 'Projects', breadcrumb: ['Workspace', 'Projects'] },
+    '/weekly-planner': { title: 'Weekly Planner', breadcrumb: ['Workspace', 'Planner'] },
+    '/time-entry': { title: 'Time Tracking', breadcrumb: ['Operations', 'Time'] },
+    '/pm-approvals': { title: 'Approvals', breadcrumb: ['Operations', 'Approvals'] },
+    '/reports': { title: 'Reports', breadcrumb: ['Operations', 'Reports'] },
+    '/insights': { title: 'AI Insights', breadcrumb: ['Intelligence', 'Insights'] },
+    '/okrs': { title: 'OKRs', breadcrumb: ['Operations', 'OKRs'] },
+    '/inputs': { title: 'Inputs', breadcrumb: ['Admin', 'Inputs'] },
+    '/user-control': { title: 'User Management', breadcrumb: ['Admin', 'Users'] },
+};
+
+const commandItems: CommandItem[] = [
+    { id: 'dash', label: 'Dashboard', group: 'Workspace', path: '/dashboard' },
+    { id: 'alloc', label: 'Resource Allocation', group: 'Workspace', path: '/allocation' },
+    { id: 'proj', label: 'Projects', group: 'Workspace', path: '/projects' },
+    { id: 'plan', label: 'Weekly Planner', group: 'Workspace', path: '/weekly-planner' },
+    { id: 'time', label: 'Time Entry', group: 'Operations', path: '/time-entry' },
+    { id: 'appr', label: 'PM Approvals', group: 'Operations', path: '/pm-approvals' },
+    { id: 'rep', label: 'Reports', group: 'Operations', path: '/reports' },
+    { id: 'ins', label: 'Insights Center', group: 'Intelligence', path: '/insights' },
+];
 
 export function Header() {
-    const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications()
-    const { user, logout } = useAuth()
-    const navigate = useNavigate()
+    const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+    const { user, logout } = useAuth();
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const meta = routeTitles[location.pathname] ?? {
+        title: 'R360',
+        breadcrumb: ['Workspace'],
+    };
 
     const handleSignOut = () => {
-        logout()
-        navigate("/login", { replace: true })
-    }
+        logout();
+        navigate('/login', { replace: true });
+    };
 
     const initials = user?.name
-        ?.split(" ")
+        ?.split(' ')
         .map((n) => n[0])
-        .join("")
+        .join('')
         .slice(0, 2)
-        .toUpperCase()
+        .toUpperCase();
 
     const getIcon = (type: string, read: boolean) => {
-        const props = { className: `w-5 h-5 ${read ? 'text-gray-400' : ''}` }
+        const props = { className: `w-5 h-5 ${read ? 'text-gray-400' : ''}` };
         switch (type) {
-            case 'SUCCESS': return <CheckCircle2 {...props} className={read ? props.className : "w-5 h-5 text-green-500"} />
-            case 'ERROR': return <AlertCircle {...props} className={read ? props.className : "w-5 h-5 text-red-500"} />
-            case 'WARNING': return <AlertCircle {...props} className={read ? props.className : "w-5 h-5 text-amber-500"} />
-            default: return <Info {...props} className={read ? props.className : "w-5 h-5 text-blue-500"} />
+            case 'SUCCESS':
+                return <CheckCircle2 {...props} className={read ? props.className : 'w-5 h-5 text-green-500'} />;
+            case 'ERROR':
+                return <AlertCircle {...props} className={read ? props.className : 'w-5 h-5 text-red-500'} />;
+            case 'WARNING':
+                return <AlertCircle {...props} className={read ? props.className : 'w-5 h-5 text-amber-500'} />;
+            default:
+                return <Info {...props} className={read ? props.className : 'w-5 h-5 text-blue-500'} />;
         }
-    }
+    };
 
     return (
-        <header className="h-20 border-b border-gray-200 bg-white px-8 flex items-center justify-end sticky top-0 z-10">
-            <div className="flex items-center gap-4">
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <button className="relative p-2 text-gray-500 hover:text-gray-900 transition-colors focus:outline-none">
-                            <Bell className="w-5 h-5" />
-                            {unreadCount > 0 && (
-                                <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white flex items-center justify-center text-[9px] font-bold text-white">
-                                    {unreadCount > 9 ? '9+' : unreadCount}
+        <>
+            <CommandPalette items={commandItems} />
+            <header className="h-16 border-b border-slate-200 bg-white/80 backdrop-blur-md px-4 lg:px-6 flex items-center justify-between gap-4 sticky top-0 z-10 shrink-0">
+                <div className="min-w-0 flex-1">
+                    <nav className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-0.5" aria-label="Breadcrumb">
+                        {meta.breadcrumb.map((crumb, i) => (
+                            <span key={crumb} className="flex items-center gap-1.5">
+                                {i > 0 && <span>/</span>}
+                                <span className={i === meta.breadcrumb.length - 1 ? 'text-indigo-600 font-medium' : ''}>
+                                    {crumb}
                                 </span>
-                            )}
-                        </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-80 p-0 mr-4" align="end">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50">
-                            <h3 className="font-semibold text-sm">Notifications</h3>
-                            {unreadCount > 0 && (
-                                <Button variant="ghost" size="sm" className="h-auto p-0 text-xs text-brand-600 hover:text-brand-700 hover:bg-transparent" onClick={() => markAllAsRead()}>
-                                    <Check className="w-3 h-3 mr-1" />
-                                    Mark all read
-                                </Button>
-                            )}
-                        </div>
-                        <div className="max-h-[400px] overflow-y-auto">
-                            {notifications.length === 0 ? (
-                                <div className="p-6 text-center text-gray-500 text-sm">
-                                    No notifications
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-gray-100">
-                                    {notifications.map((notif: any) => (
-                                        <div
-                                            key={notif.id}
-                                            className={`p-4 flex gap-3 transition-colors ${notif.read ? 'bg-white' : 'bg-blue-50/30'}`}
-                                            onClick={() => !notif.read && markAsRead(notif.id)}
-                                            role={notif.read ? "listitem" : "button"}
-                                        >
-                                            <div className="shrink-0 mt-0.5">
-                                                {getIcon(notif.type, notif.read)}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className={`text-sm tracking-tight ${notif.read ? 'text-gray-600 font-medium' : 'text-gray-900 font-semibold'}`}>
-                                                    {notif.title}
-                                                </p>
-                                                <p className={`text-xs mt-1 leading-snug break-words ${notif.read ? 'text-gray-500' : 'text-gray-700'}`}>
-                                                    {notif.message}
-                                                </p>
-                                                <p className="text-[10px] text-gray-400 mt-2 font-medium uppercase tracking-wider">
-                                                    {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
-                                                </p>
-                                            </div>
-                                            {!notif.read && (
-                                                <div className="shrink-0 flex items-center">
-                                                    <div className="w-2 h-2 bg-brand-500 rounded-full"></div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </PopoverContent>
-                </Popover>
+                            </span>
+                        ))}
+                    </nav>
+                    <h1 className="text-base font-semibold text-slate-900 truncate">{meta.title}</h1>
+                </div>
 
-                <div className="h-8 w-px bg-gray-200" aria-hidden />
+                <div className="hidden lg:block w-full max-w-sm">
+                    <GlobalSearch />
+                </div>
 
-                <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center text-xs font-semibold text-gray-700 shrink-0">
-                        {initials || "?"}
-                    </div>
-                    <div className="hidden sm:block text-right min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate max-w-[10rem]">{user?.name}</p>
-                        <p className="text-xs text-gray-500 truncate">{user?.role}</p>
-                    </div>
+                <div className="flex items-center gap-2 shrink-0">
                     <button
                         type="button"
-                        onClick={handleSignOut}
-                        aria-label="Sign out"
-                        className="inline-flex items-center justify-center p-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors shrink-0"
+                        className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-500 hover:bg-white transition-colors"
+                        onClick={() => {
+                            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+                        }}
                     >
-                        <LogOut className="w-4 h-4" />
+                        <Search className="w-3.5 h-3.5" />
+                        <span className="hidden md:inline">Search</span>
+                        <kbd className="hidden md:inline text-[10px] bg-white px-1 rounded border border-slate-200">⌘K</kbd>
                     </button>
+
+                    <Button variant="ghost" size="sm" className="hidden md:flex text-slate-500" aria-label="Help">
+                        <HelpCircle className="w-4 h-4" />
+                    </Button>
+
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button
+                                type="button"
+                                className="relative p-2 text-slate-500 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors"
+                                aria-label="Notifications"
+                            >
+                                <Bell className="w-5 h-5" />
+                                {unreadCount > 0 && (
+                                    <span className="absolute top-1 right-1 w-4 h-4 bg-indigo-600 rounded-full border-2 border-white flex items-center justify-center text-[9px] font-bold text-white">
+                                        {unreadCount > 9 ? '9+' : unreadCount}
+                                    </span>
+                                )}
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-0 mr-4" align="end">
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/80">
+                                <h3 className="font-semibold text-sm">Notifications</h3>
+                                {unreadCount > 0 && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-auto p-0 text-xs text-indigo-600 hover:text-indigo-700 hover:bg-transparent"
+                                        onClick={() => markAllAsRead()}
+                                    >
+                                        <Check className="w-3 h-3 mr-1" />
+                                        Mark all read
+                                    </Button>
+                                )}
+                            </div>
+                            <div className="max-h-[400px] overflow-y-auto">
+                                {notifications.length === 0 ? (
+                                    <div className="p-6 text-center text-slate-500 text-sm">No notifications</div>
+                                ) : (
+                                    <div className="divide-y divide-slate-100">
+                                        {notifications.map((notif: { id: string; read: boolean; type: string; title: string; message: string; createdAt: string }) => (
+                                            <div
+                                                key={notif.id}
+                                                className={`p-4 flex gap-3 transition-colors cursor-pointer ${notif.read ? 'bg-white' : 'bg-indigo-50/40'}`}
+                                                onClick={() => !notif.read && markAsRead(notif.id)}
+                                            >
+                                                <div className="shrink-0 mt-0.5">{getIcon(notif.type, notif.read)}</div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className={`text-sm ${notif.read ? 'text-slate-600 font-medium' : 'text-slate-900 font-semibold'}`}>
+                                                        {notif.title}
+                                                    </p>
+                                                    <p className="text-xs mt-1 text-slate-500 leading-snug">{notif.message}</p>
+                                                    <p className="text-[10px] text-slate-400 mt-2 uppercase tracking-wider">
+                                                        {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+
+                    <div className="h-8 w-px bg-slate-200 hidden sm:block" aria-hidden />
+
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-xs font-semibold text-indigo-700 shrink-0">
+                            {initials || '?'}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleSignOut}
+                            aria-label="Sign out"
+                            className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                            <LogOut className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
-            </div>
-        </header>
-    )
+            </header>
+        </>
+    );
 }

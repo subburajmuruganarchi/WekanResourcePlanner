@@ -19,7 +19,6 @@ import {
 
 import { AllocationGridLegend } from './components/allocation-grid-legend';
 import { AllocationDraftRow } from './components/allocation-draft-row';
-import { AllocationSuggestionsPanel } from './components/allocation-suggestions-panel';
 import { buildPlanningWeekRange, filterWeeksFromCurrent } from '@/lib/planning-week-utils';
 import { projectTypeLabel } from '@/lib/project-type-label';
 import type { WeeklyGridFilters } from '@/types/weekly-allocation';
@@ -400,13 +399,6 @@ export function Allocation() {
                     onProjectSearchChange={setSearchProject}
                     onResourceSearchChange={setSearchResource}
                 />
-
-                {gridFilters && (
-                    <AllocationSuggestionsPanel
-                        weekStartFrom={gridFilters.weekStartFrom}
-                        weekStartTo={gridFilters.weekStartTo}
-                    />
-                )}
 
                 {canEditGrid && (
                     <AllocationDraftRow

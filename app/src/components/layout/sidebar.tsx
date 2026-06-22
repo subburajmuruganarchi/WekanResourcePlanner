@@ -1,145 +1,211 @@
-import { useState } from "react"
-import { NavLink } from "react-router-dom"
-import { useAuth } from "@/lib/auth-context"
+import { useState } from 'react';
+import { NavLink } from 'react-router-dom';
+import { useAuth } from '@/lib/auth-context';
 import {
     LayoutDashboard,
     FolderKanban,
     Users,
+    CalendarRange,
     Clock,
-    Target,
+    ClipboardCheck,
     FileBarChart,
     Sparkles,
-    ClipboardCheck,
     Shield,
-    CalendarRange,
     Upload,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
+    Target,
+    ChevronLeft,
+    ChevronRight,
+    Building2,
+    Settings,
+    BarChart3,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-const navItems = [
-    { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-    { label: "Employees & Projects", icon: FolderKanban, path: "/projects" },
-    { label: "Resource Allocation", icon: Users, path: "/allocation" },
-    { label: "Weekly Planner", icon: CalendarRange, path: "/weekly-planner" },
-    { label: "Time Entry", icon: Clock, path: "/time-entry" },
-    { label: "PM Approvals", icon: ClipboardCheck, path: "/pm-approvals" },
-    { label: "OKRs", icon: Target, path: "/okrs" },
-    { label: "Insights Center", icon: Sparkles, path: "/insights" },
-    { label: "Reports", icon: FileBarChart, path: "/reports" },
-    { label: "Inputs", icon: Upload, path: "/inputs" },
-    { label: "User Control", icon: Shield, path: "/user-control" },
-]
+type NavItem = {
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    path: string;
+};
 
-interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
+type NavGroup = {
+    title: string;
+    items: NavItem[];
+};
 
-export function Sidebar({ className, ...props }: SidebarProps) {
-    const { user } = useAuth()
-    const [collapsed, setCollapsed] = useState(false)
+const navGroups: NavGroup[] = [
+    {
+        title: 'Workspace',
+        items: [
+            { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+            { label: 'Resource Planning', icon: Users, path: '/allocation' },
+            { label: 'Projects', icon: FolderKanban, path: '/projects' },
+            { label: 'Weekly Planner', icon: CalendarRange, path: '/weekly-planner' },
+        ],
+    },
+    {
+        title: 'Operations',
+        items: [
+            { label: 'Time Tracking', icon: Clock, path: '/time-entry' },
+            { label: 'Approvals', icon: ClipboardCheck, path: '/pm-approvals' },
+            { label: 'Reports', icon: FileBarChart, path: '/reports' },
+            { label: 'OKRs', icon: Target, path: '/okrs' },
+        ],
+    },
+    {
+        title: 'Intelligence',
+        items: [
+            { label: 'AI Insights', icon: Sparkles, path: '/insights' },
+            { label: 'Forecasting', icon: BarChart3, path: '/dashboard' },
+        ],
+    },
+    {
+        title: 'Admin',
+        items: [
+            { label: 'Inputs', icon: Upload, path: '/inputs' },
+            { label: 'User Management', icon: Shield, path: '/user-control' },
+            { label: 'Settings', icon: Settings, path: '/system-health' },
+        ],
+    },
+];
 
-    const allowedRoles: Record<string, string[]> = {
-        "/dashboard": ["Admin", "Project Manager"],
-        "/projects": ["Admin", "Project Manager"],
-        "/allocation": ["Admin", "Project Manager"],
-        "/weekly-planner": ["Admin", "Project Manager"],
-        "/time-entry": ["*"],
-        "/pm-approvals": ["Admin", "Project Manager"],
-        "/okrs": ["*"],
-        "/reports": ["Admin", "Project Manager"],
-        "/insights": ["Admin", "Project Manager"],
-        "/inputs": ["Admin"],
-        "/user-control": ["Admin"],
-    }
+const allowedRoles: Record<string, string[]> = {
+    '/dashboard': ['Admin', 'Project Manager'],
+    '/projects': ['Admin', 'Project Manager'],
+    '/allocation': ['Admin', 'Project Manager'],
+    '/weekly-planner': ['Admin', 'Project Manager'],
+    '/time-entry': ['*'],
+    '/pm-approvals': ['Admin', 'Project Manager'],
+    '/okrs': ['*'],
+    '/reports': ['Admin', 'Project Manager'],
+    '/insights': ['Admin', 'Project Manager'],
+    '/inputs': ['Admin'],
+    '/user-control': ['Admin'],
+    '/system-health': ['Admin'],
+};
 
-    const filteredItems = navItems.filter(item => {
-        if (!user) return false
-        if (user.role === "Admin") return true
-        const roles = allowedRoles[item.path]
-        if (!roles) return true
-        if (roles.includes("*")) return true
-        return roles.includes(user.role)
-    })
+function canAccess(path: string, role: string | undefined): boolean {
+    if (!role) return false;
+    if (role === 'Admin') return true;
+    const roles = allowedRoles[path];
+    if (!roles) return true;
+    if (roles.includes('*')) return true;
+    return roles.includes(role);
+}
 
-    const toggleCollapsed = () => setCollapsed((prev) => !prev)
+export function Sidebar() {
+    const { user } = useAuth();
+    const [collapsed, setCollapsed] = useState(false);
+
+    const initials = user?.name
+        ?.split(' ')
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase();
 
     return (
         <aside
             className={cn(
-                "bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0 shrink-0",
-                "transition-[width] duration-300 ease-in-out overflow-hidden",
-                collapsed ? "w-[4.5rem]" : "w-64",
-                className
+                'relative bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0 shrink-0 z-20',
+                'transition-[width] duration-300 ease-in-out',
+                collapsed ? 'w-[72px]' : 'w-[260px]'
             )}
-            aria-expanded={!collapsed}
-            {...props}
+            aria-label="Main navigation"
         >
-            <div className={cn("border-b border-gray-100", collapsed ? "p-3" : "p-4")}>
-                <div
-                    className={cn(
-                        "flex items-center min-w-0",
-                        collapsed ? "justify-center" : "gap-3"
+            {/* Brand + workspace */}
+            <div className={cn('border-b border-slate-100', collapsed ? 'p-3' : 'px-4 py-4')}>
+                <div className={cn('flex items-center gap-3', collapsed && 'justify-center')}>
+                    <div className="w-9 h-9 enterprise-gradient-bg rounded-xl flex items-center justify-center shadow-sm shrink-0">
+                        <span className="text-white font-bold text-sm">R</span>
+                    </div>
+                    {!collapsed && (
+                        <div className="min-w-0">
+                            <p className="font-bold text-slate-900 text-base tracking-tight">R360</p>
+                            <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                <Building2 className="w-3 h-3" />
+                                WeKan Workspace
+                            </p>
+                        </div>
                     )}
-                >
+                </div>
+                {!collapsed && (
                     <button
                         type="button"
-                        onClick={toggleCollapsed}
-                        className="rounded-lg shrink-0 cursor-pointer hover:opacity-90 active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-                        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                        aria-expanded={!collapsed}
+                        className="mt-3 w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-600 hover:bg-white hover:border-slate-300 transition-colors"
                     >
-                        <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center">
-                            <span className="text-white font-bold">R</span>
-                        </div>
+                        <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                        <span className="truncate font-medium">Enterprise · Production</span>
                     </button>
-                    <span
-                        className={cn(
-                            "font-bold text-gray-900 text-lg whitespace-nowrap transition-all duration-300 ease-in-out",
-                            collapsed
-                                ? "opacity-0 max-w-0 overflow-hidden"
-                                : "opacity-100 max-w-[8rem]"
-                        )}
-                        aria-hidden={collapsed}
-                    >
-                        R360
-                    </span>
-                </div>
+                )}
             </div>
 
-            <nav
-                className={cn(
-                    "sidebar-nav-scroll flex-1 space-y-1 overflow-y-auto overflow-x-hidden py-3",
-                    collapsed ? "px-2" : "px-3"
-                )}
-            >
-                {filteredItems.map((item) => (
-                    <NavLink
-                        key={item.path}
-                        to={item.path}
-                        title={collapsed ? item.label : undefined}
-                        className={({ isActive }: { isActive: boolean }) =>
-                            cn(
-                                "flex items-center rounded-lg transition-colors duration-200",
-                                collapsed ? "justify-center px-0 py-3" : "gap-3 px-3 py-3",
-                                isActive
-                                    ? "bg-brand-50 text-brand-600"
-                                    : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                            )
-                        }
-                    >
-                        <item.icon className="w-5 h-5 shrink-0" />
-                        <span
-                            className={cn(
-                                "font-medium text-sm whitespace-nowrap transition-all duration-300 ease-in-out",
-                                collapsed
-                                    ? "opacity-0 max-w-0 overflow-hidden"
-                                    : "opacity-100 max-w-[12rem]"
+            <nav className="sidebar-nav-scroll flex-1 overflow-y-auto py-4 px-2 space-y-6">
+                {navGroups.map((group) => {
+                    const items = group.items.filter((item) => canAccess(item.path, user?.role));
+                    if (items.length === 0) return null;
+                    return (
+                        <div key={group.title}>
+                            {!collapsed && (
+                                <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                    {group.title}
+                                </p>
                             )}
-                        >
-                            {item.label}
-                        </span>
-                    </NavLink>
-                ))}
+                            <ul className="space-y-0.5">
+                                {items.map((item) => (
+                                    <li key={item.path + item.label}>
+                                        <NavLink
+                                            to={item.path}
+                                            title={collapsed ? item.label : undefined}
+                                            className={({ isActive }) =>
+                                                cn(
+                                                    'flex items-center rounded-xl transition-all duration-200',
+                                                    collapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5',
+                                                    isActive
+                                                        ? 'enterprise-nav-active font-semibold'
+                                                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium'
+                                                )
+                                            }
+                                        >
+                                            <item.icon className="w-[18px] h-[18px] shrink-0" />
+                                            {!collapsed && (
+                                                <span className="text-sm truncate">{item.label}</span>
+                                            )}
+                                        </NavLink>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    );
+                })}
             </nav>
+
+            {/* User profile */}
+            <div className={cn('border-t border-slate-100 p-3', collapsed && 'flex justify-center')}>
+                {!collapsed ? (
+                    <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+                        <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold shrink-0">
+                            {initials ?? '?'}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-slate-900 truncate">{user?.name}</p>
+                            <p className="text-[11px] text-slate-500 truncate">{user?.role}</p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">
+                        {initials ?? '?'}
+                    </div>
+                )}
+            </div>
+
+            <button
+                type="button"
+                onClick={() => setCollapsed((c) => !c)}
+                className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+                aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+                {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+            </button>
         </aside>
-    )
+    );
 }
