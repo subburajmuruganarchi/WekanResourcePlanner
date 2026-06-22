@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { env } from '../../config/env';
 import { AppError } from '../../common/errors/app-error';
 import { structuredLogger } from '../../common/logger';
+import { postJsonToAppsScriptWebApp } from '../../common/http/apps-script-fetch';
 import { runPlannerSheetImport } from '../../services/planner-import/planner-import.service';
 import { ResourceValidationError } from '../../services/planner-import/resource-row.validation';
 import {
@@ -622,18 +623,17 @@ function kickoffAppsScriptFullSync(requestId: string, batchId: string): void {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), APPS_SCRIPT_KICKOFF_TIMEOUT_MS);
         try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Request-Id': requestId,
-                    'X-Sync-Batch-Id': batchId,
-                },
-                body: JSON.stringify({ batchId, syncBatchId: batchId }),
-                signal: controller.signal,
-                redirect: 'follow',
-            });
-            const text = await response.text();
+            const { response, text } = await postJsonToAppsScriptWebApp(
+                url,
+                { batchId, syncBatchId: batchId },
+                {
+                    headers: {
+                        'X-Request-Id': requestId,
+                        'X-Sync-Batch-Id': batchId,
+                    },
+                    signal: controller.signal,
+                }
+            );
             structuredLogger.info('APPS SCRIPT KICKOFF RESPONSE', {
                 requestId,
                 syncBatchId: batchId,

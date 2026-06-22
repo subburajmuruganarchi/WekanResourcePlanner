@@ -167,6 +167,7 @@ describe('planner-import.utils', () => {
 
     it('maps WK project codes back to sheet PID', () => {
         expect(projectCodeToPid('WK-P03')).toBe('P03');
+        expect(projectCodeToPid('P03')).toBe('P03');
         expect(projectCodeToPid('WK-MYAPP')).toBeNull();
     });
 

@@ -167,8 +167,11 @@ export function departmentLabel(resourceType: string, location: string): string 
 
 /** Reverse of projectCodeFromRow for WK-P101 → P101 (sheet PID column). */
 export function projectCodeToPid(projectCode: string): string | null {
-    const match = projectCode.trim().toUpperCase().match(/^WK-(P\d+)$/);
-    return match ? match[1] : null;
+    const code = projectCode.trim().toUpperCase();
+    const wkMatch = code.match(/^WK-(P\d+)$/);
+    if (wkMatch) return wkMatch[1];
+    if (/^P\d+$/.test(code)) return code;
+    return null;
 }
 
 /** Sheet week column display header, e.g. 22 Jun (matches Project_Allocation tab). */

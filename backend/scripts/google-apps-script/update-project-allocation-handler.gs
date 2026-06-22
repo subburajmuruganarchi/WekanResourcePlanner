@@ -43,12 +43,19 @@ function handleUpdateProjectAllocation(payload) {
   var applied = 0;
   var failed = [];
 
-  try {
-    updateProjectAllocationCells(cells);
-    applied = cells.length;
-  } catch (err) {
-    failed.push({ reason: err.message || String(err) });
-  }
+  cells.forEach(function (cell) {
+    try {
+      updateProjectAllocationCell(cell);
+      applied++;
+    } catch (err) {
+      failed.push({
+        pid: cell.pid,
+        eid: cell.eid,
+        weekHeader: cell.weekHeader || cell.weekStart,
+        reason: err.message || String(err),
+      });
+    }
+  });
 
   return jsonResponse({
     status: failed.length === 0 ? 'SUCCESS' : applied > 0 ? 'PARTIAL' : 'FAILED',
@@ -78,11 +85,48 @@ function headerMatchesWeekColumn(header, weekHeader, timezone) {
   return candidate === target;
 }
 
-function updateProjectAllocationCells(cells) {
-  if (!cells || !cells.length) {
-    throw new Error('No cells provided');
-  }
+function utcMondayFromIsoDate(isoDate) {
+  if (!isoDate) return null;
+  var parts = String(isoDate).trim().split('-');
+  if (parts.length !== 3) return null;
+  var year = Number(parts[0]);
+  var month = Number(parts[1]) - 1;
+  var day = Number(parts[2]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  return new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+}
 
+function headerMatchesWeekStartIso(header, weekStartIso, timezone) {
+  var monday = utcMondayFromIsoDate(weekStartIso);
+  if (!monday) return false;
+  if (header instanceof Date && !isNaN(header.getTime())) {
+    var headerUtc = Date.UTC(
+      header.getFullYear(),
+      header.getMonth(),
+      header.getDate()
+    );
+    return headerUtc === monday.getTime();
+  }
+  return headerMatchesWeekColumn(header, formatHeaderAsWeekLabel(monday, timezone), timezone);
+}
+
+function findWeekColumn(headers, weekHeader, weekStartIso, timezone) {
+  for (var i = 0; i < headers.length; i++) {
+    if (headerMatchesWeekColumn(headers[i], weekHeader, timezone)) {
+      return i;
+    }
+  }
+  if (weekStartIso) {
+    for (var j = 0; j < headers.length; j++) {
+      if (headerMatchesWeekStartIso(headers[j], weekStartIso, timezone)) {
+        return j;
+      }
+    }
+  }
+  return -1;
+}
+
+function updateProjectAllocationCell(cell) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Project_Allocation');
   if (!sheet) {
@@ -106,52 +150,45 @@ function updateProjectAllocationCells(cells) {
     throw new Error('PID/EID columns missing on Project_Allocation');
   }
 
-  cells.forEach(function (cell) {
-    var weekHeader = cell.weekHeader || cell.weekStart;
-    var pid = String(cell.pid || '').trim().toUpperCase();
-    var eid = String(cell.eid || '').trim().toUpperCase();
-    var hours = Number(cell.plannedHours);
+  var weekHeader = cell.weekHeader || cell.weekStart;
+  var weekStartIso = cell.weekStart || null;
+  var pid = String(cell.pid || '').trim().toUpperCase();
+  var eid = String(cell.eid || '').trim().toUpperCase();
+  var hours = Number(cell.plannedHours);
 
-    Logger.log(
-      'PATCH_ALLOCATION_CELLS pid=' + pid + ' eid=' + eid + ' week=' + weekHeader + ' hours=' + hours
-    );
+  Logger.log(
+    'PATCH_ALLOCATION_CELLS pid=' + pid + ' eid=' + eid + ' week=' + weekHeader + ' hours=' + hours
+  );
 
-    if (!pid || !eid || !weekHeader) {
-      throw new Error('Missing pid, eid, or weekHeader');
+  if (!pid || !eid || !weekHeader) {
+    throw new Error('Missing pid, eid, or weekHeader');
+  }
+  if (!Number.isFinite(hours)) {
+    throw new Error('Invalid plannedHours for ' + pid + '/' + eid);
+  }
+
+  var weekCol = findWeekColumn(headers, weekHeader, weekStartIso, timezone);
+
+  if (weekCol === -1) {
+    throw new Error('Week column missing: ' + weekHeader);
+  }
+
+  var targetRow = -1;
+  for (var r = 1; r < data.length; r++) {
+    var rowPid = String(data[r][pidCol] || '').trim().toUpperCase();
+    var rowEid = String(data[r][eidCol] || '').trim().toUpperCase();
+    if (rowPid === pid && rowEid === eid) {
+      targetRow = r + 1;
+      break;
     }
-    if (!Number.isFinite(hours)) {
-      throw new Error('Invalid plannedHours for ' + pid + '/' + eid);
-    }
+  }
 
-    var weekCol = -1;
-    for (var i = 0; i < headers.length; i++) {
-      if (headerMatchesWeekColumn(headers[i], weekHeader, timezone)) {
-        weekCol = i;
-        break;
-      }
-    }
+  if (targetRow === -1) {
+    throw new Error('Row not found for PID=' + pid + ' EID=' + eid);
+  }
 
-    if (weekCol === -1) {
-      throw new Error('Week column missing: ' + weekHeader);
-    }
-
-    var targetRow = -1;
-    for (var r = 1; r < data.length; r++) {
-      var rowPid = String(data[r][pidCol] || '').trim().toUpperCase();
-      var rowEid = String(data[r][eidCol] || '').trim().toUpperCase();
-      if (rowPid === pid && rowEid === eid) {
-        targetRow = r + 1;
-        break;
-      }
-    }
-
-    if (targetRow === -1) {
-      throw new Error('Row not found for PID=' + pid + ' EID=' + eid);
-    }
-
-    sheet.getRange(targetRow, weekCol + 1).setValue(hours);
-    Logger.log('Updated row ' + targetRow + ' col ' + (weekCol + 1));
-  });
+  sheet.getRange(targetRow, weekCol + 1).setValue(hours);
+  Logger.log('Updated row ' + targetRow + ' col ' + (weekCol + 1));
 }
 
 function jsonResponse(obj) {

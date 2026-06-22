@@ -1,7 +1,12 @@
 import { Types } from 'mongoose';
 import { env } from '../../config/env';
 import { structuredLogger } from '../../common/logger';
-import { parseWeekStartParam, startOfUtcWeek } from '../../common/utils/week.util';
+import {
+    isAppsScriptActionSuccess,
+    parseAppsScriptActionResponse,
+    postJsonToAppsScriptWebApp,
+} from '../../common/http/apps-script-fetch';
+import { parseWeekStartParam, startOfUtcWeek, weekStartToIsoDate } from '../../common/utils/week.util';
 import { Employee } from '../employees/employee.model';
 import { Project } from '../projects/project.model';
 import type { WeeklyGridBulkUpdateItem } from '../weekly-allocations/weekly-allocation.types';
@@ -17,6 +22,8 @@ export interface AllocationSheetSyncCell {
     pid: string;
     eid: string;
     weekHeader: string;
+    /** ISO Monday (YYYY-MM-DD) — Apps Script fallback when header text differs. */
+    weekStart?: string;
     plannedHours: number;
 }
 
@@ -81,6 +88,7 @@ async function mapUpdatesToSheetCells(
             pid,
             eid,
             weekHeader: formatWeekSheetHeader(weekStartDate),
+            weekStart: weekStartToIsoDate(weekStartDate),
             plannedHours: u.plannedHours!,
         });
     }
@@ -120,19 +128,18 @@ async function postToGoogleSheetSync(payload: AllocationSheetSyncPayload): Promi
             body.syncKey = env.GOOGLE_SHEET_SYNC_SECRET;
         }
 
-        const response = await fetch(url, {
-            method: 'POST',
+        const { response, text } = await postJsonToAppsScriptWebApp(url, body, {
             headers,
-            body: JSON.stringify(body),
             signal: controller.signal,
-            redirect: 'follow',
         });
+        const parsed = parseAppsScriptActionResponse(text);
 
-        const text = await response.text();
-
-        if (!response.ok) {
+        if (!response.ok || !isAppsScriptActionSuccess(parsed)) {
             structuredLogger.error('ALLOCATION SHEET SYNC FAILED', {
                 httpStatus: response.status,
+                actionStatus: parsed.status,
+                actionError: parsed.error ?? parsed.message,
+                failed: parsed.failed,
                 bodyPreview: text.slice(0, 500),
                 updateCount: payload.cells.length,
             });
@@ -141,6 +148,8 @@ async function postToGoogleSheetSync(payload: AllocationSheetSyncPayload): Promi
 
         structuredLogger.info('ALLOCATION SHEET SYNC SUCCESS', {
             httpStatus: response.status,
+            actionStatus: parsed.status,
+            applied: parsed.applied ?? payload.cells.length,
             updateCount: payload.cells.length,
             bodyPreview: text.slice(0, 300),
         });
