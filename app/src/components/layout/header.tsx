@@ -13,7 +13,7 @@ const routeTitles: Record<string, { title: string; breadcrumb: string[] }> = {
     '/allocation': { title: 'Resource Planning', breadcrumb: ['Workspace', 'Allocation'] },
     '/projects': { title: 'Projects', breadcrumb: ['Workspace', 'Projects'] },
     '/weekly-planner': { title: 'Weekly Planner', breadcrumb: ['Workspace', 'Planner'] },
-    '/time-entry': { title: 'Time Tracking', breadcrumb: ['Operations', 'Time'] },
+    '/time-entry': { title: 'Time Intelligence', breadcrumb: ['Operations', 'Time Tracking'] },
     '/pm-approvals': { title: 'Approvals', breadcrumb: ['Operations', 'Approvals'] },
     '/reports': { title: 'Reports', breadcrumb: ['Operations', 'Reports'] },
     '/insights': { title: 'AI Insights', breadcrumb: ['Intelligence', 'Insights'] },

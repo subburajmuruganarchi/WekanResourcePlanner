@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback } from "react"
-import { Calendar, Save, Clock, Loader2, AlertCircle, Target, ChevronLeft, ChevronRight } from "lucide-react"
+import { Loader2, AlertCircle, Clock } from "lucide-react"
 import { snapToMonday } from "@/lib/dashboard-period"
 import {
     getCurrentWeekStart,
@@ -14,19 +14,35 @@ import {
 } from "@/lib/time-entry-week"
 import { PageContainer } from "@/components/layout/page-container"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { useTimeEntries } from "@/lib/use-time-entries"
 import { useEmployees } from "@/lib/use-employees"
 import { useProjects } from "@/lib/use-projects"
 import { useAuth } from "@/lib/auth-context"
 import { api } from "@/lib/api-client"
-import { TimeEntryWeekCalendar } from "@/components/time-entry/time-entry-week-calendar"
 import { TimeEntryEntryDialog } from "@/components/time-entry/time-entry-entry-dialog"
-import { TimeEntryProjectPalette } from "@/components/time-entry/time-entry-project-palette"
 import type { DayData, DayEntry, ProjectOption, DailyForecastDay, DraggedProjectPayload } from "@/components/time-entry/time-entry-types"
+import { TimeHeader } from "@/components/time-tracking/TimeHeader"
+import { TimeKPICards } from "@/components/time-tracking/TimeKPICards"
+import { WeeklyNavigator } from "@/components/time-tracking/WeeklyNavigator"
+import { ProjectSelector } from "@/components/time-tracking/ProjectSelector"
+import { TimeCalendar } from "@/components/time-tracking/TimeCalendar"
+import { ViewSwitcher } from "@/components/time-tracking/ViewSwitcher"
+import { TimesheetGrid } from "@/components/time-tracking/TimesheetGrid"
+import { AISuggestionPanel } from "@/components/time-tracking/AISuggestionPanel"
+import { ApprovalTimeline } from "@/components/time-tracking/ApprovalTimeline"
+import { TimeIntelligencePanel } from "@/components/time-tracking/TimeIntelligencePanel"
+import { ValidationBanner } from "@/components/time-tracking/ValidationBanner"
+import { QuickTimeEntry } from "@/components/time-tracking/QuickTimeEntry"
+import { ManagerOverview } from "@/components/time-tracking/ManagerOverview"
+import {
+    computeTimeKPIs,
+    deriveTimeSuggestions,
+    flattenToGridRows,
+    exportTimesheetCsv,
+} from "@/components/time-tracking/time-metrics"
+import type { TimeViewMode, TimesheetStatus, TimeSuggestion } from "@/components/time-tracking/types"
+import "@/components/time-tracking/time-tracking.css"
 
 interface TimeCodeResponse {
     id: string
@@ -58,10 +74,7 @@ export function TimeEntry() {
     const [selectedWeekStart, setSelectedWeekStart] = useState(() => getCurrentWeekStart())
     const weekDates = useMemo(() => getWeekDaysFromMonday(selectedWeekStart), [selectedWeekStart])
     const [weekData, setWeekData] = useState<DayData[]>(() =>
-        getWeekDaysFromMonday(getCurrentWeekStart()).map(d => ({
-            ...d,
-            entries: []
-        }))
+        getWeekDaysFromMonday(getCurrentWeekStart()).map((d) => ({ ...d, entries: [] }))
     )
     const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("")
     const [dailyForecast, setDailyForecast] = useState<DailyForecastData | null>(null)
@@ -78,22 +91,22 @@ export function TimeEntry() {
     const [rowSaveMessage, setRowSaveMessage] = useState<string | null>(null)
     const [entryDialog, setEntryDialog] = useState<{ dayIndex: number; tempId: string } | null>(null)
     const [dialogProjectLocked, setDialogProjectLocked] = useState(false)
+    const [viewMode, setViewMode] = useState<TimeViewMode>("calendar")
 
     const { user } = useAuth()
-    const isSelfOnly = user?.role === 'Employee' || user?.role === 'User'
-    const isProjectManager = user?.role === 'Project Manager'
+    const isSelfOnly = user?.role === "Employee" || user?.role === "User"
+    const isProjectManager = user?.role === "Project Manager"
     const { submitTimeEntry, submitWeeklyTimesheet, deleteTimeEntry, loading } = useTimeEntries()
     const { employees, loading: loadingEmployees } = useEmployees({ allocatedToMyProjects: isProjectManager })
     const { projects, loading: loadingProjects } = useProjects()
 
-    // Initialize selected employee (employees locked to self; PM sees allocated team only)
     useEffect(() => {
         if (isSelfOnly && user?.id) {
             setSelectedEmployeeId(user.id)
             return
         }
         if (employees.length === 0) {
-            setSelectedEmployeeId('')
+            setSelectedEmployeeId("")
             return
         }
         if (!selectedEmployeeId || !employees.some((e) => e.id === selectedEmployeeId)) {
@@ -108,29 +121,24 @@ export function TimeEntry() {
         setSubmitWarnings([])
     }, [selectedWeekStart, weekDates])
 
-    // Fetch time code (after auth — endpoint requires token)
     const loadTimeCodes = useCallback(async () => {
         try {
-            const codes = await api.get<TimeCodeResponse[]>('/time-entries/codes')
+            const codes = await api.get<TimeCodeResponse[]>("/time-entries/codes")
             if (codes.length > 0) {
                 const preferred =
-                    codes.find((c) => c.code === 'DEV') ||
-                    codes.find((c) => c.code === 'BILLABLE') ||
+                    codes.find((c) => c.code === "DEV") ||
+                    codes.find((c) => c.code === "BILLABLE") ||
                     codes[0]
                 setTimeCodeId(preferred.id)
                 setTimeCodeError(null)
             } else {
                 setTimeCodeId(null)
-                setTimeCodeError('No time codes are configured. Contact an administrator or refresh after backend setup.')
+                setTimeCodeError("No time codes are configured. Contact an administrator.")
             }
         } catch (err) {
             setTimeCodeId(null)
-            const detail = err instanceof Error ? err.message : 'Unknown error'
-            setTimeCodeError(
-                detail === 'Failed to fetch' || detail === 'Network error'
-                    ? 'Could not reach the API. Check that the backend is running and VITE_API_URL is correct.'
-                    : `Could not load time codes: ${detail}`
-            )
+            const detail = err instanceof Error ? err.message : "Unknown error"
+            setTimeCodeError(`Could not load time codes: ${detail}`)
         }
     }, [])
 
@@ -148,32 +156,33 @@ export function TimeEntry() {
                 id: string; employeeId: string; projectId: string; date: string; hours: number; comments?: string; status: string
             }[]>(`/time-entries?employeeId=${selectedEmployeeId}&week=${weekStart}`)
 
-            // Map projectId back to projectCode
             const projectIdToCode: Record<string, string> = {}
-            projects.forEach(p => { projectIdToCode[p.id] = p.code })
+            projects.forEach((p) => { projectIdToCode[p.id] = p.code })
 
-            setWeekData(prev => prev.map(day => {
-                const dayEntries = entries
-                    .filter(e => e.date === day.fullDate)
-                    .map(e => ({
-                        tempId: generateTempId(),
-                        serverEntryId: e.id,
-                        projectCode: projectIdToCode[e.projectId] || '',
-                        hours: e.hours,
-                        comments: e.comments || '',
-                        status: e.status,
-                        isDirty: false,
-                        isEditing: false,
-                    }))
-                return { ...day, entries: dayEntries.length > 0 ? dayEntries : [] }
-            }))
+            setWeekData((prev) =>
+                prev.map((day) => {
+                    const dayEntries = entries
+                        .filter((e) => e.date === day.fullDate)
+                        .map((e) => ({
+                            tempId: generateTempId(),
+                            serverEntryId: e.id,
+                            projectCode: projectIdToCode[e.projectId] || "",
+                            hours: e.hours,
+                            comments: e.comments || "",
+                            status: e.status,
+                            isDirty: false,
+                            isEditing: false,
+                        }))
+                    return { ...day, entries: dayEntries.length > 0 ? dayEntries : [] }
+                })
+            )
         } catch {
-            // Silently fail — entries stay as they are
+            /* keep current */
         }
     }, [selectedEmployeeId, weekDates, projects])
 
     useEffect(() => {
-        fetchSavedEntries()
+        void fetchSavedEntries()
     }, [fetchSavedEntries])
 
     const fetchDailyForecast = useCallback(async () => {
@@ -188,7 +197,7 @@ export function TimeEntry() {
     }, [selectedEmployeeId, weekDates])
 
     useEffect(() => {
-        fetchDailyForecast()
+        void fetchDailyForecast()
     }, [fetchDailyForecast])
 
     useEffect(() => {
@@ -199,7 +208,6 @@ export function TimeEntry() {
         ).then(setAllocationEstimates).catch(() => setAllocationEstimates(null))
     }, [selectedEmployeeId, weekDates])
 
-    // Clear success/error messages after a delay
     useEffect(() => {
         if (submitSuccess || submitError) {
             const timer = setTimeout(() => {
@@ -216,82 +224,71 @@ export function TimeEntry() {
         return () => clearTimeout(timer)
     }, [rowSaveMessage])
 
-    const selectedEmployee = useMemo(() =>
-        employees.find(e => e.id === selectedEmployeeId),
+    const selectedEmployee = useMemo(
+        () => employees.find((e) => e.id === selectedEmployeeId),
         [employees, selectedEmployeeId]
     )
 
     const selectableProjects = useMemo((): ProjectOption[] => {
         const allocatedIds = new Set<string>()
         allocationEstimates?.byProject.forEach((p) => allocatedIds.add(p.projectId))
-        dailyForecast?.days.forEach((d) =>
-            d.byProject.forEach((p) => allocatedIds.add(p.projectId))
-        )
+        dailyForecast?.days.forEach((d) => d.byProject.forEach((p) => allocatedIds.add(p.projectId)))
 
-        const usedCodes = new Set(
-            weekData.flatMap((d) => d.entries.map((e) => e.projectCode)).filter(Boolean)
-        )
+        const usedCodes = new Set(weekData.flatMap((d) => d.entries.map((e) => e.projectCode)).filter(Boolean))
 
         const byId = new Map<string, ProjectOption>()
         for (const p of projects) {
-            const isActive =
-                !p.status || p.status === "Active" || p.status === "Planning"
+            const isActive = !p.status || p.status === "Active" || p.status === "Planning"
             if (!isActive && !usedCodes.has(p.code)) continue
-            byId.set(p.id, {
-                code: p.code,
-                name: p.name,
-                id: p.id,
-                isAllocated: allocatedIds.has(p.id),
-            })
+            byId.set(p.id, { code: p.code, name: p.name, id: p.id, isAllocated: allocatedIds.has(p.id) })
         }
         for (const p of projects) {
             if (usedCodes.has(p.code) && !byId.has(p.id)) {
-                byId.set(p.id, {
-                    code: p.code,
-                    name: p.name,
-                    id: p.id,
-                    isAllocated: allocatedIds.has(p.id),
-                })
+                byId.set(p.id, { code: p.code, name: p.name, id: p.id, isAllocated: allocatedIds.has(p.id) })
             }
         }
         return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
     }, [projects, allocationEstimates, dailyForecast, weekData])
 
-    const totalHours = useMemo(() =>
-        weekData.reduce((sum, day) =>
-            sum + day.entries.reduce((daySum, e) => daySum + (Number(e.hours) || 0), 0), 0
-        ), [weekData]
+    const allocationByProject = useMemo(() => {
+        const map = new Map<string, { estimatedHours: number; percentage: number }>()
+        allocationEstimates?.byProject.forEach((p) => {
+            map.set(p.projectId, { estimatedHours: p.estimatedHours, percentage: p.percentage })
+        })
+        return map
+    }, [allocationEstimates])
+
+    const totalHours = useMemo(
+        () => weekData.reduce((sum, day) => sum + day.entries.reduce((daySum, e) => daySum + (Number(e.hours) || 0), 0), 0),
+        [weekData]
     )
 
-    const hasUnsavedChanges = useMemo(() =>
-        weekData.some(day => day.entries.some(e => e.isDirty && (e.hours > 0 || e.projectCode !== ''))),
+    const hasUnsavedChanges = useMemo(
+        () => weekData.some((day) => day.entries.some((e) => e.isDirty && (e.hours > 0 || e.projectCode !== ""))),
         [weekData]
     )
 
     const dirtyEntryCount = useMemo(
         () =>
             weekData.reduce(
-                (count, day) =>
-                    count +
-                    day.entries.filter((e) => e.isDirty && e.hours > 0 && e.projectCode).length,
+                (count, day) => count + day.entries.filter((e) => e.isDirty && e.hours > 0 && e.projectCode).length,
                 0
             ),
         [weekData]
     )
 
-    const weekTimesheetStatus = useMemo(() => {
+    const weekTimesheetStatus = useMemo((): TimesheetStatus => {
         const entries = weekData.flatMap((d) => d.entries).filter((e) => e.hours > 0 && e.projectCode)
-        if (entries.length === 0) return 'empty' as const
-        const statuses = entries.map((e) => e.status || 'Draft')
-        if (statuses.every((s) => s === 'PM_Approved')) return 'approved' as const
-        if (statuses.every((s) => s === 'Submitted')) return 'submitted' as const
-        if (statuses.some((s) => s === 'PM_Rejected')) return 'rejected' as const
-        if (statuses.some((s) => s === 'Submitted' || s === 'PM_Approved')) return 'partial' as const
-        return 'draft' as const
+        if (entries.length === 0) return "empty"
+        const statuses = entries.map((e) => e.status || "Draft")
+        if (statuses.every((s) => s === "PM_Approved")) return "approved"
+        if (statuses.every((s) => s === "Submitted")) return "submitted"
+        if (statuses.some((s) => s === "PM_Rejected")) return "rejected"
+        if (statuses.some((s) => s === "Submitted" || s === "PM_Approved")) return "partial"
+        return "draft"
     }, [weekData])
 
-    const isTimesheetLocked =
-        weekTimesheetStatus === 'submitted' || weekTimesheetStatus === 'approved'
+    const isTimesheetLocked = weekTimesheetStatus === "submitted" || weekTimesheetStatus === "approved"
 
     const viewingCurrentWeek = isCurrentWeek(selectedWeekStart)
     const viewingFutureWeek = isFutureWeek(selectedWeekStart)
@@ -299,10 +296,7 @@ export function TimeEntry() {
     const missingWeekdays = useMemo(() => {
         const byDate = new Map<string, { hours: number; projectCode: string }[]>()
         for (const day of weekData) {
-            byDate.set(
-                day.fullDate,
-                day.entries.map((e) => ({ hours: e.hours, projectCode: e.projectCode }))
-            )
+            byDate.set(day.fullDate, day.entries.map((e) => ({ hours: e.hours, projectCode: e.projectCode })))
         }
         return getMissingWeekdays(weekDates, byDate)
     }, [weekData, weekDates])
@@ -314,21 +308,33 @@ export function TimeEntry() {
         dirtyEntryCount === 0 &&
         totalHours > 0
 
+    const kpis = useMemo(() => computeTimeKPIs(weekData, weekTimesheetStatus), [weekData, weekTimesheetStatus])
+
+    const suggestions = useMemo(
+        () => deriveTimeSuggestions(weekData, missingWeekdays, allocationEstimates),
+        [weekData, missingWeekdays, allocationEstimates]
+    )
+
+    const gridRows = useMemo(
+        () => flattenToGridRows(weekData, selectableProjects, selectedEmployee?.name ?? user?.name ?? "—"),
+        [weekData, selectableProjects, selectedEmployee, user?.name]
+    )
+
+    const topProject = allocationEstimates?.byProject[0]?.projectName
+
     const getProjectId = useCallback(
-        (code: string): string | null => {
-            return selectableProjects.find((p) => p.code === code)?.id || null
-        },
+        (code: string): string | null => selectableProjects.find((p) => p.code === code)?.id || null,
         [selectableProjects]
     )
 
     const saveEntry = useCallback(
         async (dayIndex: number, tempId: string) => {
             if (!selectedEmployee) {
-                setSubmitError('No employee selected.')
+                setSubmitError("No employee selected.")
                 return
             }
             if (!timeCodeId) {
-                setSubmitError('Time code not configured.')
+                setSubmitError("Time code not configured.")
                 return
             }
 
@@ -337,13 +343,13 @@ export function TimeEntry() {
             if (!entry) return
 
             if (!entry.projectCode || entry.hours <= 0) {
-                setSubmitError('Select a project and enter hours before saving.')
+                setSubmitError("Select a project and enter hours before saving.")
                 return
             }
 
             const projectId = selectableProjects.find((p) => p.code === entry.projectCode)?.id
             if (!projectId) {
-                setSubmitError(`Invalid project: ${entry.projectCode}. Select an active project.`)
+                setSubmitError(`Invalid project: ${entry.projectCode}.`)
                 return
             }
 
@@ -368,25 +374,17 @@ export function TimeEntry() {
                                   ...d,
                                   entries: d.entries.map((e) =>
                                       e.tempId === tempId
-                                          ? {
-                                                ...e,
-                                                serverEntryId: saved.id,
-                                                status: saved.status,
-                                                isDirty: false,
-                                                isEditing: false,
-                                            }
+                                          ? { ...e, serverEntryId: saved.id, status: saved.status, isDirty: false, isEditing: false }
                                           : e
                                   ),
                               }
                             : d
                     )
                 )
-                setRowSaveMessage('Entry saved.')
+                setRowSaveMessage("Entry saved.")
                 await Promise.all([fetchSavedEntries(), fetchDailyForecast()])
             } catch (err) {
-                const message = err instanceof Error ? err.message : 'Failed to save entry'
-                setSubmitError(message)
-                window.scrollTo({ top: 0, behavior: 'smooth' })
+                setSubmitError(err instanceof Error ? err.message : "Failed to save entry")
             } finally {
                 setSavingEntryId(null)
             }
@@ -394,30 +392,95 @@ export function TimeEntry() {
         [selectedEmployee, timeCodeId, weekData, selectableProjects, submitTimeEntry, fetchSavedEntries, fetchDailyForecast]
     )
 
-    const handleEmployeeChange = useCallback((newId: string) => {
-        if (newId === selectedEmployeeId) return
-        if (hasUnsavedChanges) {
-            const confirmed = window.confirm(
-                'You have unsaved/not submitted time entries. Switching employees will discard them. Continue?'
-            )
-            if (!confirmed) return
+    const handleSaveDraft = useCallback(async () => {
+        const dirty: { dayIndex: number; tempId: string }[] = []
+        weekData.forEach((day, dayIndex) => {
+            day.entries.forEach((e) => {
+                if (e.isDirty && e.hours > 0 && e.projectCode) dirty.push({ dayIndex, tempId: e.tempId })
+            })
+        })
+        for (const { dayIndex, tempId } of dirty) {
+            await saveEntry(dayIndex, tempId)
         }
-        setSubmitError(null)
-        setSubmitSuccess(false)
-        setSelectedEmployeeId(newId)
-    }, [selectedEmployeeId, hasUnsavedChanges])
+    }, [weekData, saveEntry])
 
-    const handleWeekChange = useCallback((newWeekStart: string) => {
-        const snapped = snapToMonday(newWeekStart)
-        if (snapped === selectedWeekStart) return
-        if (hasUnsavedChanges) {
-            const confirmed = window.confirm(
-                'You have unsaved time entries. Switching weeks will discard unsaved changes. Continue?'
-            )
-            if (!confirmed) return
+    const handleCopyPreviousWeek = useCallback(async () => {
+        if (!selectedEmployeeId || projects.length === 0 || isTimesheetLocked) return
+        const prevWeekStart = shiftWeekStart(selectedWeekStart, -1)
+        try {
+            const entries = await api.get<{
+                id: string; projectId: string; date: string; hours: number; comments?: string
+            }[]>(`/time-entries?employeeId=${selectedEmployeeId}&week=${prevWeekStart}`)
+
+            if (entries.length === 0) {
+                setSubmitError("No entries found in the previous week.")
+                return
+            }
+
+            const projectIdToCode: Record<string, string> = {}
+            projects.forEach((p) => { projectIdToCode[p.id] = p.code })
+
+            const prevWeekDates = getWeekDaysFromMonday(prevWeekStart)
+            const dayIndexByDate = new Map(weekDates.map((d, i) => [d.fullDate, i]))
+            const prevToCurrent = new Map<number, number>()
+            prevWeekDates.forEach((_pd, pi) => {
+                const cd = weekDates[pi]
+                if (cd) prevToCurrent.set(pi, dayIndexByDate.get(cd.fullDate) ?? pi)
+            })
+
+            setWeekData((prev) => {
+                const next = prev.map((d) => ({ ...d, entries: [...d.entries] }))
+                for (const entry of entries) {
+                    const prevDayIdx = prevWeekDates.findIndex((d) => d.fullDate === entry.date)
+                    const dayIndex = prevToCurrent.get(prevDayIdx)
+                    if (dayIndex == null) continue
+                    const code = projectIdToCode[entry.projectId]
+                    if (!code) continue
+                    next[dayIndex].entries.push({
+                        tempId: generateTempId(),
+                        projectCode: code,
+                        hours: entry.hours,
+                        comments: entry.comments || "",
+                        isDirty: true,
+                        isEditing: false,
+                    })
+                }
+                return next
+            })
+            setRowSaveMessage("Previous week copied as draft entries. Save each row or use Save Draft.")
+        } catch {
+            setSubmitError("Could not copy previous week.")
         }
-        setSelectedWeekStart(snapped)
-    }, [selectedWeekStart, hasUnsavedChanges])
+    }, [selectedEmployeeId, projects, selectedWeekStart, weekDates, isTimesheetLocked])
+
+    const handleExport = useCallback(() => {
+        exportTimesheetCsv(gridRows)
+    }, [gridRows])
+
+    const handleEmployeeChange = useCallback(
+        (newId: string) => {
+            if (newId === selectedEmployeeId) return
+            if (hasUnsavedChanges) {
+                if (!window.confirm("Unsaved entries will be discarded. Continue?")) return
+            }
+            setSubmitError(null)
+            setSubmitSuccess(false)
+            setSelectedEmployeeId(newId)
+        },
+        [selectedEmployeeId, hasUnsavedChanges]
+    )
+
+    const handleWeekChange = useCallback(
+        (newWeekStart: string) => {
+            const snapped = snapToMonday(newWeekStart)
+            if (snapped === selectedWeekStart) return
+            if (hasUnsavedChanges) {
+                if (!window.confirm("Unsaved entries will be discarded. Continue?")) return
+            }
+            setSelectedWeekStart(snapped)
+        },
+        [selectedWeekStart, hasUnsavedChanges]
+    )
 
     const addEntry = useCallback((dayIndex: number) => {
         const tempId = generateTempId()
@@ -429,14 +492,7 @@ export function TimeEntry() {
                           ...day,
                           entries: [
                               ...day.entries,
-                              {
-                                  tempId,
-                                  projectCode: "",
-                                  hours: 0,
-                                  comments: "",
-                                  isDirty: true,
-                                  isEditing: true,
-                              },
+                              { tempId, projectCode: "", hours: 0, comments: "", isDirty: true, isEditing: true },
                           ],
                       }
                     : day
@@ -444,6 +500,27 @@ export function TimeEntry() {
         )
         setEntryDialog({ dayIndex, tempId })
     }, [])
+
+    const handleQuickAdd = useCallback(() => {
+        const firstMissing = weekData.findIndex(
+            (d) => d.isWeekday && d.entries.reduce((s, e) => s + e.hours, 0) < 8
+        )
+        addEntry(firstMissing >= 0 ? firstMissing : weekData.findIndex((d) => d.isWeekday) || 0)
+    }, [weekData, addEntry])
+
+    const handleApplySuggestion = useCallback(
+        (suggestion: TimeSuggestion) => {
+            if (suggestion.id === "missing-hours" && missingWeekdays.length > 0) {
+                const dayIndex = weekData.findIndex((d) => d.day === missingWeekdays[0])
+                if (dayIndex >= 0) addEntry(dayIndex)
+                return
+            }
+            if (suggestion.dayIndex != null) {
+                addEntry(suggestion.dayIndex)
+            }
+        },
+        [missingWeekdays, weekData, addEntry]
+    )
 
     const handleDropProject = useCallback(
         (dayIndex: number, project: DraggedProjectPayload) => {
@@ -473,7 +550,6 @@ export function TimeEntry() {
             )
             setEntryDialog({ dayIndex, tempId })
         },
-        // [weekDates]
         [weekDates]
     )
 
@@ -484,19 +560,12 @@ export function TimeEntry() {
 
     const closeEntryDialog = useCallback(() => {
         if (entryDialog) {
-            const entry = weekData[entryDialog.dayIndex]?.entries.find(
-                (e) => e.tempId === entryDialog.tempId
-            )
+            const entry = weekData[entryDialog.dayIndex]?.entries.find((e) => e.tempId === entryDialog.tempId)
             if (entry && !entry.serverEntryId && !entry.projectCode && entry.hours <= 0) {
                 setWeekData((prev) =>
                     prev.map((day, i) =>
                         i === entryDialog.dayIndex
-                            ? {
-                                  ...day,
-                                  entries: day.entries.filter(
-                                      (e) => e.tempId !== entryDialog.tempId
-                                  ),
-                              }
+                            ? { ...day, entries: day.entries.filter((e) => e.tempId !== entryDialog.tempId) }
                             : day
                     )
                 )
@@ -506,37 +575,43 @@ export function TimeEntry() {
         setDialogProjectLocked(false)
     }, [entryDialog, weekData])
 
-    const removeEntry = useCallback(async (dayIndex: number, tempId: string) => {
-        const entry = weekData[dayIndex]?.entries.find(e => e.tempId === tempId)
-        if (entry?.serverEntryId && selectedEmployeeId) {
-            try {
-                await deleteTimeEntry(entry.serverEntryId, selectedEmployeeId)
-            } catch {
-                return
+    const removeEntry = useCallback(
+        async (dayIndex: number, tempId: string) => {
+            const entry = weekData[dayIndex]?.entries.find((e) => e.tempId === tempId)
+            if (entry?.serverEntryId && selectedEmployeeId) {
+                try {
+                    await deleteTimeEntry(entry.serverEntryId, selectedEmployeeId)
+                } catch {
+                    return
+                }
             }
-        }
-        setWeekData(prev => prev.map((day, i) =>
-            i === dayIndex
-                ? { ...day, entries: day.entries.filter(e => e.tempId !== tempId) }
-                : day
-        ))
-    }, [weekData, selectedEmployeeId, deleteTimeEntry])
+            setWeekData((prev) =>
+                prev.map((day, i) =>
+                    i === dayIndex ? { ...day, entries: day.entries.filter((e) => e.tempId !== tempId) } : day
+                )
+            )
+        },
+        [weekData, selectedEmployeeId, deleteTimeEntry]
+    )
 
     const updateEntry = useCallback((dayIndex: number, tempId: string, field: keyof DayEntry, value: string | number) => {
-        setWeekData(prev => prev.map((day, i) =>
-            i === dayIndex
-                ? { ...day, entries: day.entries.map(e => e.tempId === tempId ? { ...e, [field]: value, isDirty: true, isEditing: true } : e) }
-                : day
-        ))
+        setWeekData((prev) =>
+            prev.map((day, i) =>
+                i === dayIndex
+                    ? {
+                          ...day,
+                          entries: day.entries.map((e) =>
+                              e.tempId === tempId ? { ...e, [field]: value, isDirty: true, isEditing: true } : e
+                          ),
+                      }
+                    : day
+            )
+        )
     }, [])
 
     const dialogEntry = useMemo(() => {
         if (!entryDialog) return null
-        return (
-            weekData[entryDialog.dayIndex]?.entries.find(
-                (e) => e.tempId === entryDialog.tempId
-            ) ?? null
-        )
+        return weekData[entryDialog.dayIndex]?.entries.find((e) => e.tempId === entryDialog.tempId) ?? null
     }, [entryDialog, weekData])
 
     const updateDialogEntry = useCallback(
@@ -559,12 +634,6 @@ export function TimeEntry() {
         setEntryDialog(null)
     }, [entryDialog, removeEntry])
 
-    const getStatusColor = (hours: number) => {
-        if (hours === 40) return "bg-green-100 text-green-600 border-green-200"
-        if (hours > 40) return "bg-red-100 text-red-600 border-red-200"
-        return "bg-amber-100 text-amber-600 border-amber-200"
-    }
-
     const handleSubmit = async () => {
         setSubmitError(null)
         setSubmitSuccess(false)
@@ -575,36 +644,32 @@ export function TimeEntry() {
             return
         }
 
-        if (weekTimesheetStatus === 'approved') {
-            setSubmitError('This timesheet has already been approved by your PM.')
+        if (weekTimesheetStatus === "approved") {
+            setSubmitError("This timesheet has already been approved.")
             return
         }
 
-        if (weekTimesheetStatus === 'submitted') {
-            setSubmitError('This timesheet is already submitted and awaiting PM approval.')
+        if (weekTimesheetStatus === "submitted") {
+            setSubmitError("This timesheet is already submitted.")
             return
         }
 
-        const allEntries = weekData.flatMap((day, _) =>
-            day.entries
-                .filter(e => e.hours > 0 && e.projectCode)
-                .map(e => ({ ...e, fullDate: day.fullDate }))
+        const allEntries = weekData.flatMap((day) =>
+            day.entries.filter((e) => e.hours > 0 && e.projectCode).map((e) => ({ ...e, fullDate: day.fullDate }))
         )
 
         if (allEntries.length === 0) {
-            setSubmitError("No time entries to submit. Add hours to at least one entry.")
+            setSubmitError("No time entries to submit.")
             return
         }
 
         if (isFutureWeek(selectedWeekStart)) {
-            setSubmitError('Timesheets for future weeks cannot be submitted. You can plan entries, but submit after the week begins.')
+            setSubmitError("Future weeks cannot be submitted.")
             return
         }
 
         if (missingWeekdays.length > 0) {
-            setSubmitError(
-                `Complete all weekdays before submitting. Missing entries for: ${missingWeekdays.join(', ')}.`
-            )
+            setSubmitError(`Complete all weekdays before submitting. Missing: ${missingWeekdays.join(", ")}.`)
             return
         }
 
@@ -626,33 +691,21 @@ export function TimeEntry() {
         }
 
         if (invalidRows.length > 0) {
-            const lines = invalidRows.map(
-                (r) => `${r.projectCode} on ${r.date}`
-            )
-            setSubmitError(
-                `${invalidRows.length} ${invalidRows.length === 1 ? 'entry' : 'entries'} skipped due to invalid project configuration: ${lines.join('; ')}. Fix project codes before submitting.`
-            )
+            setSubmitError(`${invalidRows.length} entries have invalid projects. Fix before submitting.`)
             return
         }
 
         try {
             for (const entry of entriesToSave) {
                 const projectId = getProjectId(entry.projectCode)!
-                try {
-                    await submitTimeEntry({
-                        employeeId: selectedEmployee.id,
-                        projectId,
-                        timeCodeId,
-                        date: entry.fullDate,
-                        hours: entry.hours,
-                        comments: entry.comments || undefined,
-                    })
-                } catch (saveErr) {
-                    const detail = saveErr instanceof Error ? saveErr.message : 'Unknown error'
-                    throw new Error(
-                        `Failed to save ${entry.projectCode} on ${entry.fullDate}: ${detail}`
-                    )
-                }
+                await submitTimeEntry({
+                    employeeId: selectedEmployee.id,
+                    projectId,
+                    timeCodeId,
+                    date: entry.fullDate,
+                    hours: entry.hours,
+                    comments: entry.comments || undefined,
+                })
             }
 
             const weekStart = weekDates[0].fullDate
@@ -663,11 +716,7 @@ export function TimeEntry() {
             setRowSaveMessage(null)
             await Promise.all([fetchSavedEntries(), fetchDailyForecast()])
         } catch (err) {
-            const detail = err instanceof Error ? err.message : 'Unknown error'
-            setSubmitError(
-                `Unable to save all entries. Timesheet not submitted. ${detail}`
-            )
-            window.scrollTo({ top: 0, behavior: 'smooth' })
+            setSubmitError(err instanceof Error ? err.message : "Failed to submit timesheet")
         }
     }
 
@@ -682,120 +731,63 @@ export function TimeEntry() {
     if (isLoading) {
         return (
             <PageContainer className="flex items-center justify-center min-h-[400px]">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-slate-600">
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Loading time entry data...</span>
+                    <span>Loading time intelligence…</span>
                 </div>
             </PageContainer>
         )
     }
 
     const selectedWeek = formatWeekRangeLabel(selectedWeekStart)
+    const employeeDisplayName = isSelfOnly ? (user?.name ?? "—") : (selectedEmployee?.name ?? "—")
 
     return (
-        <PageContainer className="space-y-6">
+        <PageContainer className="space-y-5 max-w-[1800px]">
             {isSelfOnly && (
-                <Card className="p-4 border-brand-100 bg-brand-50/40">
-                    <p className="text-sm text-gray-800">
-                        <strong>Welcome, {user?.name}.</strong> Log your hours for the week, then submit for PM approval.
-                        Track OKRs from the sidebar when needed.
+                <Card className="p-4 border-indigo-100 bg-indigo-50/40 rounded-xl">
+                    <p className="text-sm text-slate-800">
+                        <strong>Welcome, {user?.name}.</strong> Log hours daily, track utilization, and submit for PM approval.
                     </p>
                 </Card>
             )}
-            {isProjectManager && !loadingEmployees && employees.length === 0 && (
-                <Card className="p-4 border-amber-200 bg-amber-50">
+
+            {isProjectManager && employees.length === 0 && (
+                <Card className="p-4 border-amber-200 bg-amber-50 rounded-xl">
                     <p className="text-sm text-amber-900">
-                        No employees are allocated to your managed projects yet. Assign team members under{' '}
-                        <strong>Resource Allocation</strong> to enter time on their behalf.
+                        No employees allocated to your projects. Assign team members under Resource Allocation.
                     </p>
                 </Card>
             )}
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-2xl font-semibold text-gray-900">Weekly Time Entry</h1>
-                    {isProjectManager && (
-                        <p className="text-sm text-gray-500 mt-1">
-                            Employees allocated to your managed projects.
-                        </p>
-                    )}
-                    <div className="flex items-center gap-4 mt-1">
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-600">Employee:</span>
-                            {isSelfOnly ? (
-                                <span className="text-sm font-medium text-gray-900">{user?.name}</span>
-                            ) : loadingEmployees ? (
-                                <span className="text-sm text-gray-500">Loading…</span>
-                            ) : employees.length === 0 ? (
-                                <span className="text-sm text-gray-500">No allocated employees</span>
-                            ) : (
-                                <Select value={selectedEmployeeId} onValueChange={handleEmployeeChange}>
-                                    <SelectTrigger className="h-8 w-[200px]">
-                                        <SelectValue placeholder="Select employee" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {employees.map(emp => (
-                                            <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            )}
-                        </div>
-                        <Badge
-                            variant={
-                                weekTimesheetStatus === 'approved'
-                                    ? 'success'
-                                    : weekTimesheetStatus === 'submitted'
-                                      ? 'info'
-                                      : weekTimesheetStatus === 'rejected'
-                                        ? 'warning'
-                                        : 'warning'
-                            }
-                        >
-                            {weekTimesheetStatus === 'approved'
-                                ? 'Approved'
-                                : weekTimesheetStatus === 'submitted'
-                                  ? 'Submitted'
-                                  : weekTimesheetStatus === 'rejected'
-                                    ? 'Rejected'
-                                    : weekTimesheetStatus === 'partial'
-                                      ? 'Partial'
-                                      : 'Draft'}
-                        </Badge>
-                    </div>
-                </div>
-                {!isTimesheetLocked ? (
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={handleReset} disabled={loading}>Reset</Button>
-                        <Button
-                            className="gap-2"
-                            onClick={handleSubmit}
-                            disabled={loading || !selectedEmployee || !timeCodeId || !canSubmitWeek}
-                        >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            Submit Timesheet
-                        </Button>
-                    </div>
-                ) : weekTimesheetStatus === 'approved' ? (
-                    <p className="text-sm text-green-700 font-medium">Approved by PM</p>
-                ) : (
-                    <p className="text-sm text-blue-700 font-medium">Awaiting PM approval</p>
-                )}
-            </div>
+
+            <TimeHeader
+                employeeName={employeeDisplayName}
+                isSelfOnly={isSelfOnly}
+                employees={employees}
+                selectedEmployeeId={selectedEmployeeId}
+                onEmployeeChange={handleEmployeeChange}
+                loadingEmployees={loadingEmployees}
+                weekTimesheetStatus={weekTimesheetStatus}
+                isTimesheetLocked={isTimesheetLocked}
+                loading={loading}
+                canSubmit={canSubmitWeek}
+                dirtyCount={dirtyEntryCount}
+                onSaveDraft={() => void handleSaveDraft()}
+                onSubmit={() => void handleSubmit()}
+                onCopyPreviousWeek={() => void handleCopyPreviousWeek()}
+                onExport={handleExport}
+                isProjectManager={isProjectManager}
+            />
+
+            <TimeKPICards kpis={kpis} />
 
             {timeCodeError && (
-                <Card className="p-4 bg-amber-50 border-amber-200">
+                <Card className="p-4 bg-amber-50 border-amber-200 rounded-xl">
                     <div className="flex items-start gap-3">
-                        <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-amber-900 text-sm">Time codes unavailable</h4>
-                            <p className="text-sm text-amber-800 mt-1">{timeCodeError}</p>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="mt-2"
-                                onClick={() => void loadTimeCodes()}
-                            >
+                        <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                        <div className="flex-1">
+                            <p className="font-medium text-amber-900 text-sm">{timeCodeError}</p>
+                            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void loadTimeCodes()}>
                                 Retry
                             </Button>
                         </div>
@@ -804,26 +796,20 @@ export function TimeEntry() {
             )}
 
             {submitError && (
-                <Card className="p-4 bg-red-50 border-red-200">
+                <Card className="p-4 bg-red-50 border-red-200 rounded-xl">
                     <div className="flex items-start gap-3">
-                        <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
-                        <div>
-                            <h4 className="font-medium text-red-900 text-sm">Submission Failed</h4>
-                            <p className="text-sm text-red-700 mt-1">{submitError}</p>
-                        </div>
+                        <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+                        <p className="text-sm text-red-700">{submitError}</p>
                     </div>
                 </Card>
             )}
 
             {submitSuccess && (
-                <Card className="p-4 bg-green-50 border-green-200">
+                <Card className="p-4 bg-emerald-50 border-emerald-200 rounded-xl">
                     <div className="flex items-start gap-3">
-                        <Clock className="w-5 h-5 text-green-500 mt-0.5" />
+                        <Clock className="w-5 h-5 text-emerald-500 shrink-0" />
                         <div>
-                            <h4 className="font-medium text-green-900 text-sm">Timesheet Submitted</h4>
-                            <p className="text-sm text-green-700 mt-1">
-                                Entries saved and submitted for PM approval.
-                            </p>
+                            <p className="text-sm font-medium text-emerald-900">Timesheet submitted for approval</p>
                             {submitWarnings.length > 0 && (
                                 <ul className="text-sm text-amber-700 mt-2 list-disc pl-4">
                                     {submitWarnings.map((w, i) => (
@@ -837,172 +823,116 @@ export function TimeEntry() {
             )}
 
             {rowSaveMessage && (
-                <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
+                <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2">
                     {rowSaveMessage}
                 </p>
             )}
 
-            {allocationEstimates && allocationEstimates.byProject.length > 0 && (
-                <Card className="p-4 border-gray-200">
-                    <h4 className="text-sm font-semibold text-gray-900 mb-2">Your allocations this week</h4>
-                    <p className="text-xs text-gray-600 mb-2">
-                        Expected ~{allocationEstimates.totalEstimated}h from active project allocations
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                        {allocationEstimates.byProject.map((p) => (
-                            <span key={p.projectId} className="text-xs px-2 py-1 bg-gray-100 rounded-md">
-                                {p.projectName}: {p.estimatedHours}h ({p.percentage}%)
-                            </span>
-                        ))}
-                    </div>
-                </Card>
-            )}
-
-            {/* Week selector */}
-            <Card className="p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-9 w-9 shrink-0"
-                            onClick={() => handleWeekChange(shiftWeekStart(selectedWeekStart, -1))}
-                            aria-label="Previous week"
-                        >
-                            <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <div className="min-w-0 text-center sm:text-left">
-                            <p className="text-xs text-gray-500 font-medium uppercase">
-                                {viewingCurrentWeek
-                                    ? 'Current week'
-                                    : viewingFutureWeek
-                                      ? 'Future week'
-                                      : 'Past week'}
-                            </p>
-                            <p className="font-semibold text-gray-900">{selectedWeek}</p>
-                        </div>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-9 w-9 shrink-0"
-                            onClick={() => handleWeekChange(shiftWeekStart(selectedWeekStart, 1))}
-                            aria-label="Next week"
-                        >
-                            <ChevronRight className="w-4 h-4" />
-                        </Button>
-                    </div>
-                    <div className="flex items-center gap-2 justify-center sm:justify-end">
-                        <Input
-                            type="date"
-                            className="h-9 w-[150px]"
-                            value={selectedWeekStart}
-                            onChange={(e) => handleWeekChange(e.target.value)}
-                        />
-                        {!viewingCurrentWeek && (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleWeekChange(getCurrentWeekStart())}
-                            >
-                                This week
-                            </Button>
-                        )}
-                    </div>
-                </div>
-            </Card>
+            <WeeklyNavigator
+                weekLabel={selectedWeek}
+                weekStart={selectedWeekStart}
+                isCurrentWeek={viewingCurrentWeek}
+                isFutureWeek={viewingFutureWeek}
+                onPrevious={() => handleWeekChange(shiftWeekStart(selectedWeekStart, -1))}
+                onNext={() => handleWeekChange(shiftWeekStart(selectedWeekStart, 1))}
+                onToday={() => handleWeekChange(getCurrentWeekStart())}
+                onDatePick={handleWeekChange}
+            />
 
             {viewingFutureWeek && (
-                <Card className="p-4 bg-blue-50 border-blue-200">
-                    <p className="text-sm text-blue-900">
-                        <strong>Future week.</strong> You can view allocations and draft entries, but timesheet submit
-                        is only available for the current week and past weeks.
-                    </p>
-                </Card>
+                <p className="text-sm text-blue-800 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+                    <strong>Future week.</strong> Draft entries are allowed; submit becomes available once the week starts.
+                </p>
             )}
 
-            {missingWeekdays.length > 0 && !isTimesheetLocked && !viewingFutureWeek && (
-                <Card className="p-4 bg-amber-50 border-amber-200">
-                    <p className="text-sm text-amber-900">
-                        <strong>Week incomplete.</strong> Add and save time for:{' '}
-                        {missingWeekdays.join(', ')}.
-                    </p>
-                </Card>
+            {!isTimesheetLocked && !viewingFutureWeek && missingWeekdays.length > 0 && (
+                <ValidationBanner missingWeekdays={missingWeekdays} remainingHours={kpis.remainingHours} />
             )}
 
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="p-6">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                                <Calendar className="w-5 h-5 text-gray-500" />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-500 font-medium uppercase">Week total</p>
-                                <span className="font-semibold">{selectedWeek}</span>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="text-right">
-                                <p className="text-xs text-gray-500 font-medium uppercase">Total Hours</p>
-                                <div className="flex items-baseline gap-1">
-                                    <span className="text-2xl font-bold">{totalHours}</span>
-                                    <span className="text-gray-500 text-sm">/ 40h</span>
-                                </div>
-                            </div>
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 ${getStatusColor(totalHours)}`}>
-                                <Clock className="w-5 h-5" />
-                            </div>
-                        </div>
-                    </div>
-                </Card>
+            {isProjectManager && employees.length > 0 && (
+                <ManagerOverview
+                    teamSize={employees.length}
+                    pendingApprovals={0}
+                    missingSubmissions={missingWeekdays.length > 0 ? 1 : 0}
+                />
+            )}
 
-                {dailyForecast && dailyForecast.weekTotal > 0 && (
-                    <Card className="p-6 bg-blue-50/50 border-blue-100">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                <Target className="w-5 h-5 text-blue-600" />
-                            </div>
-                            <div>
-                                <p className="text-xs text-blue-600 font-medium uppercase">Forecasted Hours (from Allocations)</p>
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-2xl font-bold text-blue-700">{dailyForecast.weekTotal}h</span>
-                                    <span className="text-sm text-blue-600">
-                                        (Logged: {totalHours}h — {totalHours >= dailyForecast.weekTotal
-                                            ? <span className="text-green-600 font-medium">On Track</span>
-                                            : <span className="text-amber-600 font-medium">{Math.round((dailyForecast.weekTotal - totalHours) * 10) / 10}h remaining</span>
-                                        })
-                                    </span>
-                                </div>
+            <ViewSwitcher value={viewMode} onChange={setViewMode} />
+
+            <div className="flex flex-col xl:flex-row gap-5 items-start">
+                <div className="flex-1 min-w-0 space-y-4 w-full">
+                    {viewMode === "calendar" && (
+                        <div className="dashboard-card p-4">
+                            <div className="flex flex-col lg:flex-row gap-4">
+                                <ProjectSelector
+                                    projects={selectableProjects}
+                                    disabled={isTimesheetLocked || !selectedEmployeeId}
+                                    allocationByProject={allocationByProject}
+                                />
+                                <TimeCalendar
+                                    weekData={weekData}
+                                    dailyForecastDays={dailyForecast?.days}
+                                    projects={selectableProjects}
+                                    isTimesheetLocked={isTimesheetLocked}
+                                    onAddEntry={addEntry}
+                                    onEditEntry={openEditEntry}
+                                    onDropProject={handleDropProject}
+                                />
                             </div>
                         </div>
-                    </Card>
-                )}
+                    )}
+
+                    {viewMode === "grid" && (
+                        <TimesheetGrid rows={gridRows} onExport={handleExport} />
+                    )}
+
+                    {viewMode === "summary" && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <ApprovalTimeline status={weekTimesheetStatus} />
+                            <AISuggestionPanel suggestions={suggestions} onApply={handleApplySuggestion} />
+                            {allocationEstimates && allocationEstimates.byProject.length > 0 && (
+                                <div className="dashboard-card p-4 lg:col-span-2">
+                                    <h3 className="text-sm font-semibold text-slate-900 mb-2">Allocation forecast</h3>
+                                    <p className="text-xs text-slate-500 mb-3">
+                                        Expected ~{allocationEstimates.totalEstimated}h from project allocations
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {allocationEstimates.byProject.map((p) => (
+                                            <span
+                                                key={p.projectId}
+                                                className="text-xs px-3 py-1.5 bg-slate-100 rounded-lg text-slate-700"
+                                            >
+                                                {p.projectName}: {p.estimatedHours}h ({p.percentage}%)
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="w-full xl:w-[280px] shrink-0 space-y-3">
+                    <TimeIntelligencePanel
+                        kpis={kpis}
+                        topProject={topProject}
+                        missingDays={missingWeekdays.length}
+                        isManager={isProjectManager}
+                        teamPending={0}
+                    />
+                    {viewMode !== "summary" && (
+                        <AISuggestionPanel suggestions={suggestions} onApply={handleApplySuggestion} />
+                    )}
+                    {viewMode !== "summary" && <ApprovalTimeline status={weekTimesheetStatus} />}
+                </div>
             </div>
 
-            <Card className="p-4">
-                <p className="text-sm text-gray-600 mb-4">
-                    Drag a project from the sidebar onto a day, then enter hours and save. You can also click a day or entry to add or edit time. Week totals update automatically when entries are saved.
-                </p>
-                <div className="flex flex-col lg:flex-row gap-4">
-                    <TimeEntryProjectPalette
-                        projects={selectableProjects}
-                        disabled={isTimesheetLocked || !selectedEmployeeId}
-                    />
-                    <TimeEntryWeekCalendar
-                        weekData={weekData}
-                        dailyForecastDays={dailyForecast?.days}
-                        projects={selectableProjects}
-                        isTimesheetLocked={isTimesheetLocked}
-                        onAddEntry={addEntry}
-                        onEditEntry={openEditEntry}
-                        onDropProject={handleDropProject}
-                    />
-                </div>
-            </Card>
+            {!isTimesheetLocked && (
+                <QuickTimeEntry
+                    disabled={!selectedEmployeeId || isTimesheetLocked}
+                    onClick={handleQuickAdd}
+                />
+            )}
 
             {entryDialog && dialogEntry && (
                 <TimeEntryEntryDialog
@@ -1029,54 +959,33 @@ export function TimeEntry() {
                     onClose={closeEntryDialog}
                     onChange={updateDialogEntry}
                     onSave={() => void saveDialogEntry()}
-                    onDelete={
-                        dialogEntry.serverEntryId
-                            ? () => void deleteDialogEntry()
-                            : undefined
-                    }
+                    onDelete={dialogEntry.serverEntryId ? () => void deleteDialogEntry() : undefined}
                 />
             )}
 
-            {(hasUnsavedChanges || totalHours > 0 || isTimesheetLocked) && (
-                <div className="sticky bottom-0 z-10 -mx-4 px-4 py-3 bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
-                    <div className="max-w-[100%] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="space-y-1">
-                            {submitError && (
-                                <p className="text-sm text-red-700 font-medium">{submitError}</p>
-                            )}
-                            <p className="text-sm text-gray-600">
-                                {weekTimesheetStatus === 'approved'
-                                    ? `${totalHours}h approved this week — no further action needed.`
-                                    : weekTimesheetStatus === 'submitted'
-                                      ? `${totalHours}h submitted this week — awaiting PM approval.`
-                                      : viewingFutureWeek
-                                        ? `${totalHours}h drafted for a future week — submit is disabled until this week starts.`
-                                        : dirtyEntryCount > 0
-                                          ? `${dirtyEntryCount} unsaved ${dirtyEntryCount === 1 ? 'entry' : 'entries'} — save each row, then submit the full timesheet for approval.`
-                                          : missingWeekdays.length > 0
-                                            ? `Add time for ${missingWeekdays.join(', ')} before submitting.`
-                                            : `${totalHours}h logged — all weekdays complete, ready to submit for PM approval.`}
-                            </p>
-                        </div>
-                        {!isTimesheetLocked && (
+            {(hasUnsavedChanges || totalHours > 0) && !isTimesheetLocked && (
+                <div className="sticky bottom-0 z-20 -mx-4 px-4 py-3 bg-white/95 backdrop-blur border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] rounded-t-xl">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <p className="text-sm text-slate-600">
+                            {dirtyEntryCount > 0
+                                ? `${dirtyEntryCount} unsaved ${dirtyEntryCount === 1 ? "entry" : "entries"} — save draft or submit when complete.`
+                                : missingWeekdays.length > 0
+                                  ? `Complete ${missingWeekdays.join(", ")} before submitting.`
+                                  : `${totalHours}h logged — ready to submit.`}
+                        </p>
                         <div className="flex gap-2 shrink-0">
-                            <Button variant="outline" onClick={handleReset} disabled={loading}>
+                            <Button variant="outline" size="sm" onClick={handleReset} disabled={loading}>
                                 Reset
                             </Button>
                             <Button
-                                className="gap-2"
-                                onClick={handleSubmit}
-                                disabled={loading || !selectedEmployee || !timeCodeId || !canSubmitWeek}
+                                size="sm"
+                                className="enterprise-gradient-bg text-white border-0"
+                                onClick={() => void handleSubmit()}
+                                disabled={loading || !canSubmitWeek}
                             >
-                                {loading ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <Save className="w-4 h-4" />
-                                )}
                                 Submit Timesheet
                             </Button>
                         </div>
-                        )}
                     </div>
                 </div>
             )}
