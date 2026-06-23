@@ -16,31 +16,17 @@
 .tt-layout {
     display: grid;
     gap: var(--tt-gap);
-    grid-template-columns: var(--tt-sidebar-w) minmax(0, 1fr) var(--tt-insights-w);
+    grid-template-columns: minmax(0, 1fr) var(--tt-insights-w);
     align-items: start;
 }
 
 @media (max-width: 1279px) {
     .tt-layout {
-        grid-template-columns: var(--tt-sidebar-w) minmax(0, 1fr);
+        grid-template-columns: 1fr;
     }
 
     .tt-layout__insights {
         display: none;
-    }
-}
-
-@media (max-width: 1023px) {
-    .tt-layout {
-        grid-template-columns: 1fr;
-    }
-
-    .tt-layout__sidebar {
-        display: none;
-    }
-
-    .tt-layout__sidebar--mobile-open {
-        display: block;
     }
 }
 

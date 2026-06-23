@@ -20,8 +20,6 @@ interface TimesheetWorkspaceProps {
     missingDays: number;
     suggestions: TimeSuggestion[];
     onApplySuggestion?: (s: TimeSuggestion) => void;
-    mobileSidebarOpen?: boolean;
-    onToggleMobileSidebar?: () => void;
     insightsDrawerOpen?: boolean;
     onOpenInsights?: () => void;
     onCloseInsights?: () => void;
@@ -42,27 +40,23 @@ export function TimesheetWorkspace({
     missingDays,
     suggestions,
     onApplySuggestion,
-    mobileSidebarOpen,
-    onToggleMobileSidebar,
     insightsDrawerOpen,
     onOpenInsights,
     onCloseInsights,
 }: TimesheetWorkspaceProps) {
     return (
         <TimeTrackingLayout
-            mobileSidebarOpen={mobileSidebarOpen}
-            onToggleMobileSidebar={onToggleMobileSidebar}
             insightsDrawerOpen={insightsDrawerOpen}
             onOpenInsights={onOpenInsights}
             onCloseInsights={onCloseInsights}
-            sidebar={
+            projects={
                 <ProjectSidebar
                     projects={projects}
                     disabled={disabled || isTimesheetLocked}
                     allocationByProject={allocationByProject}
                 />
             }
-            workspace={
+            calendar={
                 <WeeklyCalendar
                     weekData={weekData}
                     dailyForecastDays={dailyForecastDays}

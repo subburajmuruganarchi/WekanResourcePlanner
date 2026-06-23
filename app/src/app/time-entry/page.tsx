@@ -90,7 +90,6 @@ export function TimeEntry() {
     const [entryDialog, setEntryDialog] = useState<{ dayIndex: number; tempId: string } | null>(null)
     const [dialogProjectLocked, setDialogProjectLocked] = useState(false)
     const [viewMode, setViewMode] = useState<TimeViewMode>("calendar")
-    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
     const [insightsDrawerOpen, setInsightsDrawerOpen] = useState(false)
 
     const { user } = useAuth()
@@ -859,8 +858,6 @@ export function TimeEntry() {
                     missingDays={missingWeekdays.length}
                     suggestions={suggestions}
                     onApplySuggestion={handleApplySuggestion}
-                    mobileSidebarOpen={mobileSidebarOpen}
-                    onToggleMobileSidebar={() => setMobileSidebarOpen((o) => !o)}
                     insightsDrawerOpen={insightsDrawerOpen}
                     onOpenInsights={() => setInsightsDrawerOpen(true)}
                     onCloseInsights={() => setInsightsDrawerOpen(false)}
