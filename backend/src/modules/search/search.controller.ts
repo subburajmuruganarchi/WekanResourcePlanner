@@ -15,7 +15,11 @@ export class SearchController {
 
             const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
             const authId = getAuthEmployeeId(req.user);
-            const isPmOrAdmin = req.user?.role === 'Admin' || req.user?.role === 'Project Manager';
+            const isManagementViewer =
+                req.user?.role === 'Admin' ||
+                req.user?.role === 'Project Manager' ||
+                req.user?.role === 'CEO' ||
+                req.user?.role === 'Delivery Manager';
 
             const employeeFilter: Record<string, unknown> = {
                 $or: [
@@ -35,7 +39,7 @@ export class SearchController {
                 $or: [{ project_name: regex }, { project_code: regex }],
             };
 
-            if (!isPmOrAdmin && authId) {
+            if (!isManagementViewer && authId) {
                 const oid = new Types.ObjectId(authId);
                 projectFilter = {
                     $and: [
@@ -62,7 +66,7 @@ export class SearchController {
                         id: e._id.toString(),
                         name: `${e.first_name} ${e.last_name}`.trim(),
                         email: e.email,
-                        href: isPmOrAdmin ? '/projects' : '/time-entry',
+                        href: isManagementViewer ? '/projects' : '/time-entry',
                     })),
                     projects: projects.map((p) => ({
                         id: p._id.toString(),

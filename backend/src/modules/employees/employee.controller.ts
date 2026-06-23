@@ -28,6 +28,13 @@ export class EmployeeController {
                     return;
                 }
                 employees = await employeeService.findAllocatedToProjectManager(pmEmployeeId, params);
+            } else if (allocatedToMyProjects && user?.role === 'Delivery Manager') {
+                const dmEmployeeId = getAuthEmployeeId(user);
+                if (!dmEmployeeId) {
+                    res.status(401).json({ status: 'error', message: 'Authentication required.' });
+                    return;
+                }
+                employees = await employeeService.findAllocatedToDeliveryManager(dmEmployeeId, params);
             } else {
                 employees = await employeeService.findAll(params);
             }

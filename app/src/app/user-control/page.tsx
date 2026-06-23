@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/layout/page-container"
 import { api } from "@/lib/api"
 import { UserControlCards, type UserEntry, type SystemRole } from "./components/user-control-cards"
 
-const SYSTEM_ROLE_NAMES = ["Employee", "Project Manager", "Admin"]
+const SYSTEM_ROLE_NAMES = ["Employee", "Project Manager", "Delivery Manager", "CEO", "Admin"]
 
 export default function UserControlPage() {
     const [users, setUsers] = useState<UserEntry[]>([])

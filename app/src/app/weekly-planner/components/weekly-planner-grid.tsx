@@ -64,6 +64,7 @@ interface WeeklyPlannerGridProps {
     rows: WeeklyPlannerDisplayRow[];
     weeks: string[];
     canEdit: boolean;
+    editableProjectIds?: Set<string>;
     dirtyKeys: Set<string>;
     onPlannedHoursChange: (row: WeeklyPlannerGridRow, weekStart: string, hours: number) => void;
     onSelectionChange?: (row: WeeklyPlannerGridRow | null) => void;
@@ -74,6 +75,7 @@ export function WeeklyPlannerGrid({
     rows,
     weeks,
     canEdit,
+    editableProjectIds,
     dirtyKeys,
     onPlannedHoursChange,
     onSelectionChange,
@@ -85,6 +87,15 @@ export function WeeklyPlannerGrid({
     const employeeWeekTotals = useMemo(
         () => computeEmployeeWeekTotals(rows, weeks),
         [rows, weeks]
+    );
+
+    const isRowEditable = useCallback(
+        (row: WeeklyPlannerGridRow | undefined) => {
+            if (!canEdit || !row?.projectId) return false;
+            if (editableProjectIds && !editableProjectIds.has(row.projectId)) return false;
+            return true;
+        },
+        [canEdit, editableProjectIds]
     );
 
     const isOverAllocated = useCallback(
@@ -116,14 +127,14 @@ export function WeeklyPlannerGrid({
                 headerName: 'Plan',
                 width: 64,
                 minWidth: 56,
-                editable: canEdit,
+                editable: (params) => isRowEditable(params.data),
                 type: 'numericColumn',
                 filter: false,
                 sortable: false,
                 suppressMovable: true,
                 valueGetter: (params) => getCell(params.data)?.plannedHours ?? 0,
                 valueSetter: (params: ValueSetterParams<WeeklyPlannerGridRow>) => {
-                    if (!params.data || !canEdit) return false;
+                    if (!isRowEditable(params.data)) return false;
                     const raw = params.newValue;
                     const num =
                         typeof raw === 'number' ? raw : parseFloat(String(raw ?? '').trim());

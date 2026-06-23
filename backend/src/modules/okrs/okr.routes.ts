@@ -1,28 +1,17 @@
 import { Router } from 'express';
 import { okrController } from './okr.controller';
 import { requireRole } from '../../common/middleware/role.middleware';
+import { OKR_CREATE_ROLES, ROLES } from '../../common/constants/roles';
 
 const router = Router();
 
-// GET /api/okrs — list all OKRs (any authenticated role, controller filters for PM/Employee)
 router.get('/', requireRole(), okrController.list);
-
-// GET /api/okrs/periods — list available periods for dropdown
 router.get('/periods', requireRole(), okrController.listPeriods);
-
-// GET /api/okrs/employee/:employeeId — get OKRs for a specific employee
+router.get('/org-rollup', requireRole(ROLES.ADMIN, ROLES.CEO, ROLES.DELIVERY_MANAGER), okrController.orgRollup);
 router.get('/employee/:employeeId', requireRole(), okrController.getByEmployee);
-
-// POST /api/okrs — create OKR (Admin/PM only)
-router.post('/', requireRole('Admin', 'Project Manager'), okrController.create);
-
-// PUT /api/okrs/:id — update OKR (Admin/PM only)
-router.put('/:id', requireRole('Admin', 'Project Manager'), okrController.update);
-
-// PATCH /api/okrs/:id/progress — update key result progress (Admin/PM/Employee)
-router.patch('/:id/progress', requireRole('Admin', 'Project Manager', 'Employee'), okrController.updateProgress);
-
-// DELETE /api/okrs/:id — delete OKR (Admin only)
-router.delete('/:id', requireRole('Admin'), okrController.delete);
+router.post('/', requireRole(...OKR_CREATE_ROLES), okrController.create);
+router.put('/:id', requireRole(...OKR_CREATE_ROLES), okrController.update);
+router.patch('/:id/progress', requireRole(...OKR_CREATE_ROLES, ROLES.EMPLOYEE), okrController.updateProgress);
+router.delete('/:id', requireRole(ROLES.ADMIN), okrController.delete);
 
 export const okrRouter = router;

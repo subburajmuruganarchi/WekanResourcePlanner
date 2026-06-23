@@ -1,8 +1,10 @@
 import { ProjectAllocation } from '../modules/allocations/allocation.model';
 import { Project } from '../modules/projects/project.model';
+import { Types } from 'mongoose';
 import { WeeklyAllocationEntry } from '../modules/weekly-allocations/weekly-allocation-entry.model';
 import { computePeakCommittedPercent } from '../modules/allocations/allocation-availability.util';
 import type { DashboardPeriodRange } from '../modules/dashboard/dashboard-period.util';
+import type { DashboardScopeFilter } from '../modules/dashboard/dashboard-metrics.service';
 import { activeDashboardProjectFilter } from '../modules/dashboard/dashboard-metrics.service';
 import { features } from '../config/features';
 
@@ -98,12 +100,18 @@ function hoursToPercent(hours: number, weeks: number): number {
 
 /** Period-scoped heatmap from weekly planner rows (matches dashboard week filter). */
 async function buildAllocationHeatmapFromWeekly(
-    period: DashboardPeriodRange
+    period: DashboardPeriodRange,
+    scope?: DashboardScopeFilter
 ): Promise<AllocationHeatmapData> {
-    const entries = await WeeklyAllocationEntry.find({
+    const entryQuery: Record<string, unknown> = {
         week_start: { $gte: period.weekStartFrom, $lte: period.weekStartTo },
         planned_hours: { $gt: 0 },
-    })
+    };
+    if (scope?.projectIds?.length) {
+        entryQuery.project_id = { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) };
+    }
+
+    const entries = await WeeklyAllocationEntry.find(entryQuery)
         .populate<{ project_id: { _id: unknown; project_name: string; project_code: string } }>(
             'project_id',
             'project_name project_code'
@@ -189,25 +197,30 @@ async function buildAllocationHeatmapFromWeekly(
 
 /** Read-only snapshot for dashboard heatmap (active allocations in period). */
 export async function buildAllocationHeatmap(
-    period?: DashboardPeriodRange
+    period?: DashboardPeriodRange,
+    scope?: DashboardScopeFilter
 ): Promise<AllocationHeatmapData> {
     if (period) {
-        const weekly = await buildAllocationHeatmapFromWeekly(period);
+        const weekly = await buildAllocationHeatmapFromWeekly(period, scope);
         if (weekly.employees.length > 0) {
             return weekly;
         }
     }
 
-    return buildAllocationHeatmapFromLegacyAllocations(period);
+    return buildAllocationHeatmapFromLegacyAllocations(period, scope);
 }
 
 async function buildAllocationHeatmapFromLegacyAllocations(
-    period?: DashboardPeriodRange
+    period?: DashboardPeriodRange,
+    scope?: DashboardScopeFilter
 ): Promise<AllocationHeatmapData> {
     const allocationFilter: Record<string, unknown> = { is_active: true };
     if (period) {
         allocationFilter.start_date = { $lte: period.periodEnd };
         allocationFilter.end_date = { $gte: period.periodStart };
+    }
+    if (scope?.projectIds?.length) {
+        allocationFilter.project_id = { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) };
     }
 
     const allocations = await ProjectAllocation.find(allocationFilter)
@@ -277,9 +290,13 @@ async function buildAllocationHeatmapFromLegacyAllocations(
 }
 
 /** Top active projects by staffing risk score (read-only). */
-export async function buildStaffingRiskSummary(limit = 6) {
+export async function buildStaffingRiskSummary(limit = 6, scope?: DashboardScopeFilter) {
     const { assessStaffingRisk } = await import('./ai/staffing-risk.service');
-    const active = await Project.find(activeDashboardProjectFilter())
+    const projectQuery: Record<string, unknown> = { ...activeDashboardProjectFilter() };
+    if (scope?.projectIds?.length) {
+        projectQuery._id = { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) };
+    }
+    const active = await Project.find(projectQuery)
         .select('_id project_name project_code')
         .lean();
 

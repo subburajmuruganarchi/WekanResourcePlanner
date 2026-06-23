@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { canSeeManagementDashboard } from '@/lib/roles';
 import { PageContainer } from '@/components/layout/page-container';
 import { AiInsightPanel } from '@/components/ai/ai-insight-panel';
 import { api } from '@/lib/api-client';
@@ -13,7 +14,7 @@ export default function InsightsCenterPage() {
     const [approvalSummary, setApprovalSummary] = useState<ApprovalInsightSummary | null>(null);
     const [staffingRisks, setStaffingRisks] = useState<{ level: string; name: string; code: string }[]>([]);
 
-    const canAccess = user?.role === 'Admin' || user?.role === 'Project Manager';
+    const canAccess = canSeeManagementDashboard(user?.role);
 
     useEffect(() => {
         if (canAccess) {

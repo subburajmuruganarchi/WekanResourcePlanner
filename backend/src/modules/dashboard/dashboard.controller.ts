@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { collectDashboardMetrics } from './dashboard-metrics.service';
+import { collectDashboardMetrics, type DashboardScopeFilter } from './dashboard-metrics.service';
 import { parseDashboardPeriodQuery } from './dashboard-period.util';
 import { buildAllocationHeatmap, buildStaffingRiskSummary } from '../../services/dashboard-heatmap.service';
+import { resolveDataScope } from '../../common/utils/data-scope.util';
 
 function parsePeriod(req: Request, res: Response): ReturnType<typeof parseDashboardPeriodQuery> | null {
     try {
@@ -13,12 +14,22 @@ function parsePeriod(req: Request, res: Response): ReturnType<typeof parseDashbo
     }
 }
 
+function scopeFilterFromRequest(req: Request): Promise<DashboardScopeFilter | undefined> {
+    return resolveDataScope(req.user).then((scope) => {
+        if (scope.orgWide || !scope.projectIds?.length) {
+            return scope.projectIds?.length ? { projectIds: scope.projectIds } : undefined;
+        }
+        return { projectIds: scope.projectIds };
+    });
+}
+
 export class DashboardController {
     async getStats(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const period = parsePeriod(req, res);
             if (!period) return;
-            const data = await collectDashboardMetrics(period);
+            const scopeFilter = await scopeFilterFromRequest(req);
+            const data = await collectDashboardMetrics(period, scopeFilter);
             res.json({
                 status: 'success',
                 data: {
@@ -42,7 +53,8 @@ export class DashboardController {
         try {
             const period = parsePeriod(req, res);
             if (!period) return;
-            const data = await buildAllocationHeatmap(period);
+            const scopeFilter = await scopeFilterFromRequest(req);
+            const data = await buildAllocationHeatmap(period, scopeFilter);
             res.json({ status: 'success', data });
         } catch (error) {
             next(error);
@@ -51,7 +63,8 @@ export class DashboardController {
 
     async getStaffingRisks(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const data = await buildStaffingRiskSummary(6);
+            const scopeFilter = await scopeFilterFromRequest(req);
+            const data = await buildStaffingRiskSummary(6, scopeFilter);
             res.json({ status: 'success', data });
         } catch (error) {
             next(error);

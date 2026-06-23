@@ -90,6 +90,8 @@ interface AllocationWeeklyGridProps {
     employees: EmployeeOption[];
     projects: ProjectOption[];
     canEdit: boolean;
+    /** When set, only these project rows are editable (Delivery Manager portfolio scope). */
+    editableProjectIds?: Set<string>;
     dirtyKeys: Set<string>;
     onPlannedHoursChange: (row: WeeklyPlannerGridRow, weekStart: string, hours: number) => void;
     onEmployeeChange: (row: AllocationGridRow, employeeId: string) => void;
@@ -103,6 +105,7 @@ export function AllocationWeeklyGrid({
     employees,
     projects,
     canEdit,
+    editableProjectIds,
     dirtyKeys,
     onPlannedHoursChange,
     onEmployeeChange,
@@ -128,6 +131,15 @@ export function AllocationWeeklyGrid({
     const employeeWeekTotals = useMemo(
         () => computeEmployeeWeekTotals(rows, weeks),
         [rows, weeks]
+    );
+
+    const isRowEditable = useCallback(
+        (row: AllocationGridRow | undefined) => {
+            if (!canEdit || !row?.employeeId || !row?.projectId) return false;
+            if (editableProjectIds && !editableProjectIds.has(row.projectId)) return false;
+            return true;
+        },
+        [canEdit, editableProjectIds]
     );
 
     const isOverAllocated = useCallback(
@@ -161,8 +173,7 @@ export function AllocationWeeklyGrid({
                 headerTooltip: weekStart,
                 width: 72,
                 minWidth: 64,
-                editable: (params) =>
-                    canEdit && !!params.data?.employeeId && !!params.data?.projectId,
+                editable: (params) => isRowEditable(params.data),
                 type: 'numericColumn',
                 filter: false,
                 sortable: false,
@@ -170,7 +181,7 @@ export function AllocationWeeklyGrid({
                 valueGetter: (params) => getCell(params.data)?.plannedHours ?? 0,
                 valueFormatter: (p) => formatPlanHours(Number(p.value ?? 0)),
                 valueSetter: (params: ValueSetterParams<AllocationGridRow>) => {
-                    if (!params.data?.employeeId || !params.data?.projectId || !canEdit) return false;
+                    if (!isRowEditable(params.data)) return false;
                     const raw = params.newValue;
                     const num =
                         typeof raw === 'number' ? raw : parseFloat(String(raw ?? '').trim());

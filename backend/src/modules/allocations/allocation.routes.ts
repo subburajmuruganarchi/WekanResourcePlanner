@@ -1,20 +1,26 @@
 import { Router } from 'express';
 import { allocationController } from './allocation.controller';
 import { requireRole } from '../../common/middleware/role.middleware';
+import {
+    ALLOCATION_EDIT_ROLES,
+    MANAGEMENT_VIEW_ROLES,
+    ROLES,
+} from '../../common/constants/roles';
 
 const router = Router();
 
-// All allocation routes require authentication
 router.use(requireRole());
 
-// POST /api/allocations - Create new allocation (Admin / PM)
-router.post('/', requireRole('Admin', 'Project Manager'), (req, res, next) => allocationController.create(req, res, next));
+router.post('/', requireRole(...ALLOCATION_EDIT_ROLES, ROLES.PROJECT_MANAGER), (req, res, next) =>
+    allocationController.create(req, res, next)
+);
 
-// PUT /api/allocations/:id - Update allocation (Admin / PM)
-router.put('/:id', requireRole('Admin', 'Project Manager'), (req, res, next) => allocationController.update(req, res, next));
+router.put('/:id', requireRole(...ALLOCATION_EDIT_ROLES, ROLES.PROJECT_MANAGER), (req, res, next) =>
+    allocationController.update(req, res, next)
+);
 
-// GET /api/allocations/rank - Rank employees for allocation (PM/Admin)
-router.get('/rank', requireRole('Admin', 'Project Manager'), (req, res, next) => allocationController.rankEmployees(req, res, next));
+router.get('/rank', requireRole(...MANAGEMENT_VIEW_ROLES), (req, res, next) =>
+    allocationController.rankEmployees(req, res, next)
+);
 
 export { router as allocationRouter };
-

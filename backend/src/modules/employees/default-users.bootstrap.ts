@@ -6,14 +6,14 @@ import { structuredLogger } from '../../common/logger';
 import { PASSWORD_PLAIN } from '../../services/planner-import/planner-import.utils';
 import type { ImportWriteOptions } from '../../services/planner-import/types/import-write.options';
 import { mongooseSessionOpts } from '../../services/planner-import/types/import-write.options';
+import { ROLES } from '../../common/constants/roles';
 
-export const PROTECTED_SYSTEM_EMAILS = ['admin@r360.com', 'pm@r360.com'] as const;
-
-const ACCESS_ROLES = {
-    ADMIN: 'Admin',
-    PM: 'Project Manager',
-    EMPLOYEE: 'Employee',
-} as const;
+export const PROTECTED_SYSTEM_EMAILS = [
+    'admin@r360.com',
+    'pm@r360.com',
+    'ceo@r360.com',
+    'dm@r360.com',
+] as const;
 
 const DEFAULT_USERS = [
     {
@@ -21,14 +21,28 @@ const DEFAULT_USERS = [
         firstName: 'R360',
         lastName: 'Admin',
         employeeCode: 'WK-ADMIN',
-        accessRole: ACCESS_ROLES.ADMIN,
+        accessRole: ROLES.ADMIN,
     },
     {
         email: 'pm@r360.com',
         firstName: 'R360',
         lastName: 'PM',
         employeeCode: 'WK-PM',
-        accessRole: ACCESS_ROLES.PM,
+        accessRole: ROLES.PROJECT_MANAGER,
+    },
+    {
+        email: 'ceo@r360.com',
+        firstName: 'R360',
+        lastName: 'CEO',
+        employeeCode: 'WK-CEO',
+        accessRole: ROLES.CEO,
+    },
+    {
+        email: 'dm@r360.com',
+        firstName: 'R360',
+        lastName: 'DeliveryManager',
+        employeeCode: 'WK-DM',
+        accessRole: ROLES.DELIVERY_MANAGER,
     },
 ] as const;
 
@@ -36,8 +50,12 @@ export interface DefaultSystemUsersContext {
     adminRoleId: Types.ObjectId;
     pmRoleId: Types.ObjectId;
     employeeRoleId: Types.ObjectId;
+    ceoRoleId: Types.ObjectId;
+    dmRoleId: Types.ObjectId;
     defaultAdminId: Types.ObjectId;
     pmFallbackId: Types.ObjectId;
+    ceoId: Types.ObjectId;
+    dmId: Types.ObjectId;
     passwordHash: string;
 }
 
@@ -93,7 +111,7 @@ async function upsertDefaultUser(
 }
 
 /**
- * Ensure admin@r360.com and pm@r360.com exist with default password (Admin123!).
+ * Ensure default system users exist with default password (Admin123!).
  * Idempotent — safe on every server start and during planner import.
  */
 export async function ensureDefaultSystemUsers(
@@ -102,9 +120,11 @@ export async function ensureDefaultSystemUsers(
 ): Promise<DefaultSystemUsersContext> {
     const passwordHash = await bcrypt.hash(PASSWORD_PLAIN, 10);
 
-    const adminRoleId = await upsertAccessRole(ACCESS_ROLES.ADMIN, writeOpts);
-    const pmRoleId = await upsertAccessRole(ACCESS_ROLES.PM, writeOpts);
-    const employeeRoleId = await upsertAccessRole(ACCESS_ROLES.EMPLOYEE, writeOpts);
+    const adminRoleId = await upsertAccessRole(ROLES.ADMIN, writeOpts);
+    const pmRoleId = await upsertAccessRole(ROLES.PROJECT_MANAGER, writeOpts);
+    const employeeRoleId = await upsertAccessRole(ROLES.EMPLOYEE, writeOpts);
+    const ceoRoleId = await upsertAccessRole(ROLES.CEO, writeOpts);
+    const dmRoleId = await upsertAccessRole(ROLES.DELIVERY_MANAGER, writeOpts);
 
     const defaultAdminId = await upsertDefaultUser(
         DEFAULT_USERS[0],
@@ -120,6 +140,20 @@ export async function ensureDefaultSystemUsers(
         syncId,
         writeOpts
     );
+    const ceoId = await upsertDefaultUser(
+        DEFAULT_USERS[2],
+        ceoRoleId,
+        passwordHash,
+        syncId,
+        writeOpts
+    );
+    const dmId = await upsertDefaultUser(
+        DEFAULT_USERS[3],
+        dmRoleId,
+        passwordHash,
+        syncId,
+        writeOpts
+    );
 
     structuredLogger.info('DEFAULT SYSTEM USERS ENSURED', {
         emails: PROTECTED_SYSTEM_EMAILS,
@@ -130,8 +164,12 @@ export async function ensureDefaultSystemUsers(
         adminRoleId,
         pmRoleId,
         employeeRoleId,
+        ceoRoleId,
+        dmRoleId,
         defaultAdminId,
         pmFallbackId,
+        ceoId,
+        dmId,
         passwordHash,
     };
 }

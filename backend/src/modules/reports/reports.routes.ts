@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { ReportsController } from './reports.controller';
 import { requireRole } from '../../common/middleware/role.middleware';
+import { MANAGEMENT_VIEW_ROLES } from '../../common/constants/roles';
 
 const router = Router();
 const controller = new ReportsController();
 
-router.use(requireRole('Admin', 'Project Manager'));
+router.use(requireRole(...MANAGEMENT_VIEW_ROLES));
 
 router.get('/resource-view', controller.getResourceViewReport.bind(controller));
 router.get('/project-view', controller.getProjectViewReport.bind(controller));

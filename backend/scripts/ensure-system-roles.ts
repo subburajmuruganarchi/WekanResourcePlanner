@@ -16,6 +16,8 @@ import { Role } from '../src/modules/roles/role.model';
 const SYSTEM_ROLES = [
     { role_name: 'Employee', description: 'Standard employee access', is_active: true },
     { role_name: 'Project Manager', description: 'Project management access', is_active: true },
+    { role_name: 'Delivery Manager', description: 'Portfolio delivery leadership', is_active: true },
+    { role_name: 'CEO', description: 'Executive read-only access', is_active: true },
     { role_name: 'Admin', description: 'Full administrative access', is_active: true },
 ];
 

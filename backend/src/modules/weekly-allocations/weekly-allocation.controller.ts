@@ -3,6 +3,8 @@ import { ZodError } from 'zod';
 import { AppError } from '../../common/errors/app-error';
 import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
 import { parseWeekStartParam, startOfUtcWeek } from '../../common/utils/week.util';
+import { ROLES } from '../../common/constants/roles';
+import { getPortfolioProjectIds } from '../../common/utils/delivery-scope.util';
 import { weeklyAllocationService } from './weekly-allocation.service';
 import {
     parseIdList,
@@ -52,6 +54,18 @@ export class WeeklyAllocationController {
         try {
             const parsed = weeklyGridPutBodySchema.parse(req.body);
             const actorId = getAuthEmployeeId(req.user);
+
+            if (req.user?.role === ROLES.DELIVERY_MANAGER && actorId) {
+                const portfolioIds = new Set(await getPortfolioProjectIds(actorId));
+                const outOfScope = parsed.updates.filter((u) => !portfolioIds.has(u.projectId));
+                if (outOfScope.length > 0) {
+                    res.status(403).json({
+                        status: 'error',
+                        message: 'Cannot edit allocations outside your delivery portfolio.',
+                    });
+                    return;
+                }
+            }
 
             const employeeIds = parsed.updates.map((u) => u.employeeId);
             const projectIds = parsed.updates.map((u) => u.projectId);

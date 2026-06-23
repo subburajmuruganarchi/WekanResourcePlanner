@@ -11,6 +11,7 @@ import { Types } from 'mongoose';
 import { AppError } from '../../common/errors/app-error';
 import { SkillLevel } from '../../common/types/enums';
 import { getEmployeesAllocatedToManagedProjects } from '../../common/utils/pm-scope.util';
+import { getEmployeesAllocatedToPortfolioProjects } from '../../common/utils/delivery-scope.util';
 
 export interface EmployeeListParams {
     skill?: string;
@@ -71,6 +72,11 @@ interface PopulatedEmployeeSkill {
 export class EmployeeService {
     async findAllocatedToProjectManager(pmEmployeeId: string, params: EmployeeListParams = {}): Promise<EmployeeResponse[]> {
         const employeeIds = await getEmployeesAllocatedToManagedProjects(pmEmployeeId);
+        return this.findAll({ ...params, employeeIds });
+    }
+
+    async findAllocatedToDeliveryManager(dmEmployeeId: string, params: EmployeeListParams = {}): Promise<EmployeeResponse[]> {
+        const employeeIds = await getEmployeesAllocatedToPortfolioProjects(dmEmployeeId);
         return this.findAll({ ...params, employeeIds });
     }
 

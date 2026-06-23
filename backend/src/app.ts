@@ -27,11 +27,13 @@ import { weeklyAllocationRouter } from './modules/weekly-allocations/weekly-allo
 import { utilizationRouter } from './modules/utilization/utilization.routes';
 import { plannerImportRouter } from './modules/planner-import/planner-import.routes';
 import { googleSheetSyncRouter } from './modules/google-sheet-sync/google-sheet-sync.routes';
+import { deliveryPortfolioRouter } from './modules/delivery-portfolios/delivery-portfolio.routes';
 
 import './modules/skills/skill.model';
 import './modules/weekly-allocations/weekly-allocation-entry.model';
 import './modules/utilization/weekly-utilization-snapshot.model';
 import './modules/roles/role.model';
+import './modules/delivery-portfolios/delivery-portfolio.model';
 
 const app = express();
 
@@ -153,6 +155,7 @@ app.use('/api/search', searchRouter);
 app.use('/api/system', systemRouter);
 app.use('/api/planner-import', plannerImportRouter);
 app.use('/api/google-sheet-sync', googleSheetSyncRouter);
+app.use('/api/delivery-portfolios', deliveryPortfolioRouter);
 
 app.use(errorHandler);
 

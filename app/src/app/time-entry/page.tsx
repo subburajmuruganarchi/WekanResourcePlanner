@@ -19,6 +19,7 @@ import { useTimeEntries } from "@/lib/use-time-entries"
 import { useEmployees } from "@/lib/use-employees"
 import { useProjects } from "@/lib/use-projects"
 import { useAuth } from "@/lib/auth-context"
+import { isTeamTimeManager } from "@/lib/roles"
 import { api } from "@/lib/api-client"
 import { TimeEntryEntryDialog } from "@/components/time-entry/time-entry-entry-dialog"
 import type { DayData, DayEntry, ProjectOption, DailyForecastDay, DraggedProjectPayload } from "@/components/time-entry/time-entry-types"
@@ -94,9 +95,9 @@ export function TimeEntry() {
 
     const { user } = useAuth()
     const isSelfOnly = user?.role === "Employee" || user?.role === "User"
-    const isProjectManager = user?.role === "Project Manager"
+    const isTeamLead = isTeamTimeManager(user?.role)
     const { submitTimeEntry, submitWeeklyTimesheet, deleteTimeEntry, loading } = useTimeEntries()
-    const { employees, loading: loadingEmployees } = useEmployees({ allocatedToMyProjects: isProjectManager })
+    const { employees, loading: loadingEmployees } = useEmployees({ allocatedToMyProjects: isTeamLead })
     const { projects, loading: loadingProjects } = useProjects()
 
     useEffect(() => {
@@ -743,7 +744,7 @@ export function TimeEntry() {
 
     return (
         <PageContainer className="max-w-[1920px] !px-8 !py-8 space-y-6 pb-24">
-            {isProjectManager && employees.length === 0 && (
+            {isTeamLead && employees.length === 0 && (
                 <Card className="p-4 border-amber-200 bg-amber-50 rounded-xl">
                     <p className="text-sm text-amber-900">
                         No employees allocated to your projects. Assign team members under Resource Allocation.
@@ -767,7 +768,7 @@ export function TimeEntry() {
                 onSubmit={() => void handleSubmit()}
                 onCopyPreviousWeek={() => void handleCopyPreviousWeek()}
                 onExport={handleExport}
-                isProjectManager={isProjectManager}
+                isProjectManager={isTeamLead}
             />
 
             <TimeKPICards kpis={kpis} />
@@ -870,7 +871,7 @@ export function TimeEntry() {
 
             {viewMode === "summary" && (
                 <div className="space-y-6">
-                    {isProjectManager && employees.length > 0 && (
+                    {isTeamLead && employees.length > 0 && (
                         <ManagerOverview
                             teamSize={employees.length}
                             pendingApprovals={0}

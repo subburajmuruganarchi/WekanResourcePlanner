@@ -4,6 +4,8 @@ import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
+import { canEditAllocations, isExecutiveReadOnly } from '@/lib/roles';
+import { usePortfolioScope } from '@/lib/use-portfolio-scope';
 import { useEmployees } from '@/lib/use-employees';
 import { useProjects } from '@/lib/use-projects';
 import { useWeeklyAllocationGrid } from '@/lib/use-weekly-allocation-grid';
@@ -40,7 +42,9 @@ function employeeRoleLabel(emp: {
 
 export default function WeeklyPlannerPage() {
     const { user } = useAuth();
-    const canEdit = false;
+    const isReadOnlyExecutive = isExecutiveReadOnly(user?.role);
+    const canEdit = canEditAllocations(user?.role) && !isReadOnlyExecutive;
+    const { editableProjectIds } = usePortfolioScope(user?.role);
 
     const { employees } = useEmployees();
     const { projects } = useProjects();
@@ -247,6 +251,7 @@ export default function WeeklyPlannerPage() {
                         rows={gridDisplayRows}
                         weeks={grid.weeks}
                         canEdit={canEdit}
+                        editableProjectIds={editableProjectIds}
                         dirtyKeys={grid.dirtyKeys}
                         onPlannedHoursChange={grid.updatePlannedHours}
                         onSelectionChange={(row) => {

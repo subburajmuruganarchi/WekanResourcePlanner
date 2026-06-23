@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { okrService } from './okr.service';
 import { AppError } from '../../common/errors/app-error';
 import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
+import { OKR_MANAGEMENT_VIEW_ROLES } from '../../common/constants/roles';
+import { resolveOrgRollupEmployeeFilter } from './okr-org-rollup';
 
 export class OkrController {
 
@@ -44,7 +46,7 @@ export class OkrController {
             const authEmployeeId = getAuthEmployeeId(user);
 
             // RBAC: Employees can ONLY see their own OKRs
-            if (user && authEmployeeId && !['Admin', 'Project Manager'].includes(user.role)) {
+            if (user && authEmployeeId && !OKR_MANAGEMENT_VIEW_ROLES.includes(user.role as typeof OKR_MANAGEMENT_VIEW_ROLES[number])) {
                 if (employeeId !== authEmployeeId) {
                     res.status(403).json({
                         status: 'error',
@@ -149,6 +151,25 @@ export class OkrController {
             const { id } = req.params;
             await okrService.delete(id);
             res.status(204).send();
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * GET /api/okrs/org-rollup?period=Q1-2026
+     * Org-level OKR progress grouped by department.
+     */
+    async orgRollup(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { period } = req.query;
+            const authEmployeeId = getAuthEmployeeId(req.user);
+            const employeeFilter = await resolveOrgRollupEmployeeFilter(
+                req.user?.role,
+                authEmployeeId
+            );
+            const data = await okrService.getOrgRollup(period as string | undefined, employeeFilter);
+            res.json({ status: 'success', data });
         } catch (error) {
             next(error);
         }

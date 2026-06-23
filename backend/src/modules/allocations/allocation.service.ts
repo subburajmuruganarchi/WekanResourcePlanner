@@ -17,7 +17,7 @@ export interface RankingRequest {
     endDate?: string;
 }
 
-const ACCESS_ROLE_NAMES = new Set(['Admin', 'Project Manager', 'Employee', 'User']);
+const ACCESS_ROLE_NAMES = new Set(['Admin', 'Project Manager', 'Employee', 'User', 'CEO', 'Delivery Manager']);
 
 export interface RankedEmployee {
     id: string;

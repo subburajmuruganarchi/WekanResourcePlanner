@@ -45,7 +45,7 @@ const startServer = async () => {
 
         try {
             await ensureDefaultSystemUsers();
-            logger.info('Default system users ready (admin@r360.com, pm@r360.com)');
+            logger.info('Default system users ready (admin@r360.com, pm@r360.com, ceo@r360.com, dm@r360.com)');
         } catch (bootstrapErr) {
             logger.error('Failed to ensure default system users', { error: bootstrapErr });
         }

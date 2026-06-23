@@ -3,6 +3,8 @@ import { Target, Plus, ChevronDown, ChevronRight, Pencil, Trash2, Loader2, User 
 import { PageContainer } from "@/components/layout/page-container"
 import { Section } from "@/components/layout/section"
 import { useAuth } from "@/lib/auth-context"
+import { canCreateOkrs, isExecutiveReadOnly, ROLES } from "@/lib/roles"
+import { OkrOrgRollup } from "./components/okr-org-rollup"
 import { useEmployees } from "@/lib/use-employees"
 import {
     useOkrs,
@@ -62,9 +64,13 @@ function getStatusBadge(status: string): { bg: string; text: string } {
 
 export default function OkrsPage() {
     const { user } = useAuth()
-    const canCreate = user?.role === "Admin" || user?.role === "Project Manager"
-    const canEdit = canCreate
-    const canDelete = user?.role === "Admin"
+    const canCreate = canCreateOkrs(user?.role)
+    const canEdit = canCreate && !isExecutiveReadOnly(user?.role)
+    const canDelete = user?.role === ROLES.ADMIN
+    const showOrgRollup =
+        user?.role === ROLES.ADMIN ||
+        user?.role === ROLES.CEO ||
+        user?.role === ROLES.DELIVERY_MANAGER
     const canUpdateProgress = true // All roles can update their own OKR progress
     const isEmployeeView = user?.role === "Employee"
 
@@ -172,6 +178,12 @@ export default function OkrsPage() {
                     </div>
                 }
             />
+
+            {showOrgRollup && (
+                <div className="mt-6">
+                    <OkrOrgRollup period={selectedPeriod} readOnly={isExecutiveReadOnly(user?.role)} />
+                </div>
+            )}
 
             {/* Prompt to select employee */}
             {!selectedEmployee && !isEmployeeView && (

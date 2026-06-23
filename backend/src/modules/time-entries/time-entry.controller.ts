@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { timeEntryService, CreateTimeEntryRequest } from './time-entry.service';
 import { getAuthEmployeeId, assertTimeEntryEmployeeScope } from '../../common/utils/auth-user.util';
 import { getManagedProjectIds } from '../../common/utils/pm-scope.util';
+import { ROLES } from '../../common/constants/roles';
+import { getPortfolioProjectIds } from '../../common/utils/delivery-scope.util';
 
 function requireAuthEmployeeId(req: Request, res: Response): string | null {
     const id = getAuthEmployeeId(req.user);
@@ -369,7 +371,15 @@ export class TimeEntryController {
             if (!pmUserId) return;
 
             const includeAll = req.user?.role === 'Admin';
-            const entries = await timeEntryService.getPendingApprovalForPM(pmUserId, { includeAll });
+            let entries;
+            if (req.user?.role === ROLES.DELIVERY_MANAGER) {
+                const portfolioProjectIds = await getPortfolioProjectIds(pmUserId);
+                entries = await timeEntryService.getPendingApprovalForPM(pmUserId, {
+                    portfolioProjectIds,
+                });
+            } else {
+                entries = await timeEntryService.getPendingApprovalForPM(pmUserId, { includeAll });
+            }
 
             res.json({
                 status: 'success',

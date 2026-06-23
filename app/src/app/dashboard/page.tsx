@@ -16,6 +16,10 @@ import { DashboardPeriodFilters } from './components/dashboard-period-filters';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import {
+    canSeeManagementDashboard,
+    isExecutiveReadOnly,
+} from '@/lib/roles';
 import { useDashboardInsight } from '@/lib/use-ai-insights';
 import { useNavigate } from 'react-router-dom';
 import type { HeatmapCell, HeatmapMeta } from '@/components/dashboard/allocation-heatmap';
@@ -99,7 +103,8 @@ export default function Dashboard() {
     );
 
     const periodQuery = useMemo(() => periodQueryString(periodRange), [periodRange]);
-    const canSeeInsights = user?.role === 'Admin' || user?.role === 'Project Manager';
+    const isCeoView = isExecutiveReadOnly(user?.role);
+    const canSeeInsights = canSeeManagementDashboard(user?.role);
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -297,28 +302,34 @@ export default function Dashboard() {
             <header className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
                 <div className="max-w-2xl">
                     <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600 mb-2">
-                        Workforce intelligence
+                        {isCeoView ? 'Executive intelligence' : 'Workforce intelligence'}
                     </p>
                     <h1 className="text-2xl lg:text-3xl font-bold text-[#111827] tracking-tight">
-                        Resource Intelligence Dashboard
+                        {isCeoView ? 'Executive Dashboard' : 'Resource Intelligence Dashboard'}
                     </h1>
                     <p className="text-sm text-[#64748b] mt-2 leading-relaxed">
-                        Real-time visibility into workforce allocation, utilization, and delivery health
+                        {isCeoView
+                            ? 'Org-wide read-only view of utilization, delivery health, and workforce risks'
+                            : 'Real-time visibility into workforce allocation, utilization, and delivery health'}
                         {stats ? ` · ${periodLabel}` : ''}.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2 shrink-0">
-                    <Button
-                        className="gap-1.5 enterprise-gradient-bg text-white border-0 hover:opacity-90"
-                        onClick={() => navigate('/allocation')}
-                    >
-                        <Plus className="w-4 h-4" />
-                        Allocate resource
-                    </Button>
-                    <Button variant="outline" onClick={() => navigate('/projects')}>
-                        <Plus className="w-4 h-4 mr-1" />
-                        Create project
-                    </Button>
+                    {!isCeoView && (
+                        <>
+                            <Button
+                                className="gap-1.5 enterprise-gradient-bg text-white border-0 hover:opacity-90"
+                                onClick={() => navigate('/allocation')}
+                            >
+                                <Plus className="w-4 h-4" />
+                                Allocate resource
+                            </Button>
+                            <Button variant="outline" onClick={() => navigate('/projects')}>
+                                <Plus className="w-4 h-4 mr-1" />
+                                Create project
+                            </Button>
+                        </>
+                    )}
                     <Button variant="outline" onClick={() => navigate('/reports')}>
                         <FileDown className="w-4 h-4 mr-1" />
                         Export report

@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { Project } from '../projects/project.model';
 import { Employee } from '../employees/employee.model';
 import { ProjectAllocation } from '../allocations/allocation.model';
@@ -7,6 +8,10 @@ import { WeeklyAllocationEntry } from '../weekly-allocations/weekly-allocation-e
 import { features } from '../../config/features';
 import { computePeakCommittedPercent } from '../allocations/allocation-availability.util';
 import type { DashboardPeriodRange } from './dashboard-period.util';
+
+export interface DashboardScopeFilter {
+    projectIds?: string[];
+}
 
 export interface DashboardMetrics {
     activeProjects: number;
@@ -43,10 +48,18 @@ export function getCurrentUtcWeekBounds(): { weekStart: Date; weekEnd: Date } {
     return { weekStart, weekEnd };
 }
 
-async function computeAvgUtilizationForPeriod(period: DashboardPeriodRange): Promise<number> {
-    const weeklyEntries = await WeeklyAllocationEntry.find({
+async function computeAvgUtilizationForPeriod(
+    period: DashboardPeriodRange,
+    scope?: DashboardScopeFilter
+): Promise<number> {
+    const weeklyQuery: Record<string, unknown> = {
         week_start: { $gte: period.weekStartFrom, $lte: period.weekStartTo },
-    }).lean();
+    };
+    if (scope?.projectIds?.length) {
+        weeklyQuery.project_id = { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) };
+    }
+
+    const weeklyEntries = await WeeklyAllocationEntry.find(weeklyQuery).lean();
 
     if (weeklyEntries.length > 0) {
         const byEmpWeek = new Map<string, number>();
@@ -62,11 +75,16 @@ async function computeAvgUtilizationForPeriod(period: DashboardPeriodRange): Pro
         return byEmpWeek.size > 0 ? Math.round(sum / byEmpWeek.size) : 0;
     }
 
-    const allocations = await ProjectAllocation.find({
+    const allocationQuery: Record<string, unknown> = {
         is_active: true,
         start_date: { $lte: period.periodEnd },
         end_date: { $gte: period.periodStart },
-    }).lean();
+    };
+    if (scope?.projectIds?.length) {
+        allocationQuery.project_id = { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) };
+    }
+
+    const allocations = await ProjectAllocation.find(allocationQuery).lean();
 
     const byEmployee = new Map<string, { start_date: Date; end_date: Date; allocation_percent: number }[]>();
     for (const a of allocations) {
@@ -90,18 +108,42 @@ async function computeAvgUtilizationForPeriod(period: DashboardPeriodRange): Pro
 }
 
 /** Single source of truth for dashboard stat cards and AI insight metrics. */
-export async function collectDashboardMetrics(period: DashboardPeriodRange): Promise<DashboardMetrics> {
-    const activeProjects = await Project.countDocuments(activeDashboardProjectFilter());
+export async function collectDashboardMetrics(
+    period: DashboardPeriodRange,
+    scope?: DashboardScopeFilter
+): Promise<DashboardMetrics> {
+    const projectFilter = scope?.projectIds?.length
+        ? {
+              ...activeDashboardProjectFilter(),
+              _id: { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) },
+          }
+        : activeDashboardProjectFilter();
 
-    const totalEmployees = await Employee.countDocuments({
-        $or: [{ is_active: true }, { status: 'Active' }],
-    });
+    const activeProjects = await Project.countDocuments(projectFilter);
 
-    const avgUtilization = await computeAvgUtilizationForPeriod(period);
+    let totalEmployees: number;
+    if (scope?.projectIds?.length) {
+        const employeeIds = await ProjectAllocation.distinct('employee_id', {
+            project_id: { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) },
+            is_active: true,
+        });
+        totalEmployees = employeeIds.length;
+    } else {
+        totalEmployees = await Employee.countDocuments({
+            $or: [{ is_active: true }, { status: 'Active' }],
+        });
+    }
 
-    const weeklyEntries = await WeeklyAllocationEntry.find({
+    const avgUtilization = await computeAvgUtilizationForPeriod(period, scope);
+
+    const weeklyQuery: Record<string, unknown> = {
         week_start: { $gte: period.weekStartFrom, $lte: period.weekStartTo },
-    }).lean();
+    };
+    if (scope?.projectIds?.length) {
+        weeklyQuery.project_id = { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) };
+    }
+
+    const weeklyEntries = await WeeklyAllocationEntry.find(weeklyQuery).lean();
 
     const plannedHours = Math.round(
         weeklyEntries.reduce((sum, e) => sum + (e.planned_hours ?? 0), 0) * 10
@@ -111,19 +153,26 @@ export async function collectDashboardMetrics(period: DashboardPeriodRange): Pro
         weeklyEntries.reduce((sum, e) => sum + (e.actual_hours ?? 0), 0) * 10
     ) / 10;
 
-    const timeEntryFilter = {
+    const timeEntryFilter: Record<string, unknown> = {
         date: { $gte: period.periodStart, $lte: period.periodEnd },
     };
+    if (scope?.projectIds?.length) {
+        timeEntryFilter.projectId = { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) };
+    }
 
     const periodTimeEntries = await TimeEntry.find(timeEntryFilter);
     const hoursThisWeek = Math.round(
         periodTimeEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0) * 10
     ) / 10;
 
-    /** Open queue — not period-scoped so PMs always see actionable items. */
-    const pendingApprovals = await TimeEntry.countDocuments({
+    const pendingFilter: Record<string, unknown> = {
         status: TimeEntryStatus.SUBMITTED,
-    });
+    };
+    if (scope?.projectIds?.length) {
+        pendingFilter.projectId = { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) };
+    }
+
+    const pendingApprovals = await TimeEntry.countDocuments(pendingFilter);
 
     const approvedEntries = await TimeEntry.find({
         ...timeEntryFilter,

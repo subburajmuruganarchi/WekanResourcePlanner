@@ -15,6 +15,7 @@ import UserControlPage from "@/app/user-control/page"
 import InputsPage from "@/app/inputs/page"
 import SystemHealthPage from "@/app/system-health/page"
 import WeeklyPlannerPage from "@/app/weekly-planner/page"
+import PortfoliosPage from "@/app/portfolios/page"
 
 import { AuthProvider, useAuth } from "@/lib/auth-context"
 import { getHomeRoute } from "@/lib/home-route"
@@ -114,6 +115,7 @@ function AppRoutes() {
         <Route path="/ai-analytics" element={<Navigate to="/insights" replace />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/user-control" element={<UserControlPage />} />
+        <Route path="/portfolios" element={<PortfoliosPage />} />
         <Route path="/inputs" element={<InputsPage />} />
         <Route path="/system-health" element={<SystemHealthPage />} />
       </Route>

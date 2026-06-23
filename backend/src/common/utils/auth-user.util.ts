@@ -1,5 +1,7 @@
 import { TokenPayload } from './jwt.utils';
+import { ROLES } from '../constants/roles';
 import { isEmployeeAllocatedToManagedProjects } from './pm-scope.util';
+import { isEmployeeAllocatedToPortfolioProjects } from './delivery-scope.util';
 
 /** Canonical employee Mongo ID from JWT (never use `user.id` — not on TokenPayload). */
 export function getAuthEmployeeId(user?: TokenPayload): string | undefined {
@@ -20,7 +22,12 @@ export function assertEmployeeScope(
     if (!user) {
         return { ok: false, message: 'Authentication required.' };
     }
-    if (user.role === 'Admin' || user.role === 'Project Manager') {
+    if (
+        user.role === ROLES.ADMIN ||
+        user.role === ROLES.PROJECT_MANAGER ||
+        user.role === ROLES.DELIVERY_MANAGER ||
+        user.role === ROLES.CEO
+    ) {
         return { ok: true };
     }
     if (targetEmployeeId !== user.employeeId) {
@@ -40,10 +47,10 @@ export async function assertTimeEntryEmployeeScope(
     if (!user) {
         return { ok: false, message: 'Authentication required.' };
     }
-    if (user.role === 'Admin') {
+    if (user.role === ROLES.ADMIN || user.role === ROLES.CEO) {
         return { ok: true };
     }
-    if (user.role === 'Project Manager') {
+    if (user.role === ROLES.PROJECT_MANAGER) {
         const pmId = user.employeeId;
         if (!pmId) {
             return { ok: false, message: 'Authentication required.' };
@@ -53,6 +60,20 @@ export async function assertTimeEntryEmployeeScope(
             return {
                 ok: false,
                 message: 'Access denied. Employee is not allocated to your managed projects.',
+            };
+        }
+        return { ok: true };
+    }
+    if (user.role === ROLES.DELIVERY_MANAGER) {
+        const dmId = user.employeeId;
+        if (!dmId) {
+            return { ok: false, message: 'Authentication required.' };
+        }
+        const allowed = await isEmployeeAllocatedToPortfolioProjects(dmId, targetEmployeeId);
+        if (!allowed) {
+            return {
+                ok: false,
+                message: 'Access denied. Employee is not allocated to your portfolio projects.',
             };
         }
         return { ok: true };

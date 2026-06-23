@@ -18,7 +18,9 @@ import {
     Building2,
     Settings,
     BarChart3,
+    Briefcase,
 } from 'lucide-react';
+import { ROLES } from '@/lib/roles';
 import { cn } from '@/lib/utils';
 
 type NavItem = {
@@ -62,6 +64,7 @@ const navGroups: NavGroup[] = [
         title: 'Admin',
         items: [
             { label: 'Inputs', icon: Upload, path: '/inputs' },
+            { label: 'Portfolios', icon: Briefcase, path: '/portfolios' },
             { label: 'User Management', icon: Shield, path: '/user-control' },
             { label: 'Settings', icon: Settings, path: '/system-health' },
         ],
@@ -69,23 +72,24 @@ const navGroups: NavGroup[] = [
 ];
 
 const allowedRoles: Record<string, string[]> = {
-    '/dashboard': ['Admin', 'Project Manager'],
-    '/projects': ['Admin', 'Project Manager'],
-    '/allocation': ['Admin', 'Project Manager'],
-    '/weekly-planner': ['Admin', 'Project Manager'],
-    '/time-entry': ['*'],
-    '/pm-approvals': ['Admin', 'Project Manager'],
+    '/dashboard': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
+    '/projects': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
+    '/allocation': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
+    '/weekly-planner': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
+    '/time-entry': [ROLES.EMPLOYEE, ROLES.USER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.DELIVERY_MANAGER],
+    '/pm-approvals': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.DELIVERY_MANAGER],
     '/okrs': ['*'],
-    '/reports': ['Admin', 'Project Manager'],
-    '/insights': ['Admin', 'Project Manager'],
-    '/inputs': ['Admin'],
-    '/user-control': ['Admin'],
-    '/system-health': ['Admin'],
+    '/reports': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
+    '/insights': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
+    '/inputs': [ROLES.ADMIN],
+    '/user-control': [ROLES.ADMIN],
+    '/portfolios': [ROLES.ADMIN],
+    '/system-health': [ROLES.ADMIN],
 };
 
 function canAccess(path: string, role: string | undefined): boolean {
     if (!role) return false;
-    if (role === 'Admin') return true;
+    if (role === ROLES.ADMIN) return true;
     const roles = allowedRoles[path];
     if (!roles) return true;
     if (roles.includes('*')) return true;

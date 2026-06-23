@@ -2,6 +2,7 @@ import { Okr, IOkr, IKeyResult, OkrStatus } from './okr.model';
 import { Employee } from '../employees/employee.model';
 import { Types } from 'mongoose';
 import { AppError } from '../../common/errors/app-error';
+import { findOrgRollup, resolveOrgRollupEmployeeFilter, type OrgRollupResponse } from './okr-org-rollup';
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -327,6 +328,14 @@ export class OkrService {
     async getAvailablePeriods(): Promise<string[]> {
         const periods = await Okr.distinct('period');
         return periods.sort().reverse();
+    }
+
+    async getOrgRollup(period?: string, employeeIdFilter?: string[]): Promise<OrgRollupResponse> {
+        return findOrgRollup(
+            period,
+            (keyResults) => this.computeOkrAchievement(keyResults),
+            employeeIdFilter
+        );
     }
 }
 

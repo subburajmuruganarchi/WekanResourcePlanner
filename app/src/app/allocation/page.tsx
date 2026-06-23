@@ -5,6 +5,8 @@ import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { useProjects } from '@/lib/use-projects';
 import { useAuth } from '@/lib/auth-context';
+import { canEditAllocations, isExecutiveReadOnly } from '@/lib/roles';
+import { usePortfolioScope } from '@/lib/use-portfolio-scope';
 import { useEmployees } from '@/lib/use-employees';
 import { useWeeklyAllocationGrid } from '@/lib/use-weekly-allocation-grid';
 import { rowKey } from '@/lib/weekly-grid-pivot';
@@ -34,7 +36,9 @@ function employeeRoleLabel(emp: {
 
 export function Allocation() {
     const { user } = useAuth();
-    const canEditGrid = user?.role === 'Admin';
+    const isReadOnlyExecutive = isExecutiveReadOnly(user?.role);
+    const canEditGrid = canEditAllocations(user?.role) && !isReadOnlyExecutive;
+    const { editableProjectIds } = usePortfolioScope(user?.role);
 
     const { projects, loading: projLoading } = useProjects();
     const { employees } = useEmployees();
@@ -265,6 +269,9 @@ export function Allocation() {
                 <h1 className="text-2xl font-semibold text-gray-900">Resource Allocation</h1>
                 <p className="text-sm text-gray-600 mt-1">
                     Allocate resources to projects based on skills, availability, and experience.
+                    {isReadOnlyExecutive && (
+                        <span className="ml-2 text-indigo-600 font-medium">Executive view — read only</span>
+                    )}
                 </p>
             </div>
 
@@ -421,6 +428,7 @@ export function Allocation() {
                     employees={employeeOptions}
                     projects={projectOptions}
                     canEdit={canEditGrid}
+                    editableProjectIds={editableProjectIds}
                     dirtyKeys={grid.dirtyKeys}
                     onPlannedHoursChange={grid.updatePlannedHours}
                     onEmployeeChange={handleEmployeeChange}

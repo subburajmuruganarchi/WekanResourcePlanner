@@ -11,6 +11,11 @@ import { TimeEntryStatus, ProjectStatus } from '../../common/types/enums';
 import { features } from '../../config/features';
 import { weeklyActualsSyncService } from '../../services/weekly-actuals/weekly-actuals-sync.service';
 import { isFutureUtcWeek } from '../../common/utils/week.util';
+import { ROLES } from '../../common/constants/roles';
+import {
+    getPortfolioProjectIds,
+    isProjectInDeliveryManagerPortfolio,
+} from '../../common/utils/delivery-scope.util';
 
 export interface CreateTimeEntryRequest {
     employeeId: string;
@@ -605,15 +610,17 @@ export class TimeEntryService {
             }
         }
 
-        // Validate PM authorization for each entry's project (unrestricted for Admins)
+        // Validate approver authorization for each entry's project (unrestricted for Admins)
         if (!userIsAdmin) {
-            const projectIds = [...new Set(entries.map(e => e.projectId.toString()))];
+            const userRole = (await this.getUserRoleName(pmUserId)) ?? '';
+            const projectIds = [...new Set(entries.map((e) => e.projectId.toString()))];
             for (const projId of projectIds) {
                 const project = await Project.findById(projId);
                 if (!project) throw new Error(`Project ${projId} not found.`);
-                if (project.project_manager_id?.toString() !== pmUserId) {
+                const allowed = await this.canApproveProject(pmUserId, userRole, projId);
+                if (!allowed) {
                     throw new Error(
-                        `User is not the Project Manager for project "${project.project_name}". Only the assigned PM can approve entries.`
+                        `User is not authorized to approve entries for project "${project.project_name}".`
                     );
                 }
             }
@@ -724,15 +731,17 @@ export class TimeEntryService {
             }
         }
 
-        // Validate PM authorization (unrestricted for Admins)
+        // Validate approver authorization (unrestricted for Admins)
         if (!userIsAdmin) {
-            const projectIds = [...new Set(entries.map(e => e.projectId.toString()))];
+            const userRole = (await this.getUserRoleName(pmUserId)) ?? '';
+            const projectIds = [...new Set(entries.map((e) => e.projectId.toString()))];
             for (const projId of projectIds) {
                 const project = await Project.findById(projId);
                 if (!project) throw new Error(`Project ${projId} not found.`);
-                if (project.project_manager_id?.toString() !== pmUserId) {
+                const allowed = await this.canApproveProject(pmUserId, userRole, projId);
+                if (!allowed) {
                     throw new Error(
-                        `User is not the Project Manager for project "${project.project_name}". Only the assigned PM can reject entries.`
+                        `User is not authorized to reject entries for project "${project.project_name}".`
                     );
                 }
             }
@@ -805,7 +814,7 @@ export class TimeEntryService {
      */
     async getPendingApprovalForPM(
         pmUserId: string,
-        options?: { includeAll?: boolean }
+        options?: { includeAll?: boolean; portfolioProjectIds?: string[] }
     ): Promise<any[]> {
         if (!options?.includeAll && !Types.ObjectId.isValid(pmUserId)) {
             throw new Error('Invalid PM user ID');
@@ -814,7 +823,11 @@ export class TimeEntryService {
         const filter: Record<string, unknown> = {
             status: TimeEntryStatus.SUBMITTED,
         };
-        if (!options?.includeAll) {
+        if (options?.portfolioProjectIds?.length) {
+            filter.projectId = {
+                $in: options.portfolioProjectIds.map((id) => new Types.ObjectId(id)),
+            };
+        } else if (!options?.includeAll) {
             filter.projectManagerUserId = new Types.ObjectId(pmUserId);
         }
 
@@ -918,18 +931,33 @@ export class TimeEntryService {
         });
     }
 
+    async canApproveProject(userId: string, userRole: string, projectId: string): Promise<boolean> {
+        if (userRole === ROLES.ADMIN) return true;
+        const project = await Project.findById(projectId);
+        if (!project) return false;
+        if (userRole === ROLES.PROJECT_MANAGER) {
+            return project.project_manager_id?.toString() === userId;
+        }
+        if (userRole === ROLES.DELIVERY_MANAGER) {
+            return isProjectInDeliveryManagerPortfolio(userId, projectId);
+        }
+        return false;
+    }
+
+    async getUserRoleName(userId: string): Promise<string | null> {
+        if (!Types.ObjectId.isValid(userId)) return null;
+        const employee = await Employee.findById(userId).populate('role_id').lean();
+        if (!employee?.role_id) return null;
+        const role = employee.role_id as { role_name?: string };
+        return role.role_name ?? null;
+    }
+
     /**
      * Checks if a user has the 'Admin' role.
      */
     async isAdmin(userId: string): Promise<boolean> {
-        if (!Types.ObjectId.isValid(userId)) return false;
-        
-        const employee = await Employee.findById(userId).populate('role_id').lean();
-        if (!employee || !employee.role_id) return false;
-        
-        // Typescript casting as populate returns either ObjectId or populated IRole
-        const role = employee.role_id as any;
-        return role.role_name === 'Admin';
+        const role = await this.getUserRoleName(userId);
+        return role === ROLES.ADMIN;
     }
 }
 
