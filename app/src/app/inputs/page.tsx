@@ -1,7 +1,15 @@
 import { useState, useEffect, useCallback } from "react"
 import { Cloud, Loader2, RefreshCw } from "lucide-react"
+import axios from "axios"
 import { PageContainer } from "@/components/layout/page-container"
 import { api } from "@/lib/api"
+
+/** Match backend FULL_SYNC_BATCH_TIMEOUT_MS (1_200_000) with headroom for large sheets. */
+const FULL_SYNC_POLL_INTERVAL_MS = 4_000
+const FULL_SYNC_POLL_TIMEOUT_MS = 1_500_000
+const FULL_SYNC_POLL_MAX_ATTEMPTS = Math.ceil(
+    FULL_SYNC_POLL_TIMEOUT_MS / FULL_SYNC_POLL_INTERVAL_MS
+)
 
 interface SheetSyncStatus {
     sheet: string
@@ -72,8 +80,7 @@ export default function InputsPage() {
     const pollFullSyncStatus = async (
         syncBatchId: string
     ): Promise<{ ok: true; summary: FullSyncSummary } | { ok: false }> => {
-        const maxAttempts = 90
-        for (let i = 0; i < maxAttempts; i++) {
+        for (let i = 0; i < FULL_SYNC_POLL_MAX_ATTEMPTS; i++) {
             const res = await api.get<{
                 status: string
                 syncCompleted: boolean
@@ -129,9 +136,21 @@ export default function InputsPage() {
                 throw new Error(err)
             }
 
-            await new Promise((r) => setTimeout(r, 4000))
+            await new Promise((r) => setTimeout(r, FULL_SYNC_POLL_INTERVAL_MS))
         }
-        throw new Error("Full sync timed out while waiting for completion")
+        throw new Error(
+            `Full sync is still running after ${Math.round(FULL_SYNC_POLL_TIMEOUT_MS / 60_000)} minutes. ` +
+                "The job may complete in the background — refresh this page in a few minutes to check status."
+        )
+    }
+
+    const runFullSyncPoll = async (syncBatchId: string) => {
+        setSyncMessageTone("info")
+        setSyncMessage("Full sync started…")
+        const result = await pollFullSyncStatus(syncBatchId)
+        if (result.ok) {
+            await loadSyncStatus()
+        }
     }
 
     const handleSyncNow = async () => {
@@ -145,31 +164,37 @@ export default function InputsPage() {
                 syncId: string
                 syncBatchId: string
                 message?: string
-            }>("/google-sheet-sync/sync/full", {}, { timeout: 30_000 })
-
-            if (res.status === 409 || res.data?.status === "RUNNING") {
-                const activeId = (res.data as { syncBatchId?: string })?.syncBatchId
-                setSyncMessageTone("info")
-                setSyncMessage(
-                    activeId
-                        ? `${res.data?.message ?? "Sync already in progress."} (${activeId})`
-                        : (res.data?.message ?? "Sync already in progress.")
-                )
-                return
-            }
+            }>("/google-sheet-sync/sync/full", {}, { timeout: 60_000 })
 
             const syncBatchId = res.data?.syncBatchId ?? res.data?.syncId
             if (!syncBatchId) {
                 throw new Error("Server did not return a sync batch id")
             }
 
-            setSyncMessageTone("info")
-            setSyncMessage("Full sync started…")
-            const result = await pollFullSyncStatus(syncBatchId)
-            if (result.ok) {
-                await loadSyncStatus()
-            }
+            await runFullSyncPoll(syncBatchId)
         } catch (err: unknown) {
+            if (axios.isAxiosError(err) && err.response?.status === 409) {
+                const data = err.response.data as {
+                    syncBatchId?: string
+                    message?: string
+                }
+                const activeId = data?.syncBatchId
+                if (activeId) {
+                    setSyncMessageTone("info")
+                    setSyncMessage(data?.message ?? "Sync already in progress — showing live progress…")
+                    try {
+                        await runFullSyncPoll(activeId)
+                        return
+                    } catch (pollErr) {
+                        const pollMsg =
+                            pollErr instanceof Error ? pollErr.message : "Full sync failed"
+                        setSyncMessageTone("error")
+                        setSyncMessage(pollMsg)
+                        return
+                    }
+                }
+            }
+
             const msg =
                 (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
                 (err instanceof Error ? err.message : "Full sync failed")
@@ -221,7 +246,8 @@ export default function InputsPage() {
                 </div>
                 <p className="text-sm text-gray-600 mb-4">
                     Pulls Resource, Project, and Project_Allocation from Google Sheets into MongoDB.
-                    Order: Resource → Project → Project_Allocation. This may take a few minutes.
+                    Order: Resource → Project → Project_Allocation. Large sheets can take 10–20 minutes —
+                    keep this tab open until sync completes.
                 </p>
                 {syncMessage && (
                     <p
