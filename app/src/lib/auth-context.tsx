@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from "
 import { api } from "./api"
 import { normalizeRoleName } from "./role-utils"
 
-export type Role = "Admin" | "Project Manager" | "Employee" | "User" | string
+export type Role = "Admin" | "Project Manager" | "Employee" | "User" | "CEO" | "Delivery Manager" | string
 
 export interface User {
     id: string
@@ -10,6 +10,31 @@ export interface User {
     role: Role
     email: string
     avatar?: string
+    /** Job role from Resource sheet (e.g. SDE II (Full Stack)). */
+    jobRole?: string
+    /** Fallback title when job role is not set. */
+    position?: string
+}
+
+interface BackendAuthUser {
+    id: string
+    email: string
+    firstName: string
+    lastName: string
+    role: string
+    jobRole?: string
+    position?: string
+}
+
+function mapBackendUser(userData: BackendAuthUser): User {
+    return {
+        id: userData.id,
+        name: `${userData.firstName} ${userData.lastName}`.trim(),
+        email: userData.email,
+        role: normalizeRoleName(userData.role) as Role,
+        jobRole: userData.jobRole?.trim() || undefined,
+        position: userData.position?.trim() || undefined,
+    }
 }
 
 interface AuthContextType {
@@ -52,6 +77,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, [user])
 
+    // Refresh profile (job role from Resource sheet) for existing sessions
+    useEffect(() => {
+        const token = localStorage.getItem(TOKEN_KEY)
+        if (!token) return
+
+        let cancelled = false
+        api.get('/auth/me')
+            .then((response) => {
+                if (cancelled || response.data?.status !== 'success') return
+                const userData = response.data.data?.user as BackendAuthUser | undefined
+                if (!userData) return
+                setUser(mapBackendUser(userData))
+            })
+            .catch(() => {
+                // 401 handled globally by api interceptor
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [])
+
     const login = async (email: string, passwordString: string) => {
         setIsLoading(true)
         try {
@@ -63,14 +110,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 // Save the token securely in local storage
                 localStorage.setItem(TOKEN_KEY, token)
                 
-                // Map backend user to frontend User interface
-                const mappedUser: User = {
-                    id: userData.id,
-                    name: `${userData.firstName} ${userData.lastName}`.trim(),
-                    email: userData.email,
-                    role: normalizeRoleName(userData.role) as Role,
-                }
-                
+                const mappedUser = mapBackendUser(userData as BackendAuthUser)
+
                 setUser(mappedUser)
                 return mappedUser
             } else {
@@ -90,13 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const { token, user: userData } = response.data.data
                 localStorage.setItem(TOKEN_KEY, token)
                 
-                const mappedUser: User = {
-                    id: userData.id,
-                    name: `${userData.firstName} ${userData.lastName}`.trim(),
-                    email: userData.email,
-                    role: normalizeRoleName(userData.role) as Role,
-                }
-                
+                const mappedUser = mapBackendUser(userData as BackendAuthUser)
+
                 setUser(mappedUser)
                 return mappedUser
             } else {

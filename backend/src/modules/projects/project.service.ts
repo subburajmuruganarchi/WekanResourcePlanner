@@ -17,7 +17,7 @@ export interface ProjectListParams {
     status?: string;
     managerId?: string;
     ownerId?: string;
-    /** Restrict to specific project IDs (e.g. employee allocations). */
+    /** Restrict to specific project IDs (e.g. employee allocations). Empty array = none. */
     projectIds?: string[];
 }
 
@@ -114,6 +114,10 @@ interface PopulatedRoleEffort {
 
 export class ProjectService {
     async findAll(params: ProjectListParams = {}): Promise<ProjectResponse[]> {
+        if (params.projectIds !== undefined && params.projectIds.length === 0) {
+            return [];
+        }
+
         const clauses: Record<string, unknown>[] = [];
 
         if (params.status) {

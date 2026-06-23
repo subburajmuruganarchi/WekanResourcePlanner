@@ -41,10 +41,13 @@ export class ProjectController {
                 }
             }
 
-            // RBAC: Employees see only projects they are actively allocated to
+            // RBAC: Employees — allocated projects for workspace; all Active projects for time entry
+            const forTimeEntry = req.query.forTimeEntry === 'true';
             if (user && (user.role === 'Employee' || user.role === 'User')) {
                 const employeeId = getAuthEmployeeId(user);
-                if (employeeId) {
+                if (forTimeEntry) {
+                    params.status = 'Active';
+                } else if (employeeId) {
                     const projectIds = await ProjectAllocation.distinct('project_id', {
                         employee_id: new Types.ObjectId(employeeId),
                         is_active: true,

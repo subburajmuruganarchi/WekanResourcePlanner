@@ -8,12 +8,36 @@ import { AppError } from '../../common/errors/app-error';
 import { OAuth2Client } from 'google-auth-library';
 import { env } from '../../config/env';
 import { normalizeRoleName } from '../../common/utils/auth-user.util';
+import { IEmployee } from '../employees/employee.model';
 
 const client = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
+type PopulatedEmployee = IEmployee & {
+    role_id?: IRole;
+    job_role_id?: { role_name: string } | null;
+};
+
+function mapEmployeeToAuthUser(employee: PopulatedEmployee, roleName: string) {
+    const jobRoleDoc = employee.job_role_id as { role_name?: string } | undefined;
+    const jobRole = jobRoleDoc?.role_name?.trim();
+
+    return {
+        id: employee._id,
+        email: employee.email,
+        firstName: employee.first_name,
+        lastName: employee.last_name,
+        role: roleName,
+        jobRole: jobRole || undefined,
+        position: employee.position?.trim() || undefined,
+    };
+}
+
 export class AuthService {
     async login(email: string, passwordString: string): Promise<{ token: string; user: any }> {
-        const employee = await Employee.findOne({ email }).select('+password').populate<{ role_id: IRole }>('role_id');
+        const employee = await Employee.findOne({ email })
+            .select('+password')
+            .populate<{ role_id: IRole }>('role_id')
+            .populate('job_role_id', 'role_name') as PopulatedEmployee | null;
 
         if (!employee || !employee.password) {
             throw new AppError('Invalid email or password.', 401);
@@ -41,13 +65,7 @@ export class AuthService {
 
         return {
             token,
-            user: {
-                id: employee._id,
-                email: employee.email,
-                firstName: employee.first_name,
-                lastName: employee.last_name,
-                role: roleName,
-            }
+            user: mapEmployeeToAuthUser(employee, roleName),
         };
     }
 
@@ -64,7 +82,9 @@ export class AuthService {
             }
 
             const email = info.email.toLowerCase().trim();
-            const employee = await Employee.findOne({ email }).populate<{ role_id: IRole }>('role_id');
+            const employee = await Employee.findOne({ email })
+                .populate<{ role_id: IRole }>('role_id')
+                .populate('job_role_id', 'role_name') as PopulatedEmployee | null;
 
             if (!employee) {
                 throw new AppError('Employee not found with this Google email.', 401);
@@ -92,18 +112,32 @@ export class AuthService {
 
             return {
                 token,
-                user: {
-                    id: employee._id,
-                    email: employee.email,
-                    firstName: employee.first_name,
-                    lastName: employee.last_name,
-                    role: roleName,
-                }
+                user: mapEmployeeToAuthUser(employee, roleName),
             };
         } catch (error: any) {
             console.error('Google login error:', error);
             if (error instanceof AppError) throw error;
             throw new AppError('Google authentication failed.', 401);
         }
+    }
+
+    async getMe(employeeId: string) {
+        const employee = await Employee.findById(employeeId)
+            .populate<{ role_id: IRole }>('role_id')
+            .populate('job_role_id', 'role_name') as PopulatedEmployee | null;
+
+        if (!employee) {
+            throw new AppError('Employee not found.', 404);
+        }
+
+        if (!employee.is_active) {
+            throw new AppError('Employee account is deactivated.', 403);
+        }
+
+        const roleName = normalizeRoleName(employee.role_id ? employee.role_id.role_name : 'User');
+
+        return {
+            user: mapEmployeeToAuthUser(employee, roleName),
+        };
     }
 }

@@ -25,6 +25,7 @@ import {
     type LucideIcon,
 } from 'lucide-react';
 import { ROLES, type SystemRoleName } from './roles';
+import { normalizeRoleName } from './role-utils';
 
 export type NavItemDef = {
     label: string;
@@ -175,23 +176,28 @@ export const ROUTE_ACCESS: Record<string, SystemRoleName[] | '*'> = {
 
 export function getNavGroupsForRole(role: string | undefined): NavGroupDef[] {
     if (!role) return [];
-    if (role === ROLES.ADMIN) return PERSONA_NAV[ROLES.ADMIN] ?? [];
-    return PERSONA_NAV[role] ?? PERSONA_NAV[ROLES.EMPLOYEE] ?? [];
+    const canonical = normalizeRoleName(role);
+    if (canonical === ROLES.ADMIN) return PERSONA_NAV[ROLES.ADMIN] ?? [];
+    if (canonical === ROLES.USER) {
+        return PERSONA_NAV[ROLES.USER] ?? PERSONA_NAV[ROLES.EMPLOYEE] ?? [];
+    }
+    return PERSONA_NAV[canonical] ?? PERSONA_NAV[ROLES.EMPLOYEE] ?? [];
 }
 
 export function canAccessNavPath(role: string | undefined, path: string): boolean {
     if (!role) return false;
-    if (role === ROLES.ADMIN) return true;
+    const canonical = normalizeRoleName(role);
+    if (canonical === ROLES.ADMIN) return true;
     if (ROUTE_ACCESS[path]) {
         const allowed = ROUTE_ACCESS[path];
         if (allowed === '*') return true;
-        return allowed.includes(role as SystemRoleName);
+        return allowed.includes(canonical as SystemRoleName);
     }
     const two = path.split('/').slice(0, 2).join('/');
-    const allowed = ROUTE_ACCESS[two];
-    if (!allowed) return true;
-    if (allowed === '*') return true;
-    return allowed.includes(role as SystemRoleName);
+    const allowedPrefix = ROUTE_ACCESS[two];
+    if (!allowedPrefix) return true;
+    if (allowedPrefix === '*') return true;
+    return allowedPrefix.includes(canonical as SystemRoleName);
 }
 
 export const ROUTE_TITLES: Record<string, { title: string; breadcrumb: string[] }> = {

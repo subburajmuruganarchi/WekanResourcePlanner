@@ -20,6 +20,7 @@ export interface TimeEntryResponse {
     comments?: string;
     weekStartDate: string;
     status: string;
+    staffingUpdated?: boolean;
 }
 
 export interface SubmitWeeklyResult {

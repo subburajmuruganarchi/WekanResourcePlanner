@@ -2,16 +2,16 @@ import { TokenPayload } from './jwt.utils';
 import { ROLES } from '../constants/roles';
 import { isEmployeeAllocatedToManagedProjects } from './pm-scope.util';
 import { isEmployeeAllocatedToPortfolioProjects } from './delivery-scope.util';
+import { normalizeRoleName as normalizeRole } from './role-normalize.util';
 
 /** Canonical employee Mongo ID from JWT (never use `user.id` — not on TokenPayload). */
 export function getAuthEmployeeId(user?: TokenPayload): string | undefined {
     return user?.employeeId;
 }
 
-/** Normalize legacy role strings at auth boundary. */
+/** @deprecated Use normalizeRole from role-normalize.util */
 export function normalizeRoleName(role: string): string {
-    if (role === 'ProjectManager') return 'Project Manager';
-    return role;
+    return normalizeRole(role);
 }
 
 /** Employees may only act on their own employeeId unless Admin/PM. */
@@ -22,11 +22,12 @@ export function assertEmployeeScope(
     if (!user) {
         return { ok: false, message: 'Authentication required.' };
     }
+    const role = normalizeRole(user.role);
     if (
-        user.role === ROLES.ADMIN ||
-        user.role === ROLES.PROJECT_MANAGER ||
-        user.role === ROLES.DELIVERY_MANAGER ||
-        user.role === ROLES.CEO
+        role === ROLES.ADMIN ||
+        role === ROLES.PROJECT_MANAGER ||
+        role === ROLES.DELIVERY_MANAGER ||
+        role === ROLES.CEO
     ) {
         return { ok: true };
     }
@@ -47,10 +48,11 @@ export async function assertTimeEntryEmployeeScope(
     if (!user) {
         return { ok: false, message: 'Authentication required.' };
     }
-    if (user.role === ROLES.ADMIN || user.role === ROLES.CEO) {
+    const role = normalizeRole(user.role);
+    if (role === ROLES.ADMIN || role === ROLES.CEO) {
         return { ok: true };
     }
-    if (user.role === ROLES.PROJECT_MANAGER) {
+    if (role === ROLES.PROJECT_MANAGER) {
         const pmId = user.employeeId;
         if (!pmId) {
             return { ok: false, message: 'Authentication required.' };
@@ -64,7 +66,7 @@ export async function assertTimeEntryEmployeeScope(
         }
         return { ok: true };
     }
-    if (user.role === ROLES.DELIVERY_MANAGER) {
+    if (role === ROLES.DELIVERY_MANAGER) {
         const dmId = user.employeeId;
         if (!dmId) {
             return { ok: false, message: 'Authentication required.' };

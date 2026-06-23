@@ -1,4 +1,6 @@
 /** Frontend role constants and helpers — mirror backend/src/common/constants/roles.ts */
+import { normalizeRoleName } from './role-utils';
+
 export const ROLES = {
     ADMIN: 'Admin',
     PROJECT_MANAGER: 'Project Manager',
@@ -18,37 +20,33 @@ export const MANAGEMENT_VIEW_ROLES: SystemRoleName[] = [
 ];
 
 export function isExecutiveReadOnly(role: string | undefined): boolean {
-    return role === ROLES.CEO;
+    return normalizeRoleName(role) === ROLES.CEO;
 }
 
 export function canEditAllocations(role: string | undefined): boolean {
-    return role === ROLES.ADMIN || role === ROLES.DELIVERY_MANAGER;
+    const r = normalizeRoleName(role);
+    return r === ROLES.ADMIN || r === ROLES.DELIVERY_MANAGER;
 }
 
 export function canSeeManagementDashboard(role: string | undefined): boolean {
-    return MANAGEMENT_VIEW_ROLES.includes(role as SystemRoleName);
+    return MANAGEMENT_VIEW_ROLES.includes(normalizeRoleName(role) as SystemRoleName);
 }
 
 export function canApproveTimesheets(role: string | undefined): boolean {
-    return (
-        role === ROLES.ADMIN ||
-        role === ROLES.PROJECT_MANAGER ||
-        role === ROLES.DELIVERY_MANAGER
-    );
+    const r = normalizeRoleName(role);
+    return r === ROLES.ADMIN || r === ROLES.PROJECT_MANAGER || r === ROLES.DELIVERY_MANAGER;
 }
 
 export function canCreateOkrs(role: string | undefined): boolean {
-    return (
-        role === ROLES.ADMIN ||
-        role === ROLES.PROJECT_MANAGER ||
-        role === ROLES.DELIVERY_MANAGER
-    );
+    const r = normalizeRoleName(role);
+    return r === ROLES.ADMIN || r === ROLES.PROJECT_MANAGER || r === ROLES.DELIVERY_MANAGER;
 }
 
 export function isDeliveryManager(role: string | undefined): boolean {
-    return role === ROLES.DELIVERY_MANAGER;
+    return normalizeRoleName(role) === ROLES.DELIVERY_MANAGER;
 }
 
 export function isTeamTimeManager(role: string | undefined): boolean {
-    return role === ROLES.PROJECT_MANAGER || role === ROLES.DELIVERY_MANAGER;
+    const r = normalizeRoleName(role);
+    return r === ROLES.PROJECT_MANAGER || r === ROLES.DELIVERY_MANAGER;
 }

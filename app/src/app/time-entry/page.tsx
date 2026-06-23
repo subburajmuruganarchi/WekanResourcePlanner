@@ -17,8 +17,8 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { useTimeEntries } from "@/lib/use-time-entries"
 import { useEmployees } from "@/lib/use-employees"
-import { useProjects } from "@/lib/use-projects"
-import { isOperationalProject } from "@/lib/project-status"
+import { useProjects, notifyProjectsChanged } from "@/lib/use-projects"
+import { isActiveProject } from "@/lib/project-status"
 import { useAuth } from "@/lib/auth-context"
 import { isTeamTimeManager } from "@/lib/roles"
 import { api } from "@/lib/api-client"
@@ -102,7 +102,7 @@ export function TimeEntry() {
         allocatedToMyProjects: isTeamLead,
         activeOnly: true,
     })
-    const { projects, loading: loadingProjects } = useProjects()
+    const { projects, loading: loadingProjects } = useProjects({ forTimeEntry: isSelfOnly })
 
     useEffect(() => {
         if (isSelfOnly && user?.id) {
@@ -242,7 +242,7 @@ export function TimeEntry() {
 
         const byId = new Map<string, ProjectOption>()
         for (const p of projects) {
-            const isActive = !p.status || isOperationalProject(p)
+            const isActive = isActiveProject(p)
             if (!isActive && !usedCodes.has(p.code)) continue
             byId.set(p.id, { code: p.code, name: p.name, id: p.id, isAllocated: allocatedIds.has(p.id) })
         }
@@ -385,7 +385,14 @@ export function TimeEntry() {
                             : d
                     )
                 )
-                setRowSaveMessage("Entry saved.")
+                setRowSaveMessage(
+                    saved.staffingUpdated
+                        ? "Entry saved — you were added to this project for the week."
+                        : "Entry saved."
+                )
+                if (saved.staffingUpdated) {
+                    notifyProjectsChanged()
+                }
                 await Promise.all([fetchSavedEntries(), fetchDailyForecast()])
             } catch (err) {
                 setSubmitError(err instanceof Error ? err.message : "Failed to save entry")
@@ -700,9 +707,10 @@ export function TimeEntry() {
         }
 
         try {
+            let staffingCreated = false
             for (const entry of entriesToSave) {
                 const projectId = getProjectId(entry.projectCode)!
-                await submitTimeEntry({
+                const saved = await submitTimeEntry({
                     employeeId: selectedEmployee.id,
                     projectId,
                     timeCodeId,
@@ -710,6 +718,11 @@ export function TimeEntry() {
                     hours: entry.hours,
                     comments: entry.comments || undefined,
                 })
+                if (saved.staffingUpdated) staffingCreated = true
+            }
+
+            if (staffingCreated) {
+                notifyProjectsChanged()
             }
 
             const weekStart = weekDates[0].fullDate

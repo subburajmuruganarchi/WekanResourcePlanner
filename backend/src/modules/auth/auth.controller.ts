@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from './auth.service';
+import { AppError } from '../../common/errors/app-error';
 
 const authService = new AuthService();
 
@@ -42,6 +43,24 @@ export class AuthController {
             res.status(200).json({
                 status: 'success',
                 data: result
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async me(req: Request, res: Response, next: NextFunction) {
+        try {
+            const employeeId = req.user?.employeeId;
+            if (!employeeId) {
+                throw new AppError('Not authenticated.', 401);
+            }
+
+            const result = await authService.getMe(employeeId);
+
+            res.status(200).json({
+                status: 'success',
+                data: result,
             });
         } catch (error) {
             next(error);

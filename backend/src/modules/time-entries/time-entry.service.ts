@@ -19,6 +19,15 @@ import {
     getPortfolioProjectIds,
     isProjectInDeliveryManagerPortfolio,
 } from '../../common/utils/delivery-scope.util';
+import { syncAllocationToGoogleSheet } from '../google-sheet-sync/allocation-sheet-sync.service';
+import { weekStartToIsoDate } from '../../common/utils/week.util';
+
+interface StaffingSyncHint {
+    employeeId: string;
+    projectId: string;
+    weekStart: string;
+    plannedHours: number;
+}
 
 export interface CreateTimeEntryRequest {
     employeeId: string;
@@ -46,6 +55,8 @@ export interface TimeEntryResponse {
     rejectedBy?: string;
     rejectedAt?: string;
     rejectionComment?: string;
+    /** True when a new Project_Allocation + weekly planner row was created from this entry. */
+    staffingUpdated?: boolean;
 }
 
 // Weekly hour cap constant (40 hours standard, can be overridden)
@@ -188,7 +199,7 @@ export class TimeEntryService {
                 { upsert: true, new: true, session }
             );
 
-            await this.ensureWeekStaffingForTimeEntry(
+            const staffingSync = await this.ensureWeekStaffingForTimeEntry(
                 session,
                 request.employeeId,
                 project._id as Types.ObjectId,
@@ -201,7 +212,28 @@ export class TimeEntryService {
 
             if (!timeEntry) throw new Error('Failed to save time entry');
 
-            return this.mapToResponse(timeEntry);
+            if (staffingSync) {
+                void syncAllocationToGoogleSheet([
+                    {
+                        employeeId: staffingSync.employeeId,
+                        projectId: staffingSync.projectId,
+                        weekStart: staffingSync.weekStart,
+                        plannedHours: staffingSync.plannedHours,
+                    },
+                ]).catch((err) => {
+                    structuredLogger.error('Failed to sync time-entry staffing to Google Sheet', {
+                        module: 'time-entries',
+                        error: err instanceof Error ? err.message : String(err),
+                        employeeId: staffingSync.employeeId,
+                        projectId: staffingSync.projectId,
+                    });
+                });
+            }
+
+            return {
+                ...this.mapToResponse(timeEntry),
+                staffingUpdated: Boolean(staffingSync),
+            };
         } catch (error) {
             await session.abortTransaction();
             throw error;
@@ -227,8 +259,11 @@ export class TimeEntryService {
         project: { start_date?: Date; end_date?: Date },
         weekStartDate: Date,
         hoursLogged: number
-    ): Promise<void> {
+    ): Promise<StaffingSyncHint | null> {
         const empOid = new Types.ObjectId(employeeId);
+        let allocationCreated = false;
+        let weekRowUpdated = false;
+
         let allocation = await ProjectAllocation.findOne({
             project_id: projectId,
             employee_id: empOid,
@@ -236,12 +271,18 @@ export class TimeEntryService {
 
         if (!allocation) {
             const employee = await Employee.findById(empOid).session(session);
+            if (!employee?.employee_code?.trim()) {
+                structuredLogger.warn('Time entry staffing skip — employee missing employee_code for sheet sync', {
+                    module: 'time-entries',
+                    employeeId,
+                });
+            }
             let roleId = employee?.job_role_id ?? employee?.role_id;
             if (!roleId) {
                 const fallback = await Role.findOne().session(session);
                 roleId = fallback?._id;
             }
-            if (!roleId) return;
+            if (!roleId) return null;
 
             const capacity = features.weeklyCapacityHours ?? 40;
             const allocPercent = Math.min(100, Math.max(10, Math.round((hoursLogged / capacity) * 100)));
@@ -266,9 +307,11 @@ export class TimeEntryService {
                 allocation_reason: 'Auto-created from time entry',
             });
             await allocation.save({ session });
+            allocationCreated = true;
         } else if (!allocation.is_active) {
             allocation.is_active = true;
             await allocation.save({ session });
+            allocationCreated = true;
         }
 
         const existingWeek = await WeeklyAllocationEntry.findOne({
@@ -300,6 +343,7 @@ export class TimeEntryService {
                 ],
                 { session }
             );
+            weekRowUpdated = true;
         } else if ((existingWeek.planned_hours ?? 0) <= 0) {
             existingWeek.planned_hours = targetPlanned;
             existingWeek.variance_hours = targetPlanned - (existingWeek.actual_hours ?? 0);
@@ -307,7 +351,19 @@ export class TimeEntryService {
                 existingWeek.allocation_id = allocation._id;
             }
             await existingWeek.save({ session });
+            weekRowUpdated = true;
         }
+
+        if (!allocationCreated && !weekRowUpdated) {
+            return null;
+        }
+
+        return {
+            employeeId,
+            projectId: projectId.toString(),
+            weekStart: weekStartToIsoDate(weekStartDate),
+            plannedHours: targetPlanned,
+        };
     }
 
     private mapToResponse(entry: ITimeEntry): TimeEntryResponse {
