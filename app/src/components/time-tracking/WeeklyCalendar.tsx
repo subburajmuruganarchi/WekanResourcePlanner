@@ -69,7 +69,7 @@ export function WeeklyCalendar({
     );
 
     return (
-        <div className="tt-card flex flex-col min-w-0">
+        <div className="tt-card flex flex-col min-w-0 w-full overflow-visible">
             <div className="px-6 py-5 border-b border-slate-100 shrink-0">
                 <h2 className="text-lg font-semibold text-slate-900">Weekly Calendar</h2>
                 <p className="text-sm text-slate-500 mt-1">
@@ -78,9 +78,9 @@ export function WeeklyCalendar({
                 </p>
             </div>
 
-            <div className="p-6 min-w-0">
-                <div className="tt-week-scroll tt-scroll">
-                    <div className="tt-week-grid">
+            <div className="p-6 min-w-0 w-full">
+                <div className="w-full overflow-x-auto overflow-y-visible pb-2 tt-scroll">
+                    <div className="flex flex-row flex-nowrap items-stretch gap-4 min-w-max">
                         {weekData.map((day, dayIndex) => (
                             <DayColumn
                                 key={day.fullDate}

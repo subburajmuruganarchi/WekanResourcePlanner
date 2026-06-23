@@ -40,7 +40,7 @@ export function DayColumn({
             onDragLeave={onDragLeave}
             onDrop={onDrop}
             className={cn(
-                'flex flex-col tt-card overflow-hidden min-w-[140px]',
+                'flex flex-col tt-card overflow-hidden w-[150px] min-w-[150px] shrink-0 flex-none',
                 isWeekend && 'bg-slate-50/60',
                 isDropTarget && 'ring-2 ring-indigo-400 ring-offset-2'
             )}
