@@ -7,20 +7,7 @@ import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { GlobalSearch } from './global-search';
 import { CommandPalette, type CommandItem } from './command-palette';
-
-const routeTitles: Record<string, { title: string; breadcrumb: string[] }> = {
-    '/dashboard': { title: 'Resource Intelligence', breadcrumb: ['Workspace', 'Dashboard'] },
-    '/allocation': { title: 'Resource Planning', breadcrumb: ['Workspace', 'Allocation'] },
-    '/projects': { title: 'Projects', breadcrumb: ['Workspace', 'Projects'] },
-    '/weekly-planner': { title: 'Weekly Planner', breadcrumb: ['Workspace', 'Planner'] },
-    '/time-entry': { title: 'Time Intelligence', breadcrumb: ['Operations', 'Time Tracking'] },
-    '/pm-approvals': { title: 'Approvals', breadcrumb: ['Operations', 'Approvals'] },
-    '/reports': { title: 'Reports', breadcrumb: ['Operations', 'Reports'] },
-    '/insights': { title: 'AI Insights', breadcrumb: ['Intelligence', 'Insights'] },
-    '/okrs': { title: 'OKRs', breadcrumb: ['Operations', 'OKRs'] },
-    '/inputs': { title: 'Inputs', breadcrumb: ['Admin', 'Inputs'] },
-    '/user-control': { title: 'User Management', breadcrumb: ['Admin', 'Users'] },
-};
+import { ROUTE_TITLES } from '@/lib/navigation-config';
 
 const commandItems: CommandItem[] = [
     { id: 'dash', label: 'Dashboard', group: 'Workspace', path: '/dashboard' },
@@ -39,7 +26,8 @@ export function Header() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    const meta = routeTitles[location.pathname] ?? {
+    const meta = ROUTE_TITLES[location.pathname] ??
+        ROUTE_TITLES[location.pathname.split('/').slice(0, 2).join('/')] ?? {
         title: 'R360',
         breadcrumb: ['Workspace'],
     };

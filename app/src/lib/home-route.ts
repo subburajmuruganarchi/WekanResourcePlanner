@@ -1,50 +1,40 @@
-import {
-    ROLES,
-    MANAGEMENT_VIEW_ROLES,
-    isExecutiveReadOnly,
-} from '@/lib/roles';
+import { ROLES, isExecutiveReadOnly } from '@/lib/roles';
+import { ROUTE_ACCESS } from '@/lib/navigation-config';
+import type { SystemRoleName } from '@/lib/roles';
 
-/** Default landing route after login by system access role. */
 export function getHomeRoute(role: string | undefined): string {
     switch (role) {
-        case ROLES.ADMIN:
-        case ROLES.PROJECT_MANAGER:
         case ROLES.CEO:
+            return '/executive';
         case ROLES.DELIVERY_MANAGER:
+            return '/delivery';
+        case ROLES.PROJECT_MANAGER:
+            return '/pm';
+        case ROLES.ADMIN:
             return '/dashboard';
         case ROLES.EMPLOYEE:
         case ROLES.USER:
         default:
-            return '/time-entry';
+            return '/workspace';
     }
 }
 
-const managementRoutes = MANAGEMENT_VIEW_ROLES as string[];
-
-/** Routes restricted to specific roles (sidebar-aligned). */
-export const ROUTE_ROLE_ACCESS: Record<string, string[] | '*'> = {
-    '/dashboard': managementRoutes,
-    '/projects': managementRoutes,
-    '/allocation': managementRoutes,
-    '/weekly-planner': managementRoutes,
-    '/pm-approvals': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.DELIVERY_MANAGER],
-    '/reports': managementRoutes,
-    '/insights': managementRoutes,
-    '/skills': [ROLES.ADMIN],
-    '/inputs': [ROLES.ADMIN],
-    '/user-control': [ROLES.ADMIN],
-    '/portfolios': [ROLES.ADMIN],
-    '/system-health': [ROLES.ADMIN],
-    '/time-entry': [ROLES.EMPLOYEE, ROLES.USER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.DELIVERY_MANAGER],
-    '/okrs': '*',
-};
+function resolveRouteKey(path: string): string {
+    if (path.startsWith('/projects/')) return '/projects';
+    if (ROUTE_ACCESS[path]) return path;
+    const two = path.split('/').slice(0, 2).join('/');
+    if (ROUTE_ACCESS[two]) return two;
+    return path;
+}
 
 export function canAccessRoute(role: string | undefined, path: string): boolean {
     if (!role) return false;
     if (role === ROLES.ADMIN) return true;
     if (isExecutiveReadOnly(role) && path === '/time-entry') return false;
-    const allowed = ROUTE_ROLE_ACCESS[path];
+
+    const key = resolveRouteKey(path);
+    const allowed = ROUTE_ACCESS[key];
     if (!allowed) return true;
     if (allowed === '*') return true;
-    return allowed.includes(role);
+    return allowed.includes(role as SystemRoleName);
 }

@@ -16,6 +16,25 @@ import InputsPage from "@/app/inputs/page"
 import SystemHealthPage from "@/app/system-health/page"
 import WeeklyPlannerPage from "@/app/weekly-planner/page"
 import PortfoliosPage from "@/app/portfolios/page"
+import ExecutiveDashboardPage from "@/app/executive/page"
+import PortfolioHealthPage from "@/app/executive/portfolio-health/page"
+import CustomerDeliveryPage from "@/app/executive/customer-delivery/page"
+import StrategicCapacityPage from "@/app/executive/capacity/page"
+import RiskRadarPage from "@/app/executive/risk-radar/page"
+import ExecutiveBriefPage from "@/app/executive/brief/page"
+import DeliveryCommandPage from "@/app/delivery/page"
+import DeliveryMilestonesPage from "@/app/delivery/milestones/page"
+import DeliveryCapacityPage from "@/app/delivery/capacity/page"
+import RaidBoardPage from "@/app/delivery/raid/page"
+import DeliveryRecommendationsPage from "@/app/delivery/recommendations/page"
+import PmDashboardPage from "@/app/pm-workspace/page"
+import PmTimelinePage from "@/app/pm-workspace/timeline/page"
+import PmTeamPage from "@/app/pm-workspace/team/page"
+import PmStatusReportPage from "@/app/pm-workspace/status-report/page"
+import PmRisksPage from "@/app/pm-workspace/risks/page"
+import PmDecisionsPage from "@/app/pm-workspace/decisions/page"
+import PmCommunicationPage from "@/app/pm-workspace/communication/page"
+import EmployeeWorkspacePage from "@/app/workspace/page"
 
 import { AuthProvider, useAuth } from "@/lib/auth-context"
 import { getHomeRoute } from "@/lib/home-route"
@@ -102,6 +121,25 @@ function AppRoutes() {
         </ProtectedRoute>
       }>
         <Route path="/" element={<HomeRedirect />} />
+        <Route path="/workspace" element={<EmployeeWorkspacePage />} />
+        <Route path="/executive" element={<ExecutiveDashboardPage />} />
+        <Route path="/executive/portfolio-health" element={<PortfolioHealthPage />} />
+        <Route path="/executive/customer-delivery" element={<CustomerDeliveryPage />} />
+        <Route path="/executive/capacity" element={<StrategicCapacityPage />} />
+        <Route path="/executive/risk-radar" element={<RiskRadarPage />} />
+        <Route path="/executive/brief" element={<ExecutiveBriefPage />} />
+        <Route path="/delivery" element={<DeliveryCommandPage />} />
+        <Route path="/delivery/milestones" element={<DeliveryMilestonesPage />} />
+        <Route path="/delivery/capacity" element={<DeliveryCapacityPage />} />
+        <Route path="/delivery/raid" element={<RaidBoardPage />} />
+        <Route path="/delivery/recommendations" element={<DeliveryRecommendationsPage />} />
+        <Route path="/pm" element={<PmDashboardPage />} />
+        <Route path="/pm/timeline" element={<PmTimelinePage />} />
+        <Route path="/pm/team" element={<PmTeamPage />} />
+        <Route path="/pm/status-report" element={<PmStatusReportPage />} />
+        <Route path="/pm/risks" element={<PmRisksPage />} />
+        <Route path="/pm/decisions" element={<PmDecisionsPage />} />
+        <Route path="/pm/communication" element={<PmCommunicationPage />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/:id" element={<ProjectDetail />} />

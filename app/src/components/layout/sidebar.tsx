@@ -1,104 +1,22 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
-import {
-    LayoutDashboard,
-    FolderKanban,
-    Users,
-    CalendarRange,
-    Clock,
-    ClipboardCheck,
-    FileBarChart,
-    Sparkles,
-    Shield,
-    Upload,
-    Target,
-    ChevronLeft,
-    ChevronRight,
-    Building2,
-    Settings,
-    BarChart3,
-    Briefcase,
-} from 'lucide-react';
-import { ROLES } from '@/lib/roles';
+import { ChevronLeft, ChevronRight, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ROLES } from '@/lib/roles';
+import { getNavGroupsForRole } from '@/lib/navigation-config';
 
-type NavItem = {
-    label: string;
-    icon: React.ComponentType<{ className?: string }>;
-    path: string;
-};
-
-type NavGroup = {
-    title: string;
-    items: NavItem[];
-};
-
-const navGroups: NavGroup[] = [
-    {
-        title: 'Workspace',
-        items: [
-            { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-            { label: 'Resource Planning', icon: Users, path: '/allocation' },
-            { label: 'Projects', icon: FolderKanban, path: '/projects' },
-            { label: 'Weekly Planner', icon: CalendarRange, path: '/weekly-planner' },
-        ],
-    },
-    {
-        title: 'Operations',
-        items: [
-            { label: 'Time Tracking', icon: Clock, path: '/time-entry' },
-            { label: 'Approvals', icon: ClipboardCheck, path: '/pm-approvals' },
-            { label: 'Reports', icon: FileBarChart, path: '/reports' },
-            { label: 'OKRs', icon: Target, path: '/okrs' },
-        ],
-    },
-    {
-        title: 'Intelligence',
-        items: [
-            { label: 'AI Insights', icon: Sparkles, path: '/insights' },
-            { label: 'Forecasting', icon: BarChart3, path: '/dashboard' },
-        ],
-    },
-    {
-        title: 'Admin',
-        items: [
-            { label: 'Inputs', icon: Upload, path: '/inputs' },
-            { label: 'Portfolios', icon: Briefcase, path: '/portfolios' },
-            { label: 'User Management', icon: Shield, path: '/user-control' },
-            { label: 'Settings', icon: Settings, path: '/system-health' },
-        ],
-    },
-];
-
-const allowedRoles: Record<string, string[]> = {
-    '/dashboard': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
-    '/projects': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
-    '/allocation': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
-    '/weekly-planner': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
-    '/time-entry': [ROLES.EMPLOYEE, ROLES.USER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.DELIVERY_MANAGER],
-    '/pm-approvals': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.DELIVERY_MANAGER],
-    '/okrs': ['*'],
-    '/reports': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
-    '/insights': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
-    '/inputs': [ROLES.ADMIN],
-    '/user-control': [ROLES.ADMIN],
-    '/portfolios': [ROLES.ADMIN],
-    '/system-health': [ROLES.ADMIN],
-};
-
-function canAccess(path: string, role: string | undefined): boolean {
+function canAccessItem(roles: string[] | '*', role: string | undefined): boolean {
     if (!role) return false;
     if (role === ROLES.ADMIN) return true;
-    const roles = allowedRoles[path];
-    if (!roles) return true;
-    if (roles.includes('*')) return true;
+    if (roles === '*') return true;
     return roles.includes(role);
 }
 
 export function Sidebar() {
     const { user } = useAuth();
     const [collapsed, setCollapsed] = useState(false);
+    const navGroups = getNavGroupsForRole(user?.role);
 
     const initials = user?.name
         ?.split(' ')
@@ -116,7 +34,6 @@ export function Sidebar() {
             )}
             aria-label="Main navigation"
         >
-            {/* Brand + workspace */}
             <div className={cn('border-b border-slate-100', collapsed ? 'p-3' : 'px-4 py-4')}>
                 <div className={cn('flex items-center gap-3', collapsed && 'justify-center')}>
                     <div className="w-9 h-9 enterprise-gradient-bg rounded-xl flex items-center justify-center shadow-sm shrink-0">
@@ -127,25 +44,16 @@ export function Sidebar() {
                             <p className="font-bold text-slate-900 text-base tracking-tight">R360</p>
                             <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
                                 <Building2 className="w-3 h-3" />
-                                WeKan Workspace
+                                {user?.role ?? 'Workspace'}
                             </p>
                         </div>
                     )}
                 </div>
-                {!collapsed && (
-                    <button
-                        type="button"
-                        className="mt-3 w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-600 hover:bg-white hover:border-slate-300 transition-colors"
-                    >
-                        <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-                        <span className="truncate font-medium">Enterprise · Production</span>
-                    </button>
-                )}
             </div>
 
             <nav className="sidebar-nav-scroll flex-1 overflow-y-auto py-4 px-2 space-y-6">
                 {navGroups.map((group) => {
-                    const items = group.items.filter((item) => canAccess(item.path, user?.role));
+                    const items = group.items.filter((item) => canAccessItem(item.roles, user?.role));
                     if (items.length === 0) return null;
                     return (
                         <div key={group.title}>
@@ -159,6 +67,7 @@ export function Sidebar() {
                                     <li key={item.path + item.label}>
                                         <NavLink
                                             to={item.path}
+                                            end={item.path === '/executive' || item.path === '/delivery' || item.path === '/pm' || item.path === '/workspace'}
                                             title={collapsed ? item.label : undefined}
                                             className={({ isActive }) =>
                                                 cn(
@@ -183,7 +92,6 @@ export function Sidebar() {
                 })}
             </nav>
 
-            {/* User profile */}
             <div className={cn('border-t border-slate-100 p-3', collapsed && 'flex justify-center')}>
                 {!collapsed ? (
                     <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors">
