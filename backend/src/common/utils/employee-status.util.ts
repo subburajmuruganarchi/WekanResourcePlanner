@@ -1,12 +1,7 @@
-/** Mongo filter: active roster members for dashboard team-size counts. */
+/** Mongo filter: active roster members (Availability = Available on Resource sheet). */
 export function activeEmployeeMongoFilter(): Record<string, unknown> {
     return {
         is_active: { $ne: false },
-        $or: [
-            { status: 'Active' },
-            { status: { $regex: /^active$/i } },
-            { status: 'On Probation' },
-            { status: 'On Notice Period' },
-        ],
+        status: { $not: { $regex: /^(inactive|terminated|not available|unavailable)$/i } },
     };
 }

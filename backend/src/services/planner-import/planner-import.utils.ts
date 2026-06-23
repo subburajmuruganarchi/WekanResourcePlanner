@@ -72,6 +72,70 @@ export function mapProjectStatus(sheetStatus: string): ProjectStatus {
     return normalizeProjectStatusCanonical(sheetStatus);
 }
 
+/**
+ * Resource sheet Availability column → roster active flag.
+ * Expected values: "Available", "Not Available" (also handles common variants / typos).
+ */
+export function isResourceAvailableFromSheet(availability: string | undefined | null): boolean {
+    const raw = String(availability ?? '').trim();
+    if (!raw) {
+        return true;
+    }
+
+    const normalized = raw.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const inactive = new Set([
+        'not available',
+        'unavailable',
+        'inactive',
+        'terminated',
+        'no',
+        'n',
+        'false',
+        '0',
+    ]);
+
+    if (inactive.has(normalized)) {
+        return false;
+    }
+
+    if (
+        normalized.includes('not avail') ||
+        normalized.includes('unavail') ||
+        /\binactive\b/.test(normalized) ||
+        /\bterminated\b/.test(normalized)
+    ) {
+        return false;
+    }
+
+    const active = new Set([
+        'available',
+        'active',
+        'yes',
+        'y',
+        'true',
+        '1',
+        'on probation',
+        'on notice period',
+    ]);
+
+    if (active.has(normalized)) {
+        return true;
+    }
+
+    // Legacy: "Not Available" and similar
+    if (normalized.includes('not')) {
+        return false;
+    }
+
+    return true;
+}
+
+/** Employee roster status label derived from Availability column. */
+export function employeeStatusFromSheetAvailability(availability: string | undefined | null): 'Active' | 'Inactive' {
+    return isResourceAvailableFromSheet(availability) ? 'Active' : 'Inactive';
+}
+
 export function mapPriority(type: string, status: ProjectStatus): ProjectPriority {
     if (status === ProjectStatus.ACTIVE) return ProjectPriority.HIGH;
     if (type.toLowerCase().includes('internal')) return ProjectPriority.MEDIUM;

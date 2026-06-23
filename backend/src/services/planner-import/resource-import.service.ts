@@ -13,6 +13,8 @@ import {
     upsertJobRole,
     upsertSkill,
     employeeCodeLookupKeys,
+    isResourceAvailableFromSheet,
+    employeeStatusFromSheetAvailability,
 } from './planner-import.utils';
 import { ImportWriteOptions, mongooseSessionOpts, failOrSkipRow, IMPORT_BULK_CHUNK_SIZE } from './types/import-write.options';
 import { structuredLogger } from '../../common/logger';
@@ -171,7 +173,7 @@ async function importResourceRowsBulk(
             last,
             jobRoleId,
             accessRoleId: ctx.accessByEmail.get(email) ?? ctx.employeeRoleId,
-            isAvailable: !row.availability.toLowerCase().includes('not'),
+            isAvailable: isResourceAvailableFromSheet(row.availability),
         });
     }
 
@@ -187,7 +189,7 @@ async function importResourceRowsBulk(
             job_role_id: p.jobRoleId,
             position: p.row.jobRole,
             department: departmentLabel(p.row.resourceType, p.row.location),
-            status: p.isAvailable ? 'Active' : 'Inactive',
+            status: employeeStatusFromSheetAvailability(p.row.availability),
             is_active: p.isAvailable,
             max_allocation_percent: 100,
         };
@@ -340,7 +342,7 @@ async function importResourceRowsSequential(
             }
 
             const accessRoleId = ctx.accessByEmail.get(email) ?? ctx.employeeRoleId;
-            const isAvailable = !row.availability.toLowerCase().includes('not');
+            const isAvailable = isResourceAvailableFromSheet(row.availability);
 
             const setFields: Record<string, unknown> = {
                 first_name: first,
@@ -351,7 +353,7 @@ async function importResourceRowsSequential(
                 job_role_id: jobRoleId,
                 position: row.jobRole,
                 department: departmentLabel(row.resourceType, row.location),
-                status: isAvailable ? 'Active' : 'Inactive',
+                status: employeeStatusFromSheetAvailability(row.availability),
                 is_active: isAvailable,
                 max_allocation_percent: 100,
             };

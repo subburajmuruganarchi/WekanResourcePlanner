@@ -12,6 +12,10 @@ import {
     googleSheetRowToResourceRow,
     googleSheetRowsToImportableResourceRows,
 } from './adapters/google-sheet-row.adapter';
+import {
+    isResourceAvailableFromSheet,
+    employeeStatusFromSheetAvailability,
+} from './planner-import.utils';
 
 function row(overrides: Partial<ResourceImportRow> = {}): ResourceImportRow {
     return {
@@ -180,7 +184,38 @@ describe('resource-row.validation', () => {
             expect(mapped.skills).toEqual(['NodeJS', 'NestJS', 'MongoDB', 'AWS']);
         });
 
-        it('googleSheetRowsToImportableResourceRows drops dummies from raw webhook rows', () => {
+        it('maps Status column as Availability fallback', () => {
+            const mapped = googleSheetRowToResourceRow({
+                EID: 'E002',
+                Name: 'Jane Doe',
+                Email: 'jane@wekancode.com',
+                Role: 'SDE II',
+                Status: 'Not Available',
+            });
+            expect(mapped.availability).toBe('Not Available');
+            expect(isResourceAvailableFromSheet(mapped.availability)).toBe(false);
+            expect(employeeStatusFromSheetAvailability(mapped.availability)).toBe('Inactive');
+        });
+    });
+
+    describe('Resource sheet Availability → active roster', () => {
+        it('treats Available as active', () => {
+            expect(isResourceAvailableFromSheet('Available')).toBe(true);
+            expect(employeeStatusFromSheetAvailability('Available')).toBe('Active');
+        });
+
+        it('treats Not Available as inactive', () => {
+            expect(isResourceAvailableFromSheet('Not Available')).toBe(false);
+            expect(employeeStatusFromSheetAvailability('Not Available')).toBe('Inactive');
+        });
+
+        it('defaults empty Availability to active', () => {
+            expect(isResourceAvailableFromSheet('')).toBe(true);
+        });
+    });
+
+    describe('googleSheetRowsToImportableResourceRows', () => {
+        it('drops dummies from raw webhook rows', () => {
             const importable = googleSheetRowsToImportableResourceRows([
                 {
                     EID: 'E001',

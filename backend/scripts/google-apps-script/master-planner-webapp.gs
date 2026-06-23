@@ -1965,6 +1965,14 @@ for (var p = 1; p < pdata.length; p++) {
       obj.EID = obj.ID;
       obj.Email = obj.Email || obj.eMail;
       obj.Skills = obj["Skill (from HR)"];
+      obj.Availability =
+        obj.Availability ||
+        obj.Availablility ||
+        obj.Status ||
+        obj.status ||
+        obj.Active ||
+        obj.active ||
+        "";
 
       rows.push(obj);
       return;
@@ -2267,6 +2275,13 @@ switch (value.toLowerCase().trim()) {
 
       case "skill (from hr)":
         return "Skill (from HR)";
+
+      case "availability":
+      case "availablility":
+      case "availablity":
+      case "status":
+      case "active":
+        return "Availability";
 
       default:
         return value;

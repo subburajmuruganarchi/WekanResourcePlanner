@@ -43,6 +43,7 @@ export interface EmployeeResponse {
     maxAllocationPercent: number;
     profileImage?: string;
     joinDate?: string;
+    is_active?: boolean;
 }
 
 interface PopulatedEmployee {
@@ -59,6 +60,7 @@ interface PopulatedEmployee {
     max_allocation_percent?: number;
     profile_image?: string;
     join_date?: Date;
+    is_active?: boolean;
 }
 
 interface PopulatedEmployeeSkill {
@@ -295,7 +297,8 @@ export class EmployeeService {
             availability,
             maxAllocationPercent: emp.max_allocation_percent || 100,
             profileImage: emp.profile_image,
-            joinDate: formatDate(emp.join_date)
+            joinDate: formatDate(emp.join_date),
+            is_active: emp.is_active !== false,
         };
     }
 }
