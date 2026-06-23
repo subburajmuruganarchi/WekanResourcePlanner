@@ -2,8 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import { projectService } from './project.service';
 import { CreateProjectSchema } from './project.schema';
 import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
-import { ProjectAllocation } from '../allocations/allocation.model';
-import { Types } from 'mongoose';
+import { ROLES, isEmployeeAccessRole } from '../../common/constants/roles';
+import { normalizeRoleName } from '../../common/utils/role-normalize.util';
+import { resolveEmployeeAssignedProjectIds } from '../../common/utils/employee-project-scope.util';
 
 export class ProjectController {
     /**
@@ -28,12 +29,13 @@ export class ProjectController {
     async list(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const user = req.user;
+            const role = user ? normalizeRoleName(user.role) : undefined;
             const params: any = {
                 status: req.query.status as string | undefined,
             };
 
             // RBAC: If PM, only show projects they own/manage
-            if (user && user.role === 'Project Manager') {
+            if (user && role === ROLES.PROJECT_MANAGER) {
                 const employeeId = getAuthEmployeeId(user);
                 if (employeeId) {
                     params.managerId = employeeId;
@@ -41,18 +43,14 @@ export class ProjectController {
                 }
             }
 
-            // RBAC: Employees — allocated projects for workspace; all Active projects for time entry
+            // RBAC: Employees — assigned projects for workspace; all Active projects for time entry
             const forTimeEntry = req.query.forTimeEntry === 'true';
-            if (user && (user.role === 'Employee' || user.role === 'User')) {
+            if (user && isEmployeeAccessRole(role)) {
                 const employeeId = getAuthEmployeeId(user);
                 if (forTimeEntry) {
                     params.status = 'Active';
                 } else if (employeeId) {
-                    const projectIds = await ProjectAllocation.distinct('project_id', {
-                        employee_id: new Types.ObjectId(employeeId),
-                        is_active: true,
-                    });
-                    params.projectIds = projectIds.map((id) => id.toString());
+                    params.projectIds = await resolveEmployeeAssignedProjectIds(employeeId);
                 }
             }
 

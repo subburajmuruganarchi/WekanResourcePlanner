@@ -50,3 +50,9 @@ export function isTeamTimeManager(role: string | undefined): boolean {
     const r = normalizeRoleName(role);
     return r === ROLES.PROJECT_MANAGER || r === ROLES.DELIVERY_MANAGER;
 }
+
+/** Self-service employee — own workspace and time entry only. */
+export function isEmployeeAccessRole(role: string | undefined | null): boolean {
+    const r = normalizeRoleName(role);
+    return r === ROLES.EMPLOYEE || r === ROLES.USER;
+}

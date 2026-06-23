@@ -20,7 +20,7 @@ import { useEmployees } from "@/lib/use-employees"
 import { useProjects, notifyProjectsChanged } from "@/lib/use-projects"
 import { isActiveProject } from "@/lib/project-status"
 import { useAuth } from "@/lib/auth-context"
-import { isTeamTimeManager } from "@/lib/roles"
+import { isEmployeeAccessRole, isTeamTimeManager } from "@/lib/roles"
 import { api } from "@/lib/api-client"
 import { TimeEntryEntryDialog } from "@/components/time-entry/time-entry-entry-dialog"
 import type { DayData, DayEntry, ProjectOption, DailyForecastDay, DraggedProjectPayload } from "@/components/time-entry/time-entry-types"
@@ -95,7 +95,7 @@ export function TimeEntry() {
     const [insightsDrawerOpen, setInsightsDrawerOpen] = useState(false)
 
     const { user } = useAuth()
-    const isSelfOnly = user?.role === "Employee" || user?.role === "User"
+    const isSelfOnly = isEmployeeAccessRole(user?.role)
     const isTeamLead = isTeamTimeManager(user?.role)
     const { submitTimeEntry, submitWeeklyTimesheet, deleteTimeEntry, loading } = useTimeEntries()
     const { employees, loading: loadingEmployees } = useEmployees({

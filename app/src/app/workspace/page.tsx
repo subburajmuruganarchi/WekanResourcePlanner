@@ -4,12 +4,12 @@ import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { WorkspacePageHeader, WorkspaceSection } from '@/components/workspaces/shared';
 import { useAuth } from '@/lib/auth-context';
-import { useProjects } from '@/lib/use-projects';
+import { useProjects, PROJECTS_CHANGED_EVENT } from '@/lib/use-projects';
 import { useOkrs } from '@/lib/use-okrs';
 import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { getCurrentWeekStart } from '@/lib/time-entry-week';
-import { isOperationalProject } from '@/lib/project-status';
+import { isActiveProject } from '@/lib/project-status';
 
 function getCurrentQuarter(): string {
     const now = new Date();
@@ -20,12 +20,22 @@ function getCurrentQuarter(): string {
 export default function EmployeeWorkspacePage() {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const { projects, loading: projectsLoading } = useProjects();
+    const { projects, loading: projectsLoading, refetch: refetchProjects } = useProjects();
     const { okrs, overallScore, loading: okrLoading } = useOkrs(user?.id, getCurrentQuarter());
     const [timesheetStatus, setTimesheetStatus] = useState<'Draft' | 'Submitted' | 'Approved' | 'Unknown'>('Unknown');
     const [weekHours, setWeekHours] = useState(0);
 
-    const myProjects = projects.filter((p) => isOperationalProject(p));
+    const myProjects = [...projects].sort((a, b) => {
+        const aRank = isActiveProject(a) ? 0 : 1;
+        const bRank = isActiveProject(b) ? 0 : 1;
+        return aRank - bRank || a.name.localeCompare(b.name);
+    });
+
+    useEffect(() => {
+        const onProjectsChanged = () => void refetchProjects();
+        window.addEventListener(PROJECTS_CHANGED_EVENT, onProjectsChanged);
+        return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, onProjectsChanged);
+    }, [refetchProjects]);
 
     useEffect(() => {
         if (!user?.id) return;
