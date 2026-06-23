@@ -25,13 +25,11 @@ import type { DayData, DayEntry, ProjectOption, DailyForecastDay, DraggedProject
 import { TimeHeader } from "@/components/time-tracking/TimeHeader"
 import { TimeKPICards } from "@/components/time-tracking/TimeKPICards"
 import { WeeklyNavigator } from "@/components/time-tracking/WeeklyNavigator"
-import { ProjectSelector } from "@/components/time-tracking/ProjectSelector"
-import { TimeCalendar } from "@/components/time-tracking/TimeCalendar"
 import { ViewSwitcher } from "@/components/time-tracking/ViewSwitcher"
 import { TimesheetGrid } from "@/components/time-tracking/TimesheetGrid"
+import { TimesheetWorkspace } from "@/components/time-tracking/TimesheetWorkspace"
 import { AISuggestionPanel } from "@/components/time-tracking/AISuggestionPanel"
 import { ApprovalTimeline } from "@/components/time-tracking/ApprovalTimeline"
-import { TimeIntelligencePanel } from "@/components/time-tracking/TimeIntelligencePanel"
 import { ValidationBanner } from "@/components/time-tracking/ValidationBanner"
 import { QuickTimeEntry } from "@/components/time-tracking/QuickTimeEntry"
 import { ManagerOverview } from "@/components/time-tracking/ManagerOverview"
@@ -92,6 +90,8 @@ export function TimeEntry() {
     const [entryDialog, setEntryDialog] = useState<{ dayIndex: number; tempId: string } | null>(null)
     const [dialogProjectLocked, setDialogProjectLocked] = useState(false)
     const [viewMode, setViewMode] = useState<TimeViewMode>("calendar")
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+    const [insightsDrawerOpen, setInsightsDrawerOpen] = useState(false)
 
     const { user } = useAuth()
     const isSelfOnly = user?.role === "Employee" || user?.role === "User"
@@ -743,15 +743,7 @@ export function TimeEntry() {
     const employeeDisplayName = isSelfOnly ? (user?.name ?? "—") : (selectedEmployee?.name ?? "—")
 
     return (
-        <PageContainer className="space-y-5 max-w-[1800px]">
-            {isSelfOnly && (
-                <Card className="p-4 border-indigo-100 bg-indigo-50/40 rounded-xl">
-                    <p className="text-sm text-slate-800">
-                        <strong>Welcome, {user?.name}.</strong> Log hours daily, track utilization, and submit for PM approval.
-                    </p>
-                </Card>
-            )}
-
+        <PageContainer className="max-w-[1920px] !px-8 !py-8 space-y-6 pb-24">
             {isProjectManager && employees.length === 0 && (
                 <Card className="p-4 border-amber-200 bg-amber-50 rounded-xl">
                     <p className="text-sm text-amber-900">
@@ -849,83 +841,69 @@ export function TimeEntry() {
                 <ValidationBanner missingWeekdays={missingWeekdays} remainingHours={kpis.remainingHours} />
             )}
 
-            {isProjectManager && employees.length > 0 && (
-                <ManagerOverview
-                    teamSize={employees.length}
-                    pendingApprovals={0}
-                    missingSubmissions={missingWeekdays.length > 0 ? 1 : 0}
+            <ViewSwitcher value={viewMode} onChange={setViewMode} />
+
+            {viewMode === "calendar" && (
+                <TimesheetWorkspace
+                    weekData={weekData}
+                    projects={selectableProjects}
+                    dailyForecastDays={dailyForecast?.days}
+                    allocationByProject={allocationByProject}
+                    isTimesheetLocked={isTimesheetLocked}
+                    disabled={!selectedEmployeeId}
+                    onAddEntry={addEntry}
+                    onEditEntry={openEditEntry}
+                    onDropProject={handleDropProject}
+                    kpis={kpis}
+                    topProject={topProject}
+                    missingDays={missingWeekdays.length}
+                    suggestions={suggestions}
+                    onApplySuggestion={handleApplySuggestion}
+                    mobileSidebarOpen={mobileSidebarOpen}
+                    onToggleMobileSidebar={() => setMobileSidebarOpen((o) => !o)}
+                    insightsDrawerOpen={insightsDrawerOpen}
+                    onOpenInsights={() => setInsightsDrawerOpen(true)}
+                    onCloseInsights={() => setInsightsDrawerOpen(false)}
                 />
             )}
 
-            <ViewSwitcher value={viewMode} onChange={setViewMode} />
+            {viewMode === "grid" && (
+                <TimesheetGrid rows={gridRows} onExport={handleExport} />
+            )}
 
-            <div className="flex flex-col xl:flex-row gap-5 items-start">
-                <div className="flex-1 min-w-0 space-y-4 w-full">
-                    {viewMode === "calendar" && (
-                        <div className="dashboard-card p-4">
-                            <div className="flex flex-col lg:flex-row gap-4">
-                                <ProjectSelector
-                                    projects={selectableProjects}
-                                    disabled={isTimesheetLocked || !selectedEmployeeId}
-                                    allocationByProject={allocationByProject}
-                                />
-                                <TimeCalendar
-                                    weekData={weekData}
-                                    dailyForecastDays={dailyForecast?.days}
-                                    projects={selectableProjects}
-                                    isTimesheetLocked={isTimesheetLocked}
-                                    onAddEntry={addEntry}
-                                    onEditEntry={openEditEntry}
-                                    onDropProject={handleDropProject}
-                                />
+            {viewMode === "summary" && (
+                <div className="space-y-6">
+                    {isProjectManager && employees.length > 0 && (
+                        <ManagerOverview
+                            teamSize={employees.length}
+                            pendingApprovals={0}
+                            missingSubmissions={missingWeekdays.length > 0 ? 1 : 0}
+                        />
+                    )}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <ApprovalTimeline status={weekTimesheetStatus} />
+                        <AISuggestionPanel suggestions={suggestions} onApply={handleApplySuggestion} />
+                    </div>
+                    {allocationEstimates && allocationEstimates.byProject.length > 0 && (
+                        <div className="tt-card p-6">
+                            <h3 className="text-lg font-semibold text-slate-900 mb-1">Allocation forecast</h3>
+                            <p className="text-sm text-slate-500 mb-4">
+                                Expected ~{allocationEstimates.totalEstimated}h from active allocations
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                {allocationEstimates.byProject.map((p) => (
+                                    <span
+                                        key={p.projectId}
+                                        className="text-sm px-3 py-2 bg-slate-100 rounded-xl text-slate-700"
+                                    >
+                                        {p.projectName}: {p.estimatedHours}h
+                                    </span>
+                                ))}
                             </div>
                         </div>
                     )}
-
-                    {viewMode === "grid" && (
-                        <TimesheetGrid rows={gridRows} onExport={handleExport} />
-                    )}
-
-                    {viewMode === "summary" && (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            <ApprovalTimeline status={weekTimesheetStatus} />
-                            <AISuggestionPanel suggestions={suggestions} onApply={handleApplySuggestion} />
-                            {allocationEstimates && allocationEstimates.byProject.length > 0 && (
-                                <div className="dashboard-card p-4 lg:col-span-2">
-                                    <h3 className="text-sm font-semibold text-slate-900 mb-2">Allocation forecast</h3>
-                                    <p className="text-xs text-slate-500 mb-3">
-                                        Expected ~{allocationEstimates.totalEstimated}h from project allocations
-                                    </p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {allocationEstimates.byProject.map((p) => (
-                                            <span
-                                                key={p.projectId}
-                                                className="text-xs px-3 py-1.5 bg-slate-100 rounded-lg text-slate-700"
-                                            >
-                                                {p.projectName}: {p.estimatedHours}h ({p.percentage}%)
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
                 </div>
-
-                <div className="w-full xl:w-[280px] shrink-0 space-y-3">
-                    <TimeIntelligencePanel
-                        kpis={kpis}
-                        topProject={topProject}
-                        missingDays={missingWeekdays.length}
-                        isManager={isProjectManager}
-                        teamPending={0}
-                    />
-                    {viewMode !== "summary" && (
-                        <AISuggestionPanel suggestions={suggestions} onApply={handleApplySuggestion} />
-                    )}
-                    {viewMode !== "summary" && <ApprovalTimeline status={weekTimesheetStatus} />}
-                </div>
-            </div>
+            )}
 
             {!isTimesheetLocked && (
                 <QuickTimeEntry
@@ -963,7 +941,7 @@ export function TimeEntry() {
                 />
             )}
 
-            {(hasUnsavedChanges || totalHours > 0) && !isTimesheetLocked && (
+            {dirtyEntryCount > 0 && !isTimesheetLocked && (
                 <div className="sticky bottom-0 z-20 -mx-4 px-4 py-3 bg-white/95 backdrop-blur border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] rounded-t-xl">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <p className="text-sm text-slate-600">

@@ -27,15 +27,15 @@ export function TimeEntryCard({ entry, projects, disabled, onClick }: TimeEntryC
             disabled={disabled && locked}
             onClick={onClick}
             className={cn(
-                'w-full text-left rounded-xl border px-3 py-2.5 transition-all hover:shadow-sm',
+                'w-full text-left rounded-xl border px-3 py-3 transition-all hover:shadow-md text-sm',
                 projectChipColor(entry.projectCode),
                 locked && 'opacity-85'
             )}
         >
-            <p className="text-xs font-semibold truncate">
+            <p className="font-semibold truncate leading-snug">
                 {projectNameForCode(entry.projectCode, projects)}
             </p>
-            <p className="text-[10px] opacity-80 truncate mt-0.5">{task}</p>
+            <p className="text-xs opacity-80 truncate mt-1">{task}</p>
             <div className="flex items-center justify-between mt-1.5">
                 <span className="text-sm font-bold tabular-nums">{entry.hours}h</span>
                 {entry.status && entry.status !== 'Draft' && (

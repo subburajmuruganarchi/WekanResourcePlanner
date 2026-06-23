@@ -1,11 +1,4 @@
-import {
-    Gauge,
-    Clock,
-    Hourglass,
-    TrendingUp,
-    FolderKanban,
-    ClipboardCheck,
-} from 'lucide-react';
+import { Clock, Hourglass, TrendingUp, FolderKanban } from 'lucide-react';
 import type { TimeKPIs } from './types';
 
 interface TimeKPICardsProps {
@@ -13,84 +6,46 @@ interface TimeKPICardsProps {
     loading?: boolean;
 }
 
-const CARDS = [
-    {
-        key: 'weeklyCapacity' as const,
-        label: 'Weekly Capacity',
-        icon: Gauge,
-        suffix: ' hrs',
-        hint: 'Standard work week target',
-    },
-    {
-        key: 'loggedHours' as const,
-        label: 'Logged Hours',
-        icon: Clock,
-        suffix: ' hrs',
-        hint: 'Saved and draft entries',
-    },
-    {
-        key: 'remainingHours' as const,
-        label: 'Remaining',
-        icon: Hourglass,
-        suffix: ' hrs',
-        hint: 'Hours left to reach capacity',
-    },
-    {
-        key: 'utilizationPercent' as const,
-        label: 'Utilization',
-        icon: TrendingUp,
-        suffix: '%',
-        hint: 'Logged vs weekly capacity',
-    },
-    {
-        key: 'projectsWorked' as const,
-        label: 'Projects Worked',
-        icon: FolderKanban,
-        suffix: '',
-        hint: 'Distinct projects this week',
-    },
-    {
-        key: 'approvalLabel' as const,
-        label: 'Approval Status',
-        icon: ClipboardCheck,
-        suffix: '',
-        hint: 'Current timesheet workflow state',
-        isText: true,
-    },
-];
-
+/** Primary metrics strip — compact for production density */
 export function TimeKPICards({ kpis, loading }: TimeKPICardsProps) {
+    const cards = [
+        { label: 'Logged', value: `${kpis.loggedHours}h`, sub: `of ${kpis.weeklyCapacity}h`, icon: Clock },
+        { label: 'Remaining', value: `${kpis.remainingHours}h`, sub: 'to capacity', icon: Hourglass },
+        { label: 'Utilization', value: `${kpis.utilizationPercent}%`, sub: 'this week', icon: TrendingUp },
+        { label: 'Projects', value: String(kpis.projectsWorked), sub: kpis.approvalLabel, icon: FolderKanban },
+    ];
+
     if (loading) {
         return (
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-                {CARDS.map((c) => (
-                    <div key={c.key} className="dashboard-card h-[96px] animate-pulse bg-slate-50" />
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {cards.map((c) => (
+                    <div key={c.label} className="dashboard-card h-[72px] animate-pulse bg-slate-50" />
                 ))}
             </div>
         );
     }
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-            {CARDS.map((card) => {
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {cards.map((card) => {
                 const Icon = card.icon;
-                const raw = kpis[card.key];
-                const display = card.isText ? String(raw) : `${raw}${card.suffix}`;
                 return (
                     <div
-                        key={card.key}
-                        className="dashboard-card px-4 py-3.5 flex flex-col justify-between min-h-[96px] hover:shadow-md transition-shadow"
+                        key={card.label}
+                        className="dashboard-card px-4 py-3 flex items-center gap-3"
                     >
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                                {card.label}
-                            </span>
-                            <Icon className="w-4 h-4 text-indigo-400 shrink-0" aria-hidden />
+                        <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                            <Icon className="w-4 h-4 text-indigo-600" />
                         </div>
-                        <p className="text-xl font-semibold tabular-nums text-slate-900 tracking-tight">
-                            {display}
-                        </p>
-                        <p className="text-[10px] text-slate-400 leading-snug">{card.hint}</p>
+                        <div className="min-w-0">
+                            <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">
+                                {card.label}
+                            </p>
+                            <p className="text-lg font-semibold text-slate-900 tabular-nums leading-tight">
+                                {card.value}
+                            </p>
+                            <p className="text-[10px] text-slate-400 truncate">{card.sub}</p>
+                        </div>
                     </div>
                 );
             })}

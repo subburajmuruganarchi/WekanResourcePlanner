@@ -5,7 +5,7 @@ import type { TimesheetStatus } from './types';
 const STEPS = [
     { id: 'draft', label: 'Draft' },
     { id: 'submitted', label: 'Submitted' },
-    { id: 'review', label: 'Manager Review' },
+    { id: 'review', label: 'Review' },
     { id: 'approved', label: 'Approved' },
 ] as const;
 
@@ -19,11 +19,48 @@ function activeStepIndex(status: TimesheetStatus): number {
 
 interface ApprovalTimelineProps {
     status: TimesheetStatus;
+    compact?: boolean;
 }
 
-export function ApprovalTimeline({ status }: ApprovalTimelineProps) {
+export function ApprovalTimeline({ status, compact }: ApprovalTimelineProps) {
     const active = activeStepIndex(status);
     const rejected = status === 'rejected';
+
+    if (compact) {
+        return (
+            <div>
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                    Approval
+                </p>
+                <div className="flex items-center gap-1">
+                    {STEPS.map((step, i) => (
+                        <div key={step.id} className="flex items-center flex-1 min-w-0">
+                            <div
+                                className={cn(
+                                    'h-1.5 flex-1 rounded-full',
+                                    i <= active && status !== 'rejected'
+                                        ? 'bg-indigo-500'
+                                        : i === active && rejected
+                                          ? 'bg-red-400'
+                                          : 'bg-slate-200'
+                                )}
+                                title={step.label}
+                            />
+                        </div>
+                    ))}
+                </div>
+                <p className="text-[10px] text-slate-600 mt-1.5">
+                    {status === 'approved'
+                        ? 'Approved by manager'
+                        : status === 'submitted'
+                          ? 'Awaiting manager review'
+                          : rejected
+                            ? 'Rejected — update and resubmit'
+                            : 'Draft — not yet submitted'}
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="dashboard-card px-4 py-4">
@@ -62,15 +99,6 @@ export function ApprovalTimeline({ status }: ApprovalTimelineProps) {
                             >
                                 {step.label}
                             </p>
-                            {i < STEPS.length - 1 && (
-                                <div
-                                    className={cn(
-                                        'absolute hidden',
-                                        done && 'bg-emerald-400'
-                                    )}
-                                    aria-hidden
-                                />
-                            )}
                         </div>
                     );
                 })}

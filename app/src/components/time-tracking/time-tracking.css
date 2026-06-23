@@ -1,12 +1,65 @@
+/**
+ * Time Tracking layout tokens — 8px grid, enterprise spacing.
+ */
+.tt-page {
+    --tt-gap: 24px;
+    --tt-sidebar-w: 320px;
+    --tt-insights-w: 360px;
+    --tt-radius: 16px;
+    --tt-day-min-w: 140px;
+}
+
+.tt-section-gap {
+    gap: var(--tt-gap);
+}
+
+.tt-layout {
+    display: grid;
+    gap: var(--tt-gap);
+    grid-template-columns: var(--tt-sidebar-w) minmax(0, 1fr) var(--tt-insights-w);
+    align-items: start;
+}
+
+@media (max-width: 1279px) {
+    .tt-layout {
+        grid-template-columns: var(--tt-sidebar-w) minmax(0, 1fr);
+    }
+
+    .tt-layout__insights {
+        display: none;
+    }
+}
+
+@media (max-width: 1023px) {
+    .tt-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .tt-layout__sidebar {
+        display: none;
+    }
+
+    .tt-layout__sidebar--mobile-open {
+        display: block;
+    }
+}
+
+.tt-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--tt-radius);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 12px rgb(15 23 42 / 0.06);
+}
+
 .tt-filter-input {
     display: block;
     width: 100%;
-    height: 2.25rem;
-    border-radius: 0.5rem;
+    height: 44px;
+    border-radius: 10px;
     border: 1px solid #e2e8f0;
     background: #fff;
-    padding: 0 0.625rem;
-    font-size: 0.8125rem;
+    padding: 0 12px;
+    font-size: 14px;
     color: #0f172a;
 }
 
@@ -14,4 +67,61 @@
     outline: none;
     border-color: #6366f1;
     box-shadow: 0 0 0 3px rgb(99 102 241 / 0.12);
+}
+
+.tt-filter-input::placeholder {
+    color: #94a3b8;
+}
+
+.tt-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+
+.tt-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.tt-scroll::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.tt-week-scroll {
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+}
+
+.tt-week-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(var(--tt-day-min-w), 1fr));
+    gap: 16px;
+    min-width: calc(var(--tt-day-min-w) * 7 + 16px * 6);
+}
+
+.tt-insights-sticky {
+    position: sticky;
+    top: 5rem;
+}
+
+.tt-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgb(15 23 42 / 0.4);
+}
+
+.tt-drawer-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 50;
+    height: 100%;
+    width: min(360px, 100vw);
+    background: #fff;
+    box-shadow: -8px 0 24px rgb(15 23 42 / 0.12);
+    overflow-y: auto;
+    padding: 24px;
 }

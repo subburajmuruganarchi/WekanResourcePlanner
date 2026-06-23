@@ -51,8 +51,8 @@ export function deriveTimeSuggestions(
     if (remaining > 0 && missingWeekdays.length > 0) {
         suggestions.push({
             id: 'missing-hours',
-            message: `Your timesheet is missing ${remaining}h. Complete entries for ${missingWeekdays.slice(0, 2).join(' and ')}${missingWeekdays.length > 2 ? ` (+${missingWeekdays.length - 2} more)` : ''}.`,
-            actionLabel: 'Review missing days',
+            message: `${missingWeekdays.length} weekday${missingWeekdays.length === 1 ? '' : 's'} need time entries (${remaining}h remaining to reach 40h).`,
+            actionLabel: 'Fill missing days',
         });
     }
 

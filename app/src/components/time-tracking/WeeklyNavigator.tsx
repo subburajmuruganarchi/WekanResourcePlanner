@@ -24,56 +24,48 @@ export function WeeklyNavigator({
     onDatePick,
 }: WeeklyNavigatorProps) {
     return (
-        <div className="dashboard-card px-4 py-3">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-2">
+        <div className="tt-card px-6 py-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3">
                     <Button
                         type="button"
                         variant="outline"
-                        size="icon"
-                        className="h-9 w-9 shrink-0"
+                        size="default"
+                        className="h-11 px-4"
                         onClick={onPrevious}
                         aria-label="Previous week"
                     >
-                        <ChevronLeft className="w-4 h-4" />
+                        <ChevronLeft className="w-4 h-4 mr-1" />
+                        Previous Week
                     </Button>
-                    <div className="min-w-0 text-center sm:text-left px-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                            {isCurrentWeek
-                                ? 'Current Week'
-                                : isFutureWeek
-                                  ? 'Future Week'
-                                  : 'Past Week'}
+                    <div className="min-w-0 text-center px-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {isCurrentWeek ? 'Current Week' : isFutureWeek ? 'Future Week' : 'Past Week'}
                         </p>
-                        <p className="font-semibold text-slate-900 text-sm">{weekLabel}</p>
+                        <p className="font-semibold text-slate-900 text-base whitespace-nowrap">{weekLabel}</p>
                     </div>
                     <Button
                         type="button"
                         variant="outline"
-                        size="icon"
-                        className="h-9 w-9 shrink-0"
+                        size="default"
+                        className="h-11 px-4"
                         onClick={onNext}
                         aria-label="Next week"
                     >
-                        <ChevronRight className="w-4 h-4" />
+                        Next Week
+                        <ChevronRight className="w-4 h-4 ml-1" />
                     </Button>
                 </div>
-                <div className="flex items-center gap-2 justify-center sm:justify-end">
+                <div className="flex items-center gap-3 justify-center sm:justify-end">
                     {!isCurrentWeek && (
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-9 gap-1.5"
-                            onClick={onToday}
-                        >
+                        <Button type="button" variant="outline" className="h-11 gap-2" onClick={onToday}>
                             <CalendarDays className="w-4 h-4" />
                             Today
                         </Button>
                     )}
                     <Input
                         type="date"
-                        className="h-9 w-[150px] border-slate-200"
+                        className="h-11 w-[160px] border-slate-200 text-sm"
                         value={weekStart}
                         onChange={(e) => onDatePick(e.target.value)}
                     />

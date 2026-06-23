@@ -70,10 +70,10 @@ export function TimeHeader({
         <div className="space-y-4">
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-                        Time Intelligence
-                    </h1>
-                    <p className="mt-1 text-sm text-slate-500 max-w-xl">
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+                    Time Intelligence
+                </h1>
+                <p className="mt-2 text-base text-slate-500 max-w-xl">
                         Track project effort, utilization, and delivery progress.
                     </p>
                     <div className="flex flex-wrap items-center gap-3 mt-3">
