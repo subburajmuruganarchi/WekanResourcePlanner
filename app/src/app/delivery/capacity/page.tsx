@@ -32,7 +32,7 @@ export default function DeliveryCapacityPage() {
                                 <div>
                                     <p className="font-semibold text-slate-900">{p.name}</p>
                                     <p className="text-xs text-slate-500 mt-0.5">
-                                        Risk: {risk?.reasons?.[0] ?? 'None identified'}
+                                        {risk?.reasons?.[0] ?? 'No delivery risk identified'}
                                     </p>
                                 </div>
                                 <div className="text-right">

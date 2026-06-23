@@ -9,6 +9,14 @@ import {
 } from '@/lib/dashboard-period';
 import type { DeliveryRiskItem } from '@/lib/risk-intelligence';
 import { fetchDeliveryRisks } from '@/lib/risk-intelligence';
+import {
+    buildPortfolioHealthRows,
+    buildProjectDeliveryCards,
+    type PortfolioHealthRow,
+    type ProjectDeliveryCard,
+} from '@/lib/portfolio-health-rows';
+
+export type { PortfolioHealthRow as PortfolioRow, ProjectDeliveryCard as CustomerDeliveryRow };
 
 export interface ExecutiveMetrics {
     activeProjects: number;
@@ -24,18 +32,6 @@ export interface ExecutiveMetrics {
     pendingApprovals: number;
 }
 
-export interface PortfolioRow {
-    customer: string;
-    projectId: string;
-    projectName: string;
-    projectCode: string;
-    health: 'Green' | 'Amber' | 'Red';
-    progress: number;
-    confidence: number;
-    riskLevel: 'Low' | 'Medium' | 'High';
-    owner: string;
-}
-
 export interface ExecutiveRisk {
     id: string;
     title: string;
@@ -43,25 +39,6 @@ export interface ExecutiveRisk {
     reason: string;
     action: string;
     projectName?: string;
-}
-
-export interface CustomerDeliveryRow {
-    customer: string;
-    projectCount: number;
-    health: 'Green' | 'Amber' | 'Red';
-    upcomingMilestone: string;
-    escalations: number;
-}
-
-function healthFromRisk(level?: string, score?: number): 'Green' | 'Amber' | 'Red' {
-    if (level === 'HIGH' || (score ?? 0) >= 55) return 'Red';
-    if (level === 'MEDIUM' || (score ?? 0) >= 25) return 'Amber';
-    return 'Green';
-}
-
-function confidenceFromHealth(health: 'Green' | 'Amber' | 'Red', progress: number): number {
-    const base = health === 'Green' ? 88 : health === 'Amber' ? 68 : 52;
-    return Math.min(99, Math.max(40, Math.round((base + progress) / 2)));
 }
 
 export function useExecutiveMetrics() {
@@ -123,24 +100,7 @@ export function useExecutiveMetrics() {
         void fetchData();
     }, [fetchData]);
 
-    const portfolioRows: PortfolioRow[] = projects
-        .filter((p) => p.status === 'Active' || p.status === 'Planning')
-        .map((p) => {
-            const risk = risks.find((r) => r.projectId === p.id);
-            const health = healthFromRisk(risk?.level, risk?.score);
-            const progress = risk ? Math.max(35, 100 - risk.score) : 85;
-            return {
-                customer: p.clientName || p.owner || 'Internal',
-                projectId: p.id,
-                projectName: p.name,
-                projectCode: p.code,
-                health,
-                progress,
-                confidence: confidenceFromHealth(health, progress),
-                riskLevel: health === 'Red' ? 'High' : health === 'Amber' ? 'Medium' : 'Low',
-                owner: p.managerName || '—',
-            };
-        });
+    const portfolioRows = buildPortfolioHealthRows(projects, risks);
 
     const executiveRisks: ExecutiveRisk[] = risks.slice(0, 8).map((r, i) => ({
         id: r.projectId || String(i),
@@ -156,28 +116,13 @@ export function useExecutiveMetrics() {
         projectName: r.name,
     }));
 
-    const customerMap = new Map<string, CustomerDeliveryRow>();
-    for (const row of portfolioRows) {
-        const cur = customerMap.get(row.customer) ?? {
-            customer: row.customer,
-            projectCount: 0,
-            health: 'Green' as const,
-            upcomingMilestone: 'Next release window',
-            escalations: 0,
-        };
-        cur.projectCount += 1;
-        if (row.health === 'Red') {
-            cur.health = 'Red';
-            cur.escalations += 1;
-        } else if (row.health === 'Amber' && cur.health !== 'Red') cur.health = 'Amber';
-        customerMap.set(row.customer, cur);
-    }
+    const customerRows = buildProjectDeliveryCards(portfolioRows);
 
     return {
         stats,
         portfolioRows,
         executiveRisks,
-        customerRows: [...customerMap.values()],
+        customerRows,
         loading: loading || projectsLoading,
         refetch: fetchData,
     };

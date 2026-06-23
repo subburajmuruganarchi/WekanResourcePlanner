@@ -5,41 +5,43 @@ import { useExecutiveMetrics } from '@/lib/use-executive-metrics';
 
 export default function PortfolioHealthPage() {
     const { portfolioRows, loading } = useExecutiveMetrics();
-    const [customerFilter, setCustomerFilter] = useState('');
+    const [projectFilter, setProjectFilter] = useState('');
     const [healthFilter, setHealthFilter] = useState<'all' | 'Green' | 'Amber' | 'Red'>('all');
 
-    const customers = useMemo(
-        () => [...new Set(portfolioRows.map((r) => r.customer))].sort(),
+    const projectNames = useMemo(
+        () => [...new Set(portfolioRows.map((r) => r.projectName))].sort(),
         [portfolioRows]
     );
 
     const rows = useMemo(() => {
         return portfolioRows
-            .filter((r) => !customerFilter || r.customer === customerFilter)
+            .filter((r) => !projectFilter || r.projectName === projectFilter)
             .filter((r) => healthFilter === 'all' || r.health === healthFilter)
             .sort((a, b) => {
                 const order = { Red: 0, Amber: 1, Green: 2 };
                 return order[a.health] - order[b.health] || b.confidence - a.confidence;
             });
-    }, [portfolioRows, customerFilter, healthFilter]);
+    }, [portfolioRows, projectFilter, healthFilter]);
 
     return (
         <PageContainer className="space-y-6">
             <WorkspacePageHeader
                 eyebrow="Executive Command Center"
                 title="Portfolio Health"
-                description="Enterprise portfolio view — sort and filter by customer and delivery status."
+                description="Enterprise portfolio view — each project name is the customer account. Filter by project and delivery status."
             />
 
             <div className="flex flex-wrap gap-3">
                 <select
                     className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
-                    value={customerFilter}
-                    onChange={(e) => setCustomerFilter(e.target.value)}
+                    value={projectFilter}
+                    onChange={(e) => setProjectFilter(e.target.value)}
                 >
-                    <option value="">All customers</option>
-                    {customers.map((c) => (
-                        <option key={c} value={c}>{c}</option>
+                    <option value="">All projects</option>
+                    {projectNames.map((name) => (
+                        <option key={name} value={name}>
+                            {name}
+                        </option>
                     ))}
                 </select>
                 <select
@@ -63,7 +65,6 @@ export default function PortfolioHealthPage() {
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="text-left text-xs uppercase tracking-wide text-slate-400 border-b bg-slate-50/80">
-                                        <th className="px-4 py-3">Customer</th>
                                         <th className="px-4 py-3">Project</th>
                                         <th className="px-4 py-3">Health</th>
                                         <th className="px-4 py-3">Progress</th>
@@ -75,9 +76,10 @@ export default function PortfolioHealthPage() {
                                 <tbody>
                                     {rows.map((row) => (
                                         <tr key={row.projectId} className="border-b border-slate-50">
-                                            <td className="px-4 py-3 font-medium">{row.customer}</td>
-                                            <td className="px-4 py-3">{row.projectName}</td>
-                                            <td className="px-4 py-3"><HealthBadge health={row.health} /></td>
+                                            <td className="px-4 py-3 font-medium">{row.projectName}</td>
+                                            <td className="px-4 py-3">
+                                                <HealthBadge health={row.health} />
+                                            </td>
                                             <td className="px-4 py-3">{row.progress}%</td>
                                             <td className="px-4 py-3 font-semibold">{row.confidence}%</td>
                                             <td className="px-4 py-3">{row.riskLevel}</td>

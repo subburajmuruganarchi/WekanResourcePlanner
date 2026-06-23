@@ -13,6 +13,7 @@ import {
     WorkspaceMetricCard,
     WorkspacePageHeader,
     WorkspaceSection,
+    HealthBadge,
 } from '@/components/workspaces/shared';
 import { useDeliveryCommandMetrics } from '@/lib/use-delivery-metrics';
 import { RaidSuggestionPanel } from '@/components/workspaces/ai/RaidSuggestionPanel';
@@ -20,7 +21,12 @@ import { KPIGridSkeleton } from '@/components/dashboard/KPICard';
 
 export default function DeliveryCommandPage() {
     const navigate = useNavigate();
-    const { metrics, loading } = useDeliveryCommandMetrics();
+    const { metrics, portfolioRows, loading } = useDeliveryCommandMetrics();
+
+    const sortedPortfolio = [...portfolioRows].sort((a, b) => {
+        const order = { Red: 0, Amber: 1, Green: 2 };
+        return order[a.health] - order[b.health] || b.confidence - a.confidence;
+    });
 
     return (
         <PageContainer className="space-y-8">
@@ -47,6 +53,48 @@ export default function DeliveryCommandPage() {
                     <WorkspaceMetricCard label="Upcoming Releases" value={String(metrics.upcomingReleases)} accent="emerald" icon={Rocket} />
                 </div>
             )}
+
+            <WorkspaceSection
+                title="Portfolio at a glance"
+                description="Managed projects — project name is the customer account"
+            >
+                <div className="dashboard-card overflow-hidden">
+                    {loading ? (
+                        <p className="p-6 text-sm text-slate-500">Loading portfolio…</p>
+                    ) : sortedPortfolio.length === 0 ? (
+                        <p className="p-6 text-sm text-slate-500">No active projects in your portfolio.</p>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="text-left text-xs uppercase tracking-wide text-slate-400 border-b bg-slate-50/80">
+                                        <th className="px-4 py-3">Project</th>
+                                        <th className="px-4 py-3">Health</th>
+                                        <th className="px-4 py-3">Progress</th>
+                                        <th className="px-4 py-3">Confidence</th>
+                                        <th className="px-4 py-3">Owner</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {sortedPortfolio.slice(0, 8).map((row) => (
+                                        <tr key={row.projectId} className="border-b border-slate-50">
+                                            <td className="px-4 py-3 font-medium text-slate-800">
+                                                {row.projectName}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <HealthBadge health={row.health} />
+                                            </td>
+                                            <td className="px-4 py-3">{row.progress}%</td>
+                                            <td className="px-4 py-3 font-medium">{row.confidence}%</td>
+                                            <td className="px-4 py-3 text-slate-500">{row.owner}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            </WorkspaceSection>
 
             <WorkspaceSection title="AI RAID suggestions" description="Planner-detected risks — approve to add to your RAID board (RAID remains independent).">
                 <RaidSuggestionPanel />

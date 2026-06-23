@@ -17,7 +17,7 @@ interface CopilotPrompt {
 
 const MANAGEMENT_PROMPTS: CopilotPrompt[] = [
     { label: 'Summarize company delivery health', query: 'executive delivery health summary', kind: 'management' },
-    { label: 'Which customers are at risk?', query: 'customer delivery risk', kind: 'management' },
+    { label: 'Which projects are at risk?', query: 'customer delivery risk', kind: 'management' },
 ];
 
 const PROMPTS: Record<string, CopilotPrompt[]> = {

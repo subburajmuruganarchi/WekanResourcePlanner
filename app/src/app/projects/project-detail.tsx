@@ -137,7 +137,7 @@ export function ProjectDetail() {
                             <div className="grid grid-cols-2 gap-6 pt-6 border-t border-gray-100">
                                 <div className="space-y-4">
                                     <div><p className="text-xs text-gray-500">Project Owner</p><p className="font-medium">{project.owner}</p></div>
-                                    <div><p className="text-xs text-gray-500">Client</p><p className="font-medium">{project.clientName || '-'}</p></div>
+                                    <div><p className="text-xs text-gray-500">Customer</p><p className="font-medium">{project.name || project.clientName || '-'}</p></div>
                                 </div>
                                 <div className="space-y-4">
                                     <div><p className="text-xs text-gray-500">Start Date</p><p className="font-medium">{new Date(project.startDate).toLocaleDateString()}</p></div>

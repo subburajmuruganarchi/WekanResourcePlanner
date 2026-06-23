@@ -9,6 +9,11 @@ import {
     periodQueryString,
     getCurrentMonthValue,
 } from '@/lib/dashboard-period';
+import {
+    buildPortfolioHealthRows,
+    type PortfolioHealthRow,
+} from '@/lib/portfolio-health-rows';
+import { projectCustomerLabel } from '@/lib/project-customer-label';
 import type { DeliveryRiskItem } from '@/lib/risk-intelligence';
 import { fetchDeliveryRisks } from '@/lib/risk-intelligence';
 
@@ -86,14 +91,22 @@ export function useDeliveryCommandMetrics() {
     const recommendations: ResourceRecommendation[] = risks.slice(0, 3).map((r, i) => ({
         id: String(i),
         developer: 'Available bench resource',
-        fromProject: portfolioProjects[i % Math.max(1, portfolioProjects.length)]?.name ?? 'Bench',
+        fromProject: projectCustomerLabel(
+            portfolioProjects[i % Math.max(1, portfolioProjects.length)] ?? { name: 'Bench' }
+        ),
         toProject: r.name,
         impact: r.recommendations?.[0] ?? 'Update planner hours for the current week',
     }));
 
+    const portfolioRows: PortfolioHealthRow[] = buildPortfolioHealthRows(
+        portfolioProjects,
+        risks
+    );
+
     return {
         metrics,
         portfolioProjects,
+        portfolioRows,
         risks,
         recommendations,
         loading: loading || projectsLoading,

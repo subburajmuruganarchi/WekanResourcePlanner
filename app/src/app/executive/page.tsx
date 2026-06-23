@@ -94,7 +94,6 @@ export default function ExecutiveDashboardPage() {
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="text-left text-xs uppercase tracking-wide text-slate-400 border-b bg-slate-50/80">
-                                    <th className="px-4 py-3">Customer</th>
                                     <th className="px-4 py-3">Project</th>
                                     <th className="px-4 py-3">Health</th>
                                     <th className="px-4 py-3">Progress</th>
@@ -104,8 +103,7 @@ export default function ExecutiveDashboardPage() {
                             <tbody>
                                 {filtered.slice(0, 6).map((row) => (
                                     <tr key={row.projectId} className="border-b border-slate-50 hover:bg-slate-50/50">
-                                        <td className="px-4 py-3 font-medium text-slate-800">{row.customer}</td>
-                                        <td className="px-4 py-3 text-slate-600">{row.projectName}</td>
+                                        <td className="px-4 py-3 font-medium text-slate-800">{row.projectName}</td>
                                         <td className="px-4 py-3"><HealthBadge health={row.health} /></td>
                                         <td className="px-4 py-3">{row.progress}%</td>
                                         <td className="px-4 py-3 font-medium">{row.confidence}%</td>
