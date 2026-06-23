@@ -1,5 +1,3 @@
-import { normalizeRoleName } from '../utils/role-normalize.util';
-
 /** Canonical system access role names. */
 export const ROLES = {
     ADMIN: 'Admin',
@@ -11,12 +9,6 @@ export const ROLES = {
 } as const;
 
 export type SystemRoleName = (typeof ROLES)[keyof typeof ROLES];
-
-/** Employee / User access — self-service workspace and time entry. */
-export function isEmployeeAccessRole(role: string | undefined | null): boolean {
-    const r = normalizeRoleName(role);
-    return r === ROLES.EMPLOYEE || r === ROLES.USER;
-}
 
 /** Dashboard, reports, insights, allocation/planner view. */
 export const MANAGEMENT_VIEW_ROLES: SystemRoleName[] = [

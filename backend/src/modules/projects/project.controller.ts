@@ -2,8 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { projectService } from './project.service';
 import { CreateProjectSchema } from './project.schema';
 import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
-import { ROLES, isEmployeeAccessRole } from '../../common/constants/roles';
-import { normalizeRoleName } from '../../common/utils/role-normalize.util';
+import { ROLES } from '../../common/constants/roles';
+import { normalizeRoleName, isEmployeeAccessRole } from '../../common/utils/role-normalize.util';
 import { resolveEmployeeAssignedProjectIds } from '../../common/utils/employee-project-scope.util';
 
 export class ProjectController {

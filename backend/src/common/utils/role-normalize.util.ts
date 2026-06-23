@@ -41,3 +41,9 @@ export function normalizeRoleName(role: string | undefined | null): string {
 
     return raw;
 }
+
+/** Employee / User access — self-service workspace and time entry. */
+export function isEmployeeAccessRole(role: string | undefined | null): boolean {
+    const r = normalizeRoleName(role);
+    return r === ROLES.EMPLOYEE || r === ROLES.USER;
+}
