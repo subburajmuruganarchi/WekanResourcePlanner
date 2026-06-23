@@ -65,16 +65,16 @@ export default function ExecutiveDashboardPage() {
                         </div>
                     </WorkspaceSection>
 
-                    <div className="dashboard-card p-6 bg-gradient-to-br from-indigo-50/80 to-white border-indigo-100">
+                    <div className="dashboard-card p-6 bg-gradient-to-br from-brand-50/80 to-white border-brand-100">
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                             <div>
-                                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">Delivery Confidence Score</p>
+                                <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">Delivery Confidence Score</p>
                                 <p className="text-4xl font-bold text-slate-900 mt-2">{stats.deliveryConfidence}%</p>
                                 <p className="text-sm text-slate-600 mt-2 max-w-xl">
                                     Based on project progress, resource availability, staffing risks, and plan delivery ({stats.planDeliveryPercent}%).
                                 </p>
                             </div>
-                            <Target className="w-12 h-12 text-indigo-500 opacity-80 hidden md:block" />
+                            <Target className="w-12 h-12 text-brand-500 opacity-80 hidden md:block" />
                         </div>
                     </div>
                 </>

@@ -57,7 +57,7 @@ export function OkrOrgRollup({ period, readOnly = false }: OkrOrgRollupProps) {
         <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
             <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
-                    <Target className="w-5 h-5 text-indigo-600" />
+                    <Target className="w-5 h-5 text-brand-600" />
                     <div>
                         <h3 className="font-semibold text-slate-900">
                             {readOnly ? 'Executive OKR rollup' : 'Portfolio OKR rollup'}

@@ -28,9 +28,9 @@ export default function StrategicCapacityPage() {
                 </div>
             </WorkspaceSection>
 
-            <div className="dashboard-card p-6 border-indigo-100 bg-gradient-to-br from-indigo-50/50 to-white">
+            <div className="dashboard-card p-6 border-brand-100 bg-gradient-to-br from-brand-50/50 to-white">
                 <div className="flex gap-3">
-                    <Sparkles className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+                    <Sparkles className="w-5 h-5 text-brand-600 shrink-0 mt-0.5" />
                     <div>
                         <p className="text-sm font-semibold text-slate-900">AI recommendation</p>
                         <p className="text-sm text-slate-600 mt-1 leading-relaxed">{recommendation}</p>

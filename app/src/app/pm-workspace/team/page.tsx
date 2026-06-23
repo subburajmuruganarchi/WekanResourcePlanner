@@ -21,7 +21,7 @@ export default function PmTeamPage() {
                             <div key={e.id} className="dashboard-card p-4">
                                 <p className="font-semibold text-slate-900">{e.name}</p>
                                 <p className="text-xs text-slate-500 mt-1">{e.jobRole || e.position || e.department}</p>
-                                <p className="text-xs text-indigo-600 mt-2">{e.availability ?? 100}% available</p>
+                                <p className="text-xs text-brand-600 mt-2">{e.availability ?? 100}% available</p>
                             </div>
                         ))
                     )}

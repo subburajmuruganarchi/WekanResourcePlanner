@@ -34,7 +34,7 @@ export default function PmDashboardPage() {
                             key={p.id}
                             type="button"
                             onClick={() => navigate(`/projects/${p.id}`)}
-                            className="dashboard-card p-4 text-left hover:border-indigo-200 transition-colors"
+                            className="dashboard-card p-4 text-left hover:border-brand-200 transition-colors"
                         >
                             <p className="font-semibold text-slate-900">{p.name}</p>
                             <p className="text-xs text-slate-500 mt-1">{p.code} · {p.status}</p>

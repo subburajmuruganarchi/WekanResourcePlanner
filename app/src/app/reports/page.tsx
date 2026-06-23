@@ -134,7 +134,7 @@ export default function ReportsPage() {
             description:
                 "Project-wise master schedule from the current week onwards. Aggregate project hours plus individual resource allocations per week.",
             icon: FolderKanban,
-            colorClass: "bg-indigo-50 text-indigo-600",
+            colorClass: "bg-brand-50 text-brand-600",
             tags: ["Master schedule", "Project-wise"],
         },
         {

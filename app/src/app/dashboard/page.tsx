@@ -301,7 +301,7 @@ export default function Dashboard() {
             {/* Enterprise header */}
             <header className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
                 <div className="max-w-2xl">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600 mb-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 mb-2">
                         {isCeoView ? 'Executive intelligence' : 'Workforce intelligence'}
                     </p>
                     <h1 className="text-2xl lg:text-3xl font-bold text-[#111827] tracking-tight">
@@ -456,7 +456,7 @@ export default function Dashboard() {
                             title="AI workforce risk detection"
                             description="Predictive staffing gaps ranked by delivery impact."
                             action={
-                                <Button variant="ghost" size="sm" className="gap-1.5 text-indigo-600">
+                                <Button variant="ghost" size="sm" className="gap-1.5 text-brand-600">
                                     <Sparkles className="w-4 h-4" />
                                     Powered by R360 AI
                                 </Button>
@@ -472,8 +472,8 @@ export default function Dashboard() {
                     <WorkforceIntelligenceSection items={intelligenceItems} />
 
                     {!insightLoading && insight?.narrative && (
-                        <DashboardCard className="bg-gradient-to-br from-indigo-50/50 to-white border-indigo-100">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-2">
+                        <DashboardCard className="bg-gradient-to-br from-brand-50/50 to-white border-brand-100">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">
                                 Executive summary
                             </p>
                             <p className="text-sm text-slate-700 leading-relaxed">{insight.narrative}</p>
@@ -481,7 +481,7 @@ export default function Dashboard() {
                                 <ul className="mt-3 space-y-1.5">
                                     {insight.bullets.slice(0, 4).map((b) => (
                                         <li key={b} className="text-xs text-slate-600 flex gap-2">
-                                            <TrendingUp className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
+                                            <TrendingUp className="w-3.5 h-3.5 text-brand-500 shrink-0 mt-0.5" />
                                             {b}
                                         </li>
                                     ))}

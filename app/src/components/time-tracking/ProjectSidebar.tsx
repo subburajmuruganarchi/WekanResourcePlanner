@@ -121,7 +121,7 @@ export function ProjectSidebar({ projects, disabled, allocationByProject }: Proj
         <div className="tt-card flex flex-col w-full max-h-[360px]">
             <div className="p-6 border-b border-slate-100 shrink-0">
                 <div className="flex items-center gap-2 mb-4">
-                    <Briefcase className="w-5 h-5 text-indigo-500" />
+                    <Briefcase className="w-5 h-5 text-brand-500" />
                     <h2 className="text-lg font-semibold text-slate-900">Projects</h2>
                 </div>
                 <div className="relative">
@@ -143,7 +143,7 @@ export function ProjectSidebar({ projects, disabled, allocationByProject }: Proj
                             className={cn(
                                 'rounded-full px-3 py-1 text-xs font-medium transition-colors',
                                 filter === f.id
-                                    ? 'bg-indigo-600 text-white'
+                                    ? 'bg-brand-600 text-white'
                                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                             )}
                         >

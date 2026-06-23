@@ -15,7 +15,7 @@ export function AISuggestionCard({ suggestions, onApply }: AISuggestionCardProps
     return (
         <div className="tt-card overflow-hidden w-full max-w-[360px] mt-6">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-indigo-500" />
+                <Sparkles className="w-5 h-5 text-brand-500" />
                 <h3 className="text-base font-semibold text-slate-900">AI Recommendations</h3>
             </div>
             <div className="p-5 space-y-4">

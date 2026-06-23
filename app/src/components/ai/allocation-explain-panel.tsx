@@ -13,7 +13,7 @@ export function AllocationExplainPanel({ explanation, loading, onClose }: Alloca
     if (!loading && !explanation) return null;
 
     return (
-        <Card className="mt-4 p-5 border-indigo-100 bg-indigo-50/40">
+        <Card className="mt-4 p-5 border-brand-100 bg-brand-50/40">
             <div className="flex justify-between items-start mb-3">
                 <div>
                     <h4 className="font-semibold text-gray-900">Why suggested?</h4>

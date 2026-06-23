@@ -106,7 +106,7 @@ export function TimeHeader({
                             {statusLabel}
                         </span>
                         {isProjectManager && (
-                            <span className="text-[11px] text-indigo-600 font-medium bg-indigo-50 px-2 py-0.5 rounded-full">
+                            <span className="text-[11px] text-brand-600 font-medium bg-brand-50 px-2 py-0.5 rounded-full">
                                 Manager view
                             </span>
                         )}

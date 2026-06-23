@@ -270,7 +270,7 @@ export function Allocation() {
                 <p className="text-sm text-gray-600 mt-1">
                     Allocate resources to projects based on skills, availability, and experience.
                     {isReadOnlyExecutive && (
-                        <span className="ml-2 text-indigo-600 font-medium">Executive view — read only</span>
+                        <span className="ml-2 text-brand-600 font-medium">Executive view — read only</span>
                     )}
                 </p>
             </div>

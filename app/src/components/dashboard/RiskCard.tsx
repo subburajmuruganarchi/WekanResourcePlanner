@@ -62,7 +62,7 @@ export function RiskCard({ risk, onView }: RiskCardProps) {
                     <ul className="space-y-1">
                         {missing.map((m) => (
                             <li key={m} className="text-xs text-slate-700 flex items-center gap-2">
-                                <span className="w-1 h-1 rounded-full bg-indigo-400 shrink-0" />
+                                <span className="w-1 h-1 rounded-full bg-brand-400 shrink-0" />
                                 {m}
                             </li>
                         ))}
@@ -86,7 +86,7 @@ export function RiskCard({ risk, onView }: RiskCardProps) {
                 <Button
                     variant="outline"
                     size="sm"
-                    className="w-full gap-1.5 text-indigo-700 border-indigo-200 hover:bg-indigo-50"
+                    className="w-full gap-1.5 text-brand-700 border-brand-200 hover:bg-brand-50"
                     onClick={() => onView?.(risk.projectId)}
                 >
                     View recommendation

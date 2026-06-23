@@ -13,7 +13,7 @@ export function InsightPanel({ kpis, topProject, missingDays }: InsightPanelProp
             icon: BarChart3,
             label: 'Utilization',
             value: `${kpis.utilizationPercent}%`,
-            accent: kpis.utilizationPercent >= 85 ? 'text-amber-600' : 'text-indigo-600',
+            accent: kpis.utilizationPercent >= 85 ? 'text-amber-600' : 'text-brand-600',
         },
         {
             icon: FolderKanban,

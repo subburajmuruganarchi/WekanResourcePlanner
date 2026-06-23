@@ -42,13 +42,13 @@ export function DayColumn({
             className={cn(
                 'flex flex-col tt-card overflow-hidden w-[150px] min-w-[150px] shrink-0 flex-none',
                 isWeekend && 'bg-slate-50/60',
-                isDropTarget && 'ring-2 ring-indigo-400 ring-offset-2'
+                isDropTarget && 'ring-2 ring-brand-500 ring-offset-2'
             )}
         >
             <header
                 className={cn(
                     'h-[90px] shrink-0 px-4 py-3 border-b border-slate-100 flex flex-col justify-between',
-                    isDropTarget ? 'bg-indigo-50' : 'bg-slate-50/80'
+                    isDropTarget ? 'bg-brand-50' : 'bg-slate-50/80'
                 )}
             >
                 <div>
@@ -60,7 +60,7 @@ export function DayColumn({
                 <div className="flex items-center justify-between">
                     <span className="text-sm font-bold text-slate-800 tabular-nums">{dayTotal}h</span>
                     {forecast && forecast.totalForecast > 0 && (
-                        <span className="text-xs text-indigo-600 tabular-nums">
+                        <span className="text-xs text-brand-600 tabular-nums">
                             / {forecast.totalForecast}h
                         </span>
                     )}
@@ -70,7 +70,7 @@ export function DayColumn({
             <div
                 className={cn(
                     'flex-1 min-h-[500px] p-3 flex flex-col',
-                    isDropTarget && 'bg-indigo-50/20'
+                    isDropTarget && 'bg-brand-50/20'
                 )}
             >
                 {day.entries.length === 0 ? (
@@ -78,7 +78,7 @@ export function DayColumn({
                         <p
                             className={cn(
                                 'text-sm text-center px-2',
-                                isDropTarget ? 'text-indigo-600 font-medium' : 'text-slate-400'
+                                isDropTarget ? 'text-brand-600 font-medium' : 'text-slate-400'
                             )}
                         >
                             {isDropTarget ? 'Drop project here' : 'No time logged'}
@@ -104,7 +104,7 @@ export function DayColumn({
                     <button
                         type="button"
                         onClick={() => onAddEntry(dayIndex)}
-                        className="w-full flex items-center justify-center gap-1.5 h-10 rounded-xl text-sm font-medium text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 transition-colors"
+                        className="w-full flex items-center justify-center gap-1.5 h-10 rounded-xl text-sm font-medium text-slate-600 hover:text-brand-700 hover:bg-brand-50 transition-colors"
                     >
                         <Plus className="w-4 h-4" />
                         Add time

@@ -25,7 +25,7 @@ export default function PmTimelinePage() {
                                     <div key={phase} className="text-center">
                                         <div className="h-2 rounded-full bg-slate-100 mb-2 overflow-hidden">
                                             <div
-                                                className="h-full bg-indigo-500 rounded-full"
+                                                className="h-full bg-brand-500 rounded-full"
                                                 style={{ width: `${Math.min(100, 40 + i * 18)}%` }}
                                             />
                                         </div>

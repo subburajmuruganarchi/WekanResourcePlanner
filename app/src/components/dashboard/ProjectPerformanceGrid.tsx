@@ -116,7 +116,7 @@ export function ProjectPerformanceGrid({ rows, loading, onRowClick }: ProjectPer
                                 setPage(0);
                             }}
                             placeholder="Search projects…"
-                            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+                            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                             aria-label="Search projects"
                         />
                     </div>
@@ -168,7 +168,7 @@ export function ProjectPerformanceGrid({ rows, loading, onRowClick }: ProjectPer
                                     <tr
                                         key={row.projectId}
                                         className={cn(
-                                            'border-b border-slate-50 hover:bg-indigo-50/30 transition-colors',
+                                            'border-b border-slate-50 hover:bg-brand-50/30 transition-colors',
                                             onRowClick && 'cursor-pointer'
                                         )}
                                         onClick={() => onRowClick?.(row.projectId)}

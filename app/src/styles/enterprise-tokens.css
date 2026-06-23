@@ -1,18 +1,23 @@
 /**
- * Enterprise design tokens — 8px spacing grid, indigo primary, neutral surfaces.
+ * Enterprise design tokens — WeKan brand palette (coral gradient + navy).
+ * Source: https://www.wekanenterprisesolutions.com/
  */
 @theme {
-  --color-brand-50: #eef2ff;
-  --color-brand-100: #e0e7ff;
-  --color-brand-200: #c7d2fe;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
-  --color-brand-700: #4338ca;
+  --color-brand-50: #fff5f6;
+  --color-brand-100: #ffe4e8;
+  --color-brand-200: #fecdd6;
+  --color-brand-400: #f37555;
+  --color-brand-500: #f26555;
+  --color-brand-600: #ee2f58;
+  --color-brand-700: #d4254d;
 
-  --color-surface: #f8fafc;
-  --color-ink: #111827;
-  --color-ink-muted: #64748b;
-  --color-border-subtle: #e2e8f0;
+  --color-navy: #001c2a;
+  --color-navy-muted: #0a2d3f;
+
+  --color-surface: #fafafa;
+  --color-ink: #111011;
+  --color-ink-muted: #77777a;
+  --color-border-subtle: #dce4ea;
 
   --color-success: #059669;
   --color-success-bg: #ecfdf5;
@@ -22,25 +27,25 @@
   --color-critical-bg: #fef2f2;
 
   --radius-card: 14px;
-  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 12px rgb(15 23 42 / 0.06);
-  --shadow-card-hover: 0 4px 6px rgb(15 23 42 / 0.05), 0 12px 28px rgb(15 23 42 / 0.08);
+  --shadow-card: 0 1px 2px rgb(0 28 42 / 0.04), 0 4px 12px rgb(0 28 42 / 0.06);
+  --shadow-card-hover: 0 4px 6px rgb(0 28 42 / 0.05), 0 12px 28px rgb(0 28 42 / 0.08);
 }
 
 .enterprise-gradient-text {
-  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #818cf8 100%);
+  background: linear-gradient(135deg, #f37555 0%, #ee2f58 50%, #f26555 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
 .enterprise-gradient-bg {
-  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  background: linear-gradient(180deg, #f37555 0%, #ee2f58 100%);
 }
 
 .enterprise-nav-active {
-  background: linear-gradient(135deg, rgb(79 70 229 / 0.12) 0%, rgb(99 102 241 / 0.08) 100%);
+  background: linear-gradient(135deg, rgb(238 47 88 / 0.1) 0%, rgb(242 101 85 / 0.06) 100%);
   color: var(--color-brand-700);
-  box-shadow: inset 0 0 0 1px rgb(99 102 241 / 0.15);
+  box-shadow: inset 0 0 0 1px rgb(238 47 88 / 0.14);
 }
 
 .dashboard-card {

@@ -101,7 +101,7 @@ export function CommandPalette({ items }: CommandPaletteProps) {
                                         type="button"
                                         className={cn(
                                             'w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-sm text-left',
-                                            'hover:bg-indigo-50 text-slate-800 transition-colors'
+                                            'hover:bg-brand-50 text-slate-800 transition-colors'
                                         )}
                                         onClick={() => run(item.path)}
                                     >

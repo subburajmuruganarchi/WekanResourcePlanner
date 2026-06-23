@@ -32,7 +32,7 @@ export default function ExecutiveBriefPage() {
                                 <ul className="mt-4 space-y-2">
                                     {insight.bullets.map((b) => (
                                         <li key={b} className="text-sm text-slate-600 flex gap-2">
-                                            <span className="text-indigo-500">•</span>
+                                            <span className="text-brand-500">•</span>
                                             {b}
                                         </li>
                                     ))}

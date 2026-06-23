@@ -67,7 +67,7 @@ export function Header() {
                         {meta.breadcrumb.map((crumb, i) => (
                             <span key={crumb} className="flex items-center gap-1.5">
                                 {i > 0 && <span>/</span>}
-                                <span className={i === meta.breadcrumb.length - 1 ? 'text-indigo-600 font-medium' : ''}>
+                                <span className={i === meta.breadcrumb.length - 1 ? 'text-brand-600 font-medium' : ''}>
                                     {crumb}
                                 </span>
                             </span>
@@ -106,7 +106,7 @@ export function Header() {
                             >
                                 <Bell className="w-5 h-5" />
                                 {unreadCount > 0 && (
-                                    <span className="absolute top-1 right-1 w-4 h-4 bg-indigo-600 rounded-full border-2 border-white flex items-center justify-center text-[9px] font-bold text-white">
+                                    <span className="absolute top-1 right-1 w-4 h-4 bg-brand-600 rounded-full border-2 border-white flex items-center justify-center text-[9px] font-bold text-white">
                                         {unreadCount > 9 ? '9+' : unreadCount}
                                     </span>
                                 )}
@@ -119,7 +119,7 @@ export function Header() {
                                     <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="h-auto p-0 text-xs text-indigo-600 hover:text-indigo-700 hover:bg-transparent"
+                                        className="h-auto p-0 text-xs text-brand-600 hover:text-brand-700 hover:bg-transparent"
                                         onClick={() => markAllAsRead()}
                                     >
                                         <Check className="w-3 h-3 mr-1" />
@@ -135,7 +135,7 @@ export function Header() {
                                         {notifications.map((notif: { id: string; read: boolean; type: string; title: string; message: string; createdAt: string }) => (
                                             <div
                                                 key={notif.id}
-                                                className={`p-4 flex gap-3 transition-colors cursor-pointer ${notif.read ? 'bg-white' : 'bg-indigo-50/40'}`}
+                                                className={`p-4 flex gap-3 transition-colors cursor-pointer ${notif.read ? 'bg-white' : 'bg-brand-50/40'}`}
                                                 onClick={() => !notif.read && markAsRead(notif.id)}
                                             >
                                                 <div className="shrink-0 mt-0.5">{getIcon(notif.type, notif.read)}</div>
@@ -159,7 +159,7 @@ export function Header() {
                     <div className="h-8 w-px bg-slate-200 hidden sm:block" aria-hidden />
 
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-xs font-semibold text-indigo-700 shrink-0">
+                        <div className="w-8 h-8 bg-brand-100 rounded-full flex items-center justify-center text-xs font-semibold text-brand-700 shrink-0">
                             {initials || '?'}
                         </div>
                         <button

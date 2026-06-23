@@ -36,7 +36,7 @@ export default function DeliveryCapacityPage() {
                                     </p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-2xl font-bold text-indigo-600">{confidence}%</p>
+                                    <p className="text-2xl font-bold text-brand-600">{confidence}%</p>
                                     <p className="text-xs text-slate-500">confidence</p>
                                 </div>
                             </div>
@@ -46,7 +46,7 @@ export default function DeliveryCapacityPage() {
             </WorkspaceSection>
 
             <div className="dashboard-card p-5 flex gap-3">
-                <Sparkles className="w-5 h-5 text-indigo-600 shrink-0" />
+                <Sparkles className="w-5 h-5 text-brand-600 shrink-0" />
                 <p className="text-sm text-slate-700">{recommendation}</p>
             </div>
         </PageContainer>

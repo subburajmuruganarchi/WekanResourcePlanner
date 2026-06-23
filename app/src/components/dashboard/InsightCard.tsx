@@ -12,13 +12,13 @@ export interface InsightCardProps {
 }
 
 const toneStyles = {
-    indigo: 'from-indigo-500/10 to-violet-500/5 border-indigo-100',
+    indigo: 'from-brand-500/10 to-violet-500/5 border-brand-100',
     amber: 'from-amber-500/10 to-orange-500/5 border-amber-100',
     emerald: 'from-emerald-500/10 to-teal-500/5 border-emerald-100',
 };
 
 const iconStyles = {
-    indigo: 'bg-indigo-100 text-indigo-600',
+    indigo: 'bg-brand-100 text-brand-600',
     amber: 'bg-amber-100 text-amber-700',
     emerald: 'bg-emerald-100 text-emerald-700',
 };

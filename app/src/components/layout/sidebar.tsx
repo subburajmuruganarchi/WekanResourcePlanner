@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROLES } from '@/lib/roles';
 import { getNavGroupsForRole } from '@/lib/navigation-config';
+import { BrandLogo } from '@/components/brand/brand-logo';
 
 function canAccessItem(roles: string[] | '*', role: string | undefined): boolean {
     if (!role) return false;
@@ -36,9 +37,7 @@ export function Sidebar() {
         >
             <div className={cn('border-b border-slate-100', collapsed ? 'p-3' : 'px-4 py-4')}>
                 <div className={cn('flex items-center gap-3', collapsed && 'justify-center')}>
-                    <div className="w-9 h-9 enterprise-gradient-bg rounded-xl flex items-center justify-center shadow-sm shrink-0">
-                        <span className="text-white font-bold text-sm">R</span>
-                    </div>
+                    <BrandLogo className={collapsed ? 'h-9 w-9' : 'h-9 w-9'} />
                     {!collapsed && (
                         <div className="min-w-0">
                             <p className="font-bold text-slate-900 text-base tracking-tight">R360</p>
@@ -95,7 +94,7 @@ export function Sidebar() {
             <div className={cn('border-t border-slate-100 p-3', collapsed && 'flex justify-center')}>
                 {!collapsed ? (
                     <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors">
-                        <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold shrink-0">
+                        <div className="w-9 h-9 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-bold shrink-0">
                             {initials ?? '?'}
                         </div>
                         <div className="min-w-0 flex-1">
@@ -104,7 +103,7 @@ export function Sidebar() {
                         </div>
                     </div>
                 ) : (
-                    <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">
+                    <div className="w-9 h-9 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-bold">
                         {initials ?? '?'}
                     </div>
                 )}
@@ -113,7 +112,7 @@ export function Sidebar() {
             <button
                 type="button"
                 onClick={() => setCollapsed((c) => !c)}
-                className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+                className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:text-brand-600 hover:border-brand-200 transition-colors"
                 aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
                 {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}

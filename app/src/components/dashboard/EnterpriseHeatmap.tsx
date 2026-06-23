@@ -6,7 +6,7 @@ import type { AllocationHeatmapProps } from './allocation-heatmap';
 function cellColor(percent: number): string {
     if (percent <= 0) return 'bg-slate-50 text-slate-300';
     if (percent <= 50) return 'bg-sky-100 text-sky-900';
-    if (percent <= 85) return 'bg-indigo-200 text-indigo-950';
+    if (percent <= 85) return 'bg-brand-200 text-brand-700';
     if (percent <= 100) return 'bg-amber-200 text-amber-950';
     return 'bg-orange-400 text-white';
 }
@@ -143,7 +143,7 @@ export function EnterpriseHeatmap({
 
             <div className="flex flex-wrap gap-4 text-[10px] text-slate-500">
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-sky-100" /> 1–50% Low</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-indigo-200" /> 51–85% Optimal</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-brand-200" /> 51–85% Optimal</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-200" /> 86–100% High</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-orange-400" /> 100%+ Over</span>
             </div>

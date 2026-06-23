@@ -24,7 +24,7 @@ export function DashboardCard({
             className={cn(
                 'dashboard-card',
                 paddingMap[padding],
-                hover && 'hover:border-indigo-100',
+                hover && 'hover:border-brand-100',
                 className
             )}
             {...props}

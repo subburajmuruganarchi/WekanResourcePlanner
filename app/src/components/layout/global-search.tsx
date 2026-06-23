@@ -62,7 +62,7 @@ export function GlobalSearch() {
                 onFocus={() => query.length >= 2 && setOpen(true)}
                 onBlur={() => setTimeout(() => setOpen(false), 200)}
                 placeholder="Search projects, employees..."
-                className="w-full pl-10 pr-10 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 hover:bg-white transition-colors"
+                className="w-full pl-10 pr-10 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 hover:bg-white transition-colors"
             />
             {open && query.length >= 2 && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">

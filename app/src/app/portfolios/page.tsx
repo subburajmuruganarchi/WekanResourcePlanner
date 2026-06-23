@@ -89,7 +89,7 @@ export default function PortfoliosPage() {
     return (
         <PageContainer className="space-y-8">
             <header>
-                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600 mb-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 mb-2">
                     Admin
                 </p>
                 <h1 className="text-2xl font-bold text-slate-900">Delivery Portfolios</h1>
@@ -172,7 +172,7 @@ export default function PortfoliosPage() {
                     portfolios.map((p) => (
                         <div key={p.id} className="rounded-xl border border-slate-200 bg-white p-4">
                             <div className="flex items-start gap-3">
-                                <Briefcase className="w-5 h-5 text-indigo-600 mt-0.5" />
+                                <Briefcase className="w-5 h-5 text-brand-600 mt-0.5" />
                                 <div>
                                     <p className="font-semibold text-slate-900">{p.name}</p>
                                     {p.description && (

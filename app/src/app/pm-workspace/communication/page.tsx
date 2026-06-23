@@ -67,7 +67,7 @@ export default function PmCommunicationPage() {
                         visible.map((item) => (
                             <div key={item.id} className="dashboard-card p-4">
                                 <div className="flex flex-wrap gap-2 items-center mb-2">
-                                    <span className="text-xs font-semibold text-indigo-600">{item.category}</span>
+                                    <span className="text-xs font-semibold text-brand-600">{item.category}</span>
                                     <HealthBadge health={item.status === 'Closed' ? 'Green' : item.priority === 'High' ? 'Red' : 'Amber'} />
                                 </div>
                                 <p className="font-semibold text-slate-900">{item.title}</p>

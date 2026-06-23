@@ -73,7 +73,7 @@ export function UtilizationAnalytics({
                                 onClick={() => setView('12w')}
                                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                                     view === '12w'
-                                        ? 'bg-white text-indigo-700 shadow-sm'
+                                        ? 'bg-white text-brand-700 shadow-sm'
                                         : 'text-slate-600 hover:text-slate-900'
                                 }`}
                             >
@@ -84,7 +84,7 @@ export function UtilizationAnalytics({
                                 onClick={() => setView('90d')}
                                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                                     view === '90d'
-                                        ? 'bg-white text-indigo-700 shadow-sm'
+                                        ? 'bg-white text-brand-700 shadow-sm'
                                         : 'text-slate-600 hover:text-slate-900'
                                 }`}
                             >

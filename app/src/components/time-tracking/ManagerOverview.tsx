@@ -47,7 +47,7 @@ export function ManagerOverview({
                         >
                             <div className="flex items-center gap-2">
                                 <Icon
-                                    className={`w-4 h-4 ${item.warn ? 'text-amber-500' : 'text-indigo-500'}`}
+                                    className={`w-4 h-4 ${item.warn ? 'text-amber-500' : 'text-brand-500'}`}
                                 />
                                 <span className="text-[10px] font-semibold uppercase text-slate-500">
                                     {item.label}

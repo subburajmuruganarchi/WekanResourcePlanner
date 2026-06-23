@@ -36,7 +36,7 @@ export default function RiskRadarPage() {
                                     </span>
                                 </div>
                                 {risk.projectName && (
-                                    <p className="text-xs text-indigo-600 font-medium mb-2">{risk.projectName}</p>
+                                    <p className="text-xs text-brand-600 font-medium mb-2">{risk.projectName}</p>
                                 )}
                                 <p className="text-sm text-slate-600"><span className="font-medium">Reason:</span> {risk.reason}</p>
                                 <p className="text-sm text-slate-800 mt-2">

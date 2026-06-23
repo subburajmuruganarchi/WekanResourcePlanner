@@ -52,21 +52,21 @@ export function MatchWhyHint({ emp, rankPosition }: { emp: RankedEmployee; rankP
             </button>
             <div
                 role="tooltip"
-                className="pointer-events-none absolute bottom-full right-0 mb-2 z-30 w-64 rounded-lg border border-indigo-100 bg-white p-3 shadow-lg opacity-0 invisible translate-y-1 transition-all duration-150 group-hover/hint:opacity-100 group-hover/hint:visible group-hover/hint:translate-y-0 group-focus-within/hint:opacity-100 group-focus-within/hint:visible group-focus-within/hint:translate-y-0"
+                className="pointer-events-none absolute bottom-full right-0 mb-2 z-30 w-64 rounded-lg border border-brand-100 bg-white p-3 shadow-lg opacity-0 invisible translate-y-1 transition-all duration-150 group-hover/hint:opacity-100 group-hover/hint:visible group-hover/hint:translate-y-0 group-focus-within/hint:opacity-100 group-focus-within/hint:visible group-focus-within/hint:translate-y-0"
             >
-                <p className="text-[10px] font-semibold text-indigo-700 uppercase tracking-wider mb-2">
+                <p className="text-[10px] font-semibold text-brand-700 uppercase tracking-wider mb-2">
                     Match breakdown
                 </p>
                 <ul className="space-y-1.5 text-xs text-gray-600 leading-relaxed">
                     {lines.map((line, i) => (
                         <li key={i} className="flex gap-1.5">
-                            <span className="text-indigo-400 shrink-0">•</span>
+                            <span className="text-brand-400 shrink-0">•</span>
                             <span>{line}</span>
                         </li>
                     ))}
                 </ul>
                 <div
-                    className="absolute -bottom-1.5 right-4 h-3 w-3 rotate-45 border-r border-b border-indigo-100 bg-white"
+                    className="absolute -bottom-1.5 right-4 h-3 w-3 rotate-45 border-r border-b border-brand-100 bg-white"
                     aria-hidden
                 />
             </div>

@@ -55,9 +55,9 @@ export default function RaidBoardPage() {
             />
 
             <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setFilter('all')} className={`px-3 py-1.5 rounded-lg text-sm border ${filter === 'all' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'border-slate-200'}`}>All</button>
+                <button type="button" onClick={() => setFilter('all')} className={`px-3 py-1.5 rounded-lg text-sm border ${filter === 'all' ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-slate-200'}`}>All</button>
                 {TYPES.map((t) => (
-                    <button key={t} type="button" onClick={() => setFilter(t)} className={`px-3 py-1.5 rounded-lg text-sm border ${filter === t ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'border-slate-200'}`}>{t}</button>
+                    <button key={t} type="button" onClick={() => setFilter(t)} className={`px-3 py-1.5 rounded-lg text-sm border ${filter === t ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-slate-200'}`}>{t}</button>
                 ))}
             </div>
 
@@ -66,7 +66,7 @@ export default function RaidBoardPage() {
                     {visible.map((item) => (
                         <div key={item.id} className="dashboard-card p-5">
                             <div className="flex flex-wrap items-center gap-2 mb-2">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-indigo-600">{item.type}</span>
+                                <span className="text-xs font-semibold uppercase tracking-wide text-brand-600">{item.type}</span>
                                 <HealthBadge health={item.status === 'Closed' ? 'Green' : item.priority === 'High' ? 'Red' : 'Amber'} />
                             </div>
                             <h3 className="font-semibold text-slate-900">{item.title}</h3>

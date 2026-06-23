@@ -4,7 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 type Accent = 'indigo' | 'emerald' | 'amber' | 'rose' | 'slate' | 'sky';
 
 const accentMap: Record<Accent, string> = {
-    indigo: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+    indigo: 'text-brand-600 bg-brand-50 border-brand-100',
     emerald: 'text-emerald-600 bg-emerald-50 border-emerald-100',
     amber: 'text-amber-700 bg-amber-50 border-amber-100',
     rose: 'text-rose-600 bg-rose-50 border-rose-100',
@@ -58,7 +58,7 @@ export function WorkspacePageHeader({ eyebrow, title, description, action }: Wor
     return (
         <header className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-8">
             <div className="max-w-3xl">
-                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600 mb-2">{eyebrow}</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 mb-2">{eyebrow}</p>
                 <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">{title}</h1>
                 <p className="text-sm text-slate-500 mt-2 leading-relaxed">{description}</p>
             </div>

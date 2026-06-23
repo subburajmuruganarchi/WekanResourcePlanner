@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/lib/auth-context"
 import { getHomeRoute } from "@/lib/home-route"
+import { BrandLogo } from "@/components/brand/brand-logo"
 import { GoogleLogin } from "@react-oauth/google"
 
 export function LoginPage() {
@@ -37,7 +38,7 @@ export function LoginPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex flex-col items-center justify-center p-6">
+        <div className="min-h-screen flex flex-col items-center justify-center p-6" style={{ background: 'linear-gradient(135deg, #001c2a 0%, #0a2d3f 50%, #001c2a 100%)' }}>
             {/* Background pattern */}
             <div className="absolute inset-0 opacity-5">
                 <div className="absolute inset-0" style={{
@@ -50,14 +51,12 @@ export function LoginPage() {
             <div className="relative z-10 w-full max-w-md">
                 {/* Logo & Header */}
                 <div className="text-center mb-10">
-                    <div className="inline-flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 bg-brand-600 rounded-xl flex items-center justify-center shadow-lg shadow-brand-600/30">
-                            <span className="text-white font-bold text-xl">R</span>
-                        </div>
-                        <span className="font-bold text-white text-3xl tracking-tight">R360</span>
+                    <div className="flex flex-col items-center gap-3 mb-4">
+                        <BrandLogo className="h-14 w-14" />
+                        <p className="font-bold text-white text-3xl tracking-tight">R360</p>
+                        <p className="text-slate-400 text-lg">Resource Management Platform</p>
                     </div>
-                    <p className="text-gray-400 text-lg">Resource Management Platform</p>
-                    <p className="text-gray-500 text-sm mt-2">Sign in to your account</p>
+                    <p className="text-slate-500 text-sm mt-2">Sign in to your account</p>
                 </div>
 
                 {/* Login Form */}

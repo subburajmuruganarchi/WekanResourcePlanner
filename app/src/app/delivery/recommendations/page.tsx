@@ -21,7 +21,7 @@ export default function DeliveryRecommendationsPage() {
                     <div className="space-y-4">
                         {recommendations.map((rec) => (
                             <div key={rec.id} className="dashboard-card p-5">
-                                <div className="flex items-center gap-2 text-indigo-600 mb-3">
+                                <div className="flex items-center gap-2 text-brand-600 mb-3">
                                     <ArrowRightLeft className="w-4 h-4" />
                                     <span className="text-sm font-semibold">Recommendation</span>
                                 </div>

@@ -59,7 +59,7 @@ export default function EmployeeWorkspacePage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="dashboard-card p-5 lg:col-span-2">
                     <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                        <CheckCircle2 className="w-4 h-4 text-brand-600" />
                         Today&apos;s Work
                     </h3>
                     <p className="text-sm text-slate-600 mt-3 leading-relaxed">
@@ -72,7 +72,7 @@ export default function EmployeeWorkspacePage() {
 
                 <div className="dashboard-card p-5">
                     <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-indigo-600" />
+                        <Clock className="w-4 h-4 text-brand-600" />
                         Timesheet Status
                     </h3>
                     <p className="text-2xl font-bold text-slate-900 mt-3">{timesheetStatus}</p>
@@ -84,7 +84,7 @@ export default function EmployeeWorkspacePage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                     {myProjects.map((p) => (
                         <div key={p.id} className="dashboard-card p-4 flex items-center gap-3">
-                            <FolderKanban className="w-5 h-5 text-indigo-600" />
+                            <FolderKanban className="w-5 h-5 text-brand-600" />
                             <div>
                                 <p className="font-medium text-slate-900">{p.name}</p>
                                 <p className="text-xs text-slate-500">{p.code}</p>
@@ -97,12 +97,12 @@ export default function EmployeeWorkspacePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="dashboard-card p-5">
                     <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Target className="w-4 h-4 text-indigo-600" />
+                        <Target className="w-4 h-4 text-brand-600" />
                         My OKRs
                     </h3>
                     {!okrLoading && (
                         <>
-                            <p className="text-2xl font-bold text-indigo-600 mt-2">{overallScore}%</p>
+                            <p className="text-2xl font-bold text-brand-600 mt-2">{overallScore}%</p>
                             <p className="text-xs text-slate-500">{okrs.length} objective(s) this quarter</p>
                         </>
                     )}
@@ -113,7 +113,7 @@ export default function EmployeeWorkspacePage() {
 
                 <div className="dashboard-card p-5">
                     <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Bell className="w-4 h-4 text-indigo-600" />
+                        <Bell className="w-4 h-4 text-brand-600" />
                         Pending Actions
                     </h3>
                     <ul className="mt-3 space-y-2 text-sm text-slate-600">

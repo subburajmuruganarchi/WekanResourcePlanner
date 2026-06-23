@@ -74,7 +74,7 @@ export function AICopilotPanel({ className }: { className?: string }) {
                                 key={p.label}
                                 type="button"
                                 onClick={() => void runPrompt(p.label)}
-                                className="w-full text-left px-3 py-2.5 rounded-lg border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 text-sm text-slate-700 transition-colors"
+                                className="w-full text-left px-3 py-2.5 rounded-lg border border-slate-100 hover:border-brand-200 hover:bg-brand-50/50 text-sm text-slate-700 transition-colors"
                             >
                                 {p.label}
                             </button>
@@ -87,7 +87,7 @@ export function AICopilotPanel({ className }: { className?: string }) {
                         )}
                         {activePrompt && insight?.narrative && !loading && (
                             <div className="mt-3 p-3 rounded-lg bg-slate-50 border border-slate-100">
-                                <p className="text-xs font-semibold text-indigo-600 mb-1">{activePrompt}</p>
+                                <p className="text-xs font-semibold text-brand-600 mb-1">{activePrompt}</p>
                                 <p className="text-sm text-slate-700 leading-relaxed">{insight.narrative}</p>
                             </div>
                         )}

@@ -39,7 +39,7 @@ export function ApprovalTimeline({ status, compact }: ApprovalTimelineProps) {
                                 className={cn(
                                     'h-1.5 flex-1 rounded-full',
                                     i <= active && status !== 'rejected'
-                                        ? 'bg-indigo-500'
+                                        ? 'bg-brand-500'
                                         : i === active && rejected
                                           ? 'bg-red-400'
                                           : 'bg-slate-200'
@@ -81,7 +81,7 @@ export function ApprovalTimeline({ status, compact }: ApprovalTimelineProps) {
                                         : current
                                           ? rejected
                                               ? 'border-red-500 text-red-500 bg-red-50'
-                                              : 'border-indigo-500 text-indigo-600 bg-indigo-50'
+                                              : 'border-brand-500 text-brand-600 bg-brand-50'
                                           : 'border-slate-200 text-slate-300 bg-white'
                                 )}
                             >

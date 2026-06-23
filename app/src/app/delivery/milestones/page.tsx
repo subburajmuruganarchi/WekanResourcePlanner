@@ -66,7 +66,7 @@ export default function DeliveryMilestonesPage() {
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-2">
                                                 <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${m.progress}%` }} />
+                                                    <div className="h-full bg-brand-500 rounded-full" style={{ width: `${m.progress}%` }} />
                                                 </div>
                                                 {m.progress}%
                                             </div>
