@@ -10,5 +10,8 @@ router.use(requireRole(...MANAGEMENT_VIEW_ROLES));
 router.get('/stats', dashboardController.getStats);
 router.get('/allocation-heatmap', dashboardController.getAllocationHeatmap);
 router.get('/staffing-risks', dashboardController.getStaffingRisks);
+router.get('/delivery-risks', dashboardController.getDeliveryRisks);
+router.get('/skill-gap-forecast', dashboardController.getSkillGapForecast);
+router.get('/raid-suggestions', dashboardController.getRaidSuggestions);
 
 export { router as dashboardRouter };

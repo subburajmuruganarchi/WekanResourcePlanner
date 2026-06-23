@@ -1,26 +1,22 @@
 import { ArrowRight, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { StaffingRiskItem, StaffingRiskSkill } from './staffing-risk-cards';
+import type { DeliveryRiskItem } from '@/lib/risk-intelligence';
 
 interface RiskCardProps {
-    risk: StaffingRiskItem;
+    risk: DeliveryRiskItem;
     onView?: (projectId: string) => void;
 }
 
-function missingRoles(risk: StaffingRiskItem): string[] {
-    const skills = (risk.requiredSkills ?? [])
-        .filter((s: StaffingRiskSkill) => s.gap > 0)
-        .map((s) => s.skill);
-    const roles = (risk.requiredRoles ?? []).filter((r) => r.gap > 0).map((r) => r.role);
-    return [...skills, ...roles].slice(0, 3);
-}
-
 export function RiskCard({ risk, onView }: RiskCardProps) {
-    const missing = missingRoles(risk);
+    const operationalIssues = [
+        ...(risk.allocationRisks?.map((r) => r.message) ?? []),
+        ...(risk.capacityRisks?.map((r) => r.message) ?? []),
+    ].slice(0, 3);
+
     const recommendation =
-        risk.suggestedRoles?.[0] ??
-        (missing.length > 0 ? `Allocate ${missing[0]}` : 'Review staffing plan');
+        risk.recommendations?.[0] ??
+        (operationalIssues.length > 0 ? 'Review Project_Allocation and current-week planner hours.' : 'No action required');
 
     const levelLabel =
         risk.level === 'HIGH' ? 'HIGH RISK' : risk.level === 'MEDIUM' ? 'MEDIUM RISK' : 'LOW RISK';
@@ -31,7 +27,8 @@ export function RiskCard({ risk, onView }: RiskCardProps) {
         <article className="dashboard-card p-5 flex flex-col h-full">
             <div className="flex items-start justify-between gap-3 mb-4">
                 <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[#111827] truncate">{risk.name}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-600">Current Delivery Risk</p>
+                    <p className="text-sm font-semibold text-[#111827] truncate mt-1">{risk.name}</p>
                     <p className="text-[11px] text-slate-400 font-mono mt-0.5">{risk.code}</p>
                 </div>
                 <div
@@ -56,11 +53,11 @@ export function RiskCard({ risk, onView }: RiskCardProps) {
                 </div>
             </div>
 
-            {missing.length > 0 && (
+            {operationalIssues.length > 0 && (
                 <div className="mb-4">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Missing</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Operational signals</p>
                     <ul className="space-y-1">
-                        {missing.map((m) => (
+                        {operationalIssues.map((m) => (
                             <li key={m} className="text-xs text-slate-700 flex items-center gap-2">
                                 <span className="w-1 h-1 rounded-full bg-brand-400 shrink-0" />
                                 {m}
@@ -73,8 +70,8 @@ export function RiskCard({ risk, onView }: RiskCardProps) {
             <div className="flex items-start gap-2 text-xs text-slate-600 bg-slate-50 rounded-lg p-3 mb-4">
                 <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <div>
-                    <p className="font-medium text-slate-800">Delivery delay risk</p>
-                    <p className="text-slate-600 mt-0.5">~{impactDays} days if unaddressed</p>
+                    <p className="font-medium text-slate-800">Delivery impact if unresolved</p>
+                    <p className="text-slate-600 mt-0.5">~{impactDays} days potential slip</p>
                 </div>
             </div>
 
@@ -89,7 +86,7 @@ export function RiskCard({ risk, onView }: RiskCardProps) {
                     className="w-full gap-1.5 text-brand-700 border-brand-200 hover:bg-brand-50"
                     onClick={() => onView?.(risk.projectId)}
                 >
-                    View recommendation
+                    View project
                     <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
             </div>
@@ -102,7 +99,7 @@ export function RiskCardGrid({
     loading,
     onView,
 }: {
-    risks: StaffingRiskItem[];
+    risks: DeliveryRiskItem[];
     loading?: boolean;
     onView?: (projectId: string) => void;
 }) {
@@ -119,8 +116,8 @@ export function RiskCardGrid({
     if (risks.length === 0) {
         return (
             <div className="dashboard-card py-12 text-center">
-                <p className="text-sm font-medium text-slate-700">No workforce risks detected</p>
-                <p className="text-xs text-slate-500 mt-1">All monitored projects appear adequately staffed.</p>
+                <p className="text-sm font-medium text-slate-700">No current delivery risks detected</p>
+                <p className="text-xs text-slate-500 mt-1">Project_Allocation and planner coverage appear operational.</p>
             </div>
         );
     }
@@ -134,4 +131,4 @@ export function RiskCardGrid({
     );
 }
 
-export type { StaffingRiskItem, StaffingRiskSkill };
+export type { DeliveryRiskItem as StaffingRiskItem };

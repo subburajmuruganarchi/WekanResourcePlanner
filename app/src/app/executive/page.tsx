@@ -71,7 +71,7 @@ export default function ExecutiveDashboardPage() {
                                 <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">Delivery Confidence Score</p>
                                 <p className="text-4xl font-bold text-slate-900 mt-2">{stats.deliveryConfidence}%</p>
                                 <p className="text-sm text-slate-600 mt-2 max-w-xl">
-                                    Based on project progress, resource availability, staffing risks, and plan delivery ({stats.planDeliveryPercent}%).
+                                    Based on project progress, planner capacity, current delivery risk, and plan delivery ({stats.planDeliveryPercent}%).
                                 </p>
                             </div>
                             <Target className="w-12 h-12 text-brand-500 opacity-80 hidden md:block" />
@@ -82,7 +82,7 @@ export default function ExecutiveDashboardPage() {
 
             <WorkspaceSection
                 title="Portfolio at a glance"
-                description="Top projects by delivery risk"
+                description="Top projects by current delivery risk (allocation + planner)"
                 action={
                     <Button variant="outline" size="sm" onClick={() => navigate('/executive/portfolio-health')}>
                         View all

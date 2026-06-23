@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { WorkspacePageHeader, WorkspaceSection, HealthBadge } from '@/components/workspaces/shared';
 import { useAuth } from '@/lib/auth-context';
 import { workspaceStore, type RaidItem, type RaidType } from '@/lib/workspace-store';
+import { RaidSuggestionPanel } from '@/components/workspaces/ai/RaidSuggestionPanel';
 
 const TYPES: RaidType[] = ['Risk', 'Assumption', 'Issue', 'Dependency'];
 
@@ -45,7 +46,7 @@ export default function RaidBoardPage() {
             <WorkspacePageHeader
                 eyebrow="Delivery Command"
                 title="RAID Management"
-                description="Track Risks, Assumptions, Issues, and Dependencies across your portfolio."
+                description="Manual RAID tracking — independent from delivery risk scoring. Approve AI suggestions below to pre-fill items."
                 action={
                     <Button onClick={addItem} className="gap-2 enterprise-gradient-bg text-white border-0">
                         <Plus className="w-4 h-4" />
@@ -60,6 +61,10 @@ export default function RaidBoardPage() {
                     <button key={t} type="button" onClick={() => setFilter(t)} className={`px-3 py-1.5 rounded-lg text-sm border ${filter === t ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-slate-200'}`}>{t}</button>
                 ))}
             </div>
+
+            <WorkspaceSection title="AI suggestions from planner" description="Detect → recommend → you approve RAID creation">
+                <RaidSuggestionPanel />
+            </WorkspaceSection>
 
             <WorkspaceSection title="RAID board">
                 <div className="space-y-3">

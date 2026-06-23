@@ -1,97 +1,30 @@
-import { Types } from 'mongoose';
-import { projectService } from '../../modules/projects/project.service';
-import { ProjectAllocation } from '../../modules/allocations/allocation.model';
-import { StaffingRiskAssessment, StaffingRiskLevel } from './types';
+import { assessProjectDeliveryRisk, assessProjectRiskIntelligence } from '../risk/risk-intelligence.service';
+import type { StaffingRiskAssessment, StaffingRiskLevel } from './types';
 
-/** Predictive staffing risk from requirements vs allocations — read-only. */
+/** Legacy API shape — maps to Current Delivery Risk only (never skill-gap forecast). */
 export async function assessStaffingRisk(projectId: string): Promise<StaffingRiskAssessment> {
-    const project = await projectService.findById(projectId);
-    if (!project) {
+    const intelligence = await assessProjectRiskIntelligence(projectId);
+    if (!intelligence) {
         throw new Error('Project not found');
     }
 
-    const reasons: string[] = [];
-    let score = 0;
-
-    const skillReqs = project.skillRequirements || [];
-    const unfulfilledHeadcount = skillReqs.reduce((s, r) => s + Math.max(0, r.remainingHeadcount ?? 0), 0);
-    const missingSkillSlots = skillReqs.filter((r) => (r.remainingHeadcount ?? 0) > 0).length;
-
-    const requiredSkills = skillReqs.map((r) => {
-        const headcount = r.originalHeadcount ?? 1;
-        const gap = Math.max(0, r.remainingHeadcount ?? 0);
-        return {
-            skill: r.skillName || 'Skill',
-            minLevel: r.minSkillLevel || '—',
-            headcount,
-            filled: Math.max(0, headcount - gap),
-            gap,
-        };
-    });
-
-    const roleEfforts = project.roleEfforts || [];
-    const roleGap = roleEfforts.reduce((s, r) => s + Math.max(0, r.remainingHeadcount ?? 0), 0);
-
-    const requiredRoles = roleEfforts.map((r) => ({
-        role: r.roleName || 'Role',
-        effortHours: (r.hoursPerDay ?? 8) * (r.requiredDays ?? 1),
-        headcount: r.originalHeadcount ?? 1,
-        gap: Math.max(0, r.remainingHeadcount ?? 0),
-    }));
-
-    const suggestedRoles = [
-        ...requiredSkills.filter((s) => s.gap > 0).map((s) => `${s.skill} (${s.gap} needed)`),
-        ...requiredRoles.filter((r) => r.gap > 0).map((r) => `${r.role} (${r.gap} open)`),
-    ].slice(0, 6);
-
-    if (missingSkillSlots > 0) {
-        score += Math.min(40, missingSkillSlots * 15);
-        reasons.push(`${missingSkillSlots} skill requirement slot(s) still need headcount.`);
-    }
-    if (unfulfilledHeadcount > 0) {
-        score += Math.min(30, unfulfilledHeadcount * 10);
-        reasons.push(`${unfulfilledHeadcount} open headcount across requirements.`);
-    }
-
-    const teamSize = project.teamSize ?? 0;
-    if (roleGap > 0) {
-        score += 20;
-        reasons.push(`${roleGap} role effort position(s) unfilled.`);
-    }
-
-    const allocations = await ProjectAllocation.find({
-        project_id: new Types.ObjectId(projectId),
-        is_active: true,
-    }).lean();
-    const allocatedPct = allocations.reduce((s, a) => s + (a.allocation_percent || 0), 0);
-    if (teamSize === 0 && skillReqs.length > 0) {
-        score += 25;
-        reasons.push('No team allocated despite defined skill requirements.');
-    } else if (
-        allocatedPct < 50 &&
-        (project.status === 'Active' || project.status === 'Planning')
-    ) {
-        score += 15;
-        reasons.push('Low total allocation percent on active project.');
-    }
-
-    if (reasons.length === 0) {
-        reasons.push('Skill requirements and allocations appear balanced.');
-    }
-
-    let level: StaffingRiskLevel = 'LOW';
-    if (score >= 55) level = 'HIGH';
-    else if (score >= 25) level = 'MEDIUM';
+    const delivery = intelligence.deliveryRisk;
 
     return {
         projectId,
-        level,
-        score: Math.min(100, score),
-        reasons,
-        missingSkillSlots,
-        unfulfilledHeadcount,
-        requiredSkills,
-        requiredRoles,
-        suggestedRoles,
+        level: delivery.level as StaffingRiskLevel,
+        score: delivery.score,
+        reasons: delivery.reasons,
+        category: 'Current Delivery Risk',
+        allocationRisks: delivery.allocationRisks,
+        capacityRisks: delivery.capacityRisks,
+        recommendations: delivery.recommendations,
+        missingSkillSlots: 0,
+        unfulfilledHeadcount: delivery.capacityRisks.find((c) => c.type === 'zero_planned_hours')?.memberCount ?? 0,
+        requiredSkills: [],
+        requiredRoles: [],
+        suggestedRoles: delivery.recommendations.slice(0, 6),
     };
 }
+
+export { assessProjectDeliveryRisk, assessProjectRiskIntelligence };

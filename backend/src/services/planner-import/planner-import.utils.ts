@@ -228,6 +228,14 @@ export function formatWeekSheetHeader(weekStart: Date): string {
     return `${weekStart.getUTCDate()} ${months[weekStart.getUTCMonth()]}`;
 }
 
+/** Weekly Planner tab: one week spans Plan / Act / Delta columns, e.g. "22 Jun Plan". */
+export function formatWeeklyPlannerMetricHeader(
+    weekStart: Date,
+    metric: 'Plan' | 'Act' | 'Delta'
+): string {
+    return `${formatWeekSheetHeader(weekStart)} ${metric}`;
+}
+
 export function parseWeekMonday(header: string): Date | null {
     const h = header.trim();
     const m1 = h.match(/^(\d{1,2})[-\s]([A-Za-z]{3,9})$/);

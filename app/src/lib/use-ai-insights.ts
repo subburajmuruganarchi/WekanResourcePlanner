@@ -29,6 +29,15 @@ export interface StaffingRiskAssessment {
     level: 'LOW' | 'MEDIUM' | 'HIGH';
     score: number;
     reasons: string[];
+    category?: 'Current Delivery Risk';
+    allocationRisks?: { type: string; message: string; severity: string }[];
+    capacityRisks?: { type: string; message: string; severity: string }[];
+    recommendations?: string[];
+    missingSkillSlots: number;
+    unfulfilledHeadcount: number;
+    requiredSkills: never[];
+    requiredRoles: never[];
+    suggestedRoles: string[];
 }
 
 export interface ApprovalInsightSummary {
@@ -61,8 +70,10 @@ export function useDashboardInsight() {
                 : '';
             const data = await api.get<DashboardInsight>(`/ai/dashboard-summary${q}`);
             setInsight(data);
+            return data;
         } catch {
             setInsight(null);
+            return null;
         } finally {
             setLoading(false);
         }

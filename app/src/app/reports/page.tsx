@@ -19,6 +19,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { api } from "@/lib/api"
 import { ReportSheetViewer } from "@/components/reports/report-sheet-viewer"
+import { DeliveryRiskCards, SkillGapForecastCards } from "@/components/dashboard/staffing-risk-cards"
+import {
+    fetchDeliveryRisks,
+    fetchSkillGapForecasts,
+    type DeliveryRiskItem,
+    type SkillGapForecastItem,
+} from "@/lib/risk-intelligence"
 import type {
     AllReportsPreviewResponse,
     ReportPreviewId,
@@ -53,6 +60,9 @@ export default function ReportsPage() {
     const [previews, setPreviews] = useState<ReportPreviewPayload[]>([])
     const [sheetIndices, setSheetIndices] = useState<Partial<Record<ReportPreviewId, number>>>({})
     const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null)
+    const [deliveryRisks, setDeliveryRisks] = useState<DeliveryRiskItem[]>([])
+    const [skillForecasts, setSkillForecasts] = useState<SkillGapForecastItem[]>([])
+    const [riskLoading, setRiskLoading] = useState(true)
 
     const loadPreviews = useCallback(async () => {
         setIsRefreshing(true)
@@ -78,6 +88,20 @@ export default function ReportsPage() {
     useEffect(() => {
         void loadPreviews()
     }, [loadPreviews])
+
+    useEffect(() => {
+        setRiskLoading(true)
+        Promise.all([fetchDeliveryRisks(), fetchSkillGapForecasts()])
+            .then(([dr, fc]) => {
+                setDeliveryRisks(dr ?? [])
+                setSkillForecasts(fc ?? [])
+            })
+            .catch(() => {
+                setDeliveryRisks([])
+                setSkillForecasts([])
+            })
+            .finally(() => setRiskLoading(false))
+    }, [])
 
     const previewsById = useMemo(() => {
         const map = new Map<ReportPreviewId, ReportPreviewPayload>()
@@ -296,6 +320,36 @@ export default function ReportsPage() {
                     )
                 })}
             </div>
+
+            <section className="space-y-4">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                    Risk intelligence
+                </h2>
+                <p className="text-sm text-gray-600">
+                    Current delivery risk uses Project_Allocation and the weekly planner. Future capability gaps are planning forecasts only.
+                </p>
+                <div className="grid lg:grid-cols-2 gap-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base">Current Delivery Risk</CardTitle>
+                            <CardDescription>Allocation + planner capacity</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <DeliveryRiskCards risks={deliveryRisks.slice(0, 4)} loading={riskLoading} />
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base">Future Capability Gap</CardTitle>
+                            <CardDescription>Project plan forecast — not operational risk</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <SkillGapForecastCards forecasts={skillForecasts.slice(0, 4)} loading={riskLoading} />
+                        </CardContent>
+                    </Card>
+                </div>
+            </section>
 
             <Card className="bg-brand-50 border-brand-100">
                 <CardContent className="flex items-start gap-4 p-6 text-brand-800">

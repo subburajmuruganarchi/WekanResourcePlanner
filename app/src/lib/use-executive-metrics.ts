@@ -7,7 +7,8 @@ import {
     periodQueryString,
     getCurrentMonthValue,
 } from '@/lib/dashboard-period';
-import type { StaffingRiskItem } from '@/components/dashboard/staffing-risk-cards';
+import type { DeliveryRiskItem } from '@/lib/risk-intelligence';
+import { fetchDeliveryRisks } from '@/lib/risk-intelligence';
 
 export interface ExecutiveMetrics {
     activeProjects: number;
@@ -66,7 +67,7 @@ function confidenceFromHealth(health: 'Green' | 'Amber' | 'Red', progress: numbe
 export function useExecutiveMetrics() {
     const { projects, loading: projectsLoading } = useProjects();
     const [stats, setStats] = useState<ExecutiveMetrics | null>(null);
-    const [risks, setRisks] = useState<StaffingRiskItem[]>([]);
+    const [risks, setRisks] = useState<DeliveryRiskItem[]>([]);
     const [loading, setLoading] = useState(true);
 
     const fetchData = useCallback(async () => {
@@ -82,7 +83,7 @@ export function useExecutiveMetrics() {
                     planDeliveryPercent: number;
                     pendingApprovals: number;
                 }>(`/dashboard/stats?${query}`),
-                api.get<StaffingRiskItem[]>('/dashboard/staffing-risks'),
+                fetchDeliveryRisks(),
             ]);
             setRisks(risksRes ?? []);
             const critical = (risksRes ?? []).filter((r) => r.level === 'HIGH').length;
@@ -143,13 +144,15 @@ export function useExecutiveMetrics() {
 
     const executiveRisks: ExecutiveRisk[] = risks.slice(0, 8).map((r, i) => ({
         id: r.projectId || String(i),
-        title: r.level === 'HIGH' ? 'Customer milestone delay risk' : 'Delivery capacity pressure',
-        impact: r.level === 'HIGH' ? 'High' : r.level === 'MEDIUM' ? 'Medium' : 'Low',
-        reason: r.reasons?.[0] || 'Resource or skill coverage gap',
-        action:
+        title:
             r.level === 'HIGH'
-                ? 'Increase capacity or re-prioritize portfolio allocations'
-                : 'Review staffing plan with delivery lead',
+                ? 'Current delivery risk — planner or allocation'
+                : r.level === 'MEDIUM'
+                  ? 'Planner capacity needs attention'
+                  : 'Portfolio watch item',
+        impact: r.level === 'HIGH' ? 'High' : r.level === 'MEDIUM' ? 'Medium' : 'Low',
+        reason: r.reasons?.[0] || 'Review Project_Allocation and current-week planner hours',
+        action: r.recommendations?.[0] ?? 'Confirm weekly planner hours match allocated team members',
         projectName: r.name,
     }));
 

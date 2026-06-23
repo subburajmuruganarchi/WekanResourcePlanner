@@ -289,41 +289,8 @@ async function buildAllocationHeatmapFromLegacyAllocations(
     return applyHeatmapLimits(allEmployees, allProjects, cells);
 }
 
-/** Top active projects by staffing risk score (read-only). */
+/** Top active projects by current delivery risk (allocation + planner capacity). */
 export async function buildStaffingRiskSummary(limit = 6, scope?: DashboardScopeFilter) {
-    const { assessStaffingRisk } = await import('./ai/staffing-risk.service');
-    const projectQuery: Record<string, unknown> = { ...activeDashboardProjectFilter() };
-    if (scope?.projectIds?.length) {
-        projectQuery._id = { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) };
-    }
-    const active = await Project.find(projectQuery)
-        .select('_id project_name project_code')
-        .lean();
-
-    const assessed = await Promise.all(
-        active.map(async (p) => {
-            try {
-                const risk = await assessStaffingRisk(p._id.toString());
-                return {
-                    projectId: risk.projectId,
-                    name: p.project_name,
-                    code: p.project_code,
-                    level: risk.level,
-                    score: risk.score,
-                    reasons: risk.reasons.slice(0, 3),
-                    requiredSkills: risk.requiredSkills,
-                    requiredRoles: risk.requiredRoles,
-                    suggestedRoles: risk.suggestedRoles,
-                    unfulfilledHeadcount: risk.unfulfilledHeadcount,
-                };
-            } catch {
-                return null;
-            }
-        })
-    );
-
-    return assessed
-        .filter((r): r is NonNullable<typeof r> => r !== null)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit);
+    const { buildStaffingRiskSummary: buildLegacy } = await import('./risk/risk-intelligence.service');
+    return buildLegacy(limit, scope);
 }

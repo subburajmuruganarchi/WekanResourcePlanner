@@ -2,6 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import { collectDashboardMetrics, type DashboardScopeFilter } from './dashboard-metrics.service';
 import { parseDashboardPeriodQuery } from './dashboard-period.util';
 import { buildAllocationHeatmap, buildStaffingRiskSummary } from '../../services/dashboard-heatmap.service';
+import {
+    buildDeliveryRiskSummary,
+    buildSkillGapForecastSummary,
+    buildRaidSuggestions,
+} from '../../services/risk/risk-intelligence.service';
 import { resolveDataScope } from '../../common/utils/data-scope.util';
 
 function parsePeriod(req: Request, res: Response): ReturnType<typeof parseDashboardPeriodQuery> | null {
@@ -64,7 +69,37 @@ export class DashboardController {
     async getStaffingRisks(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const scopeFilter = await scopeFilterFromRequest(req);
-            const data = await buildStaffingRiskSummary(6, scopeFilter);
+            const data = await buildStaffingRiskSummary(12, scopeFilter);
+            res.json({ status: 'success', data });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getDeliveryRisks(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const scopeFilter = await scopeFilterFromRequest(req);
+            const data = await buildDeliveryRiskSummary(12, scopeFilter);
+            res.json({ status: 'success', data });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getSkillGapForecast(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const scopeFilter = await scopeFilterFromRequest(req);
+            const data = await buildSkillGapForecastSummary(12, scopeFilter);
+            res.json({ status: 'success', data });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getRaidSuggestions(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const scopeFilter = await scopeFilterFromRequest(req);
+            const data = await buildRaidSuggestions(10, scopeFilter);
             res.json({ status: 'success', data });
         } catch (error) {
             next(error);

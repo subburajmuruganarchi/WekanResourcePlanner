@@ -3,7 +3,13 @@ import { useAuth } from '@/lib/auth-context';
 import { canSeeManagementDashboard } from '@/lib/roles';
 import { PageContainer } from '@/components/layout/page-container';
 import { AiInsightPanel } from '@/components/ai/ai-insight-panel';
-import { api } from '@/lib/api-client';
+import { DeliveryRiskCards, SkillGapForecastCards } from '@/components/dashboard/staffing-risk-cards';
+import {
+    fetchDeliveryRisks,
+    fetchSkillGapForecasts,
+    type DeliveryRiskItem,
+    type SkillGapForecastItem,
+} from '@/lib/risk-intelligence';
 import { useDashboardInsight, fetchApprovalAnomalies, type ApprovalInsightSummary } from '@/lib/use-ai-insights';
 import { Sparkles, ShieldAlert, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -12,7 +18,9 @@ export default function InsightsCenterPage() {
     const { user } = useAuth();
     const { insight, loading, fetchInsight } = useDashboardInsight();
     const [approvalSummary, setApprovalSummary] = useState<ApprovalInsightSummary | null>(null);
-    const [staffingRisks, setStaffingRisks] = useState<{ level: string; name: string; code: string }[]>([]);
+    const [deliveryRisks, setDeliveryRisks] = useState<DeliveryRiskItem[]>([]);
+    const [forecasts, setForecasts] = useState<SkillGapForecastItem[]>([]);
+    const [risksLoading, setRisksLoading] = useState(true);
 
     const canAccess = canSeeManagementDashboard(user?.role);
 
@@ -22,9 +30,17 @@ export default function InsightsCenterPage() {
             fetchApprovalAnomalies()
                 .then(setApprovalSummary)
                 .catch(() => setApprovalSummary(null));
-            api.get<{ level: string; name: string; code: string }[]>('/dashboard/staffing-risks')
-                .then(setStaffingRisks)
-                .catch(() => setStaffingRisks([]));
+            setRisksLoading(true);
+            Promise.all([fetchDeliveryRisks(), fetchSkillGapForecasts()])
+                .then(([dr, fc]) => {
+                    setDeliveryRisks(dr ?? []);
+                    setForecasts(fc ?? []);
+                })
+                .catch(() => {
+                    setDeliveryRisks([]);
+                    setForecasts([]);
+                })
+                .finally(() => setRisksLoading(false));
         }
     }, [canAccess, fetchInsight]);
 
@@ -34,7 +50,7 @@ export default function InsightsCenterPage() {
                 <ShieldAlert className="w-12 h-12 text-amber-500 mb-4" />
                 <h1 className="text-xl font-bold text-gray-900">Insights Center</h1>
                 <p className="text-gray-600 mt-2 max-w-md">
-                    Available to Admin and Project Manager roles. Embedded assistants live on Dashboard, Projects, and PM Approvals.
+                    Available to management roles. Risk intelligence uses Project_Allocation and the weekly planner.
                 </p>
             </PageContainer>
         );
@@ -44,11 +60,11 @@ export default function InsightsCenterPage() {
         <PageContainer className="space-y-8">
             <div>
                 <h1 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
-                    <Sparkles className="w-6 h-6 text-blue-600" />
+                    <Sparkles className="w-6 h-6 text-brand-600" />
                     Insights Center
                 </h1>
                 <p className="text-sm text-gray-600 mt-1">
-                    Tool-based read-only intelligence from your live R360 data. No chat — explanations and alerts only.
+                    Operational delivery risk (allocation + planner) is separate from future capability forecasts (project plan).
                 </p>
             </div>
 
@@ -63,31 +79,28 @@ export default function InsightsCenterPage() {
             </section>
 
             <section>
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">2. Allocation Explanations</h2>
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">2. Current Delivery Risk</h2>
+                <p className="text-xs text-gray-500 mb-3">
+                    Source: Project_Allocation + weekly planner. Does not use Project sheet role/skill requirements.
+                </p>
+                <DeliveryRiskCards risks={deliveryRisks} loading={risksLoading} />
+            </section>
+
+            <section>
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">3. Future Capability Gap</h2>
+                <p className="text-xs text-gray-500 mb-3">Planning forecast only — not counted as current delivery risk.</p>
+                <SkillGapForecastCards forecasts={forecasts} loading={risksLoading} />
+            </section>
+
+            <section>
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">4. Allocation Explanations</h2>
                 <Card className="p-4 text-sm text-gray-700 border-gray-200">
-                    Review staffing recommendations from project insights and staffing risk summaries.
-                    Ranking scores come from the existing ranking service — AI only explains factors. Resource assignment changes require Admin approval.
+                    Ranking explanations come from live allocation data. Resource moves still require management approval.
                 </Card>
             </section>
 
             <section>
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">3. Staffing Risks</h2>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {staffingRisks.length > 0 ? staffingRisks.map((r, i) => (
-                        <Card key={i} className="p-4">
-                            <p className="font-medium text-sm">{r.name}</p>
-                            <p className="text-xs text-gray-500">{r.code}</p>
-                            <p className="text-xs font-semibold mt-2 text-amber-700">Risk: {r.level}</p>
-                        </Card>
-                    )) : (
-                        <p className="text-sm text-gray-500 col-span-full">No elevated risks on active projects.</p>
-                    )}
-                </div>
-                <p className="text-xs text-gray-500 mt-2">Risk badges also appear on project detail pages.</p>
-            </section>
-
-            <section>
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">4. Approval Anomalies</h2>
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">5. Approval Anomalies</h2>
                 {approvalSummary ? (
                     <AiInsightPanel
                         title="PM approval assistant"
@@ -102,9 +115,9 @@ export default function InsightsCenterPage() {
             </section>
 
             <section>
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">5. Forecast Widgets</h2>
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">6. Forecast Widgets</h2>
                 <Card className="p-4 text-sm text-gray-700">
-                    Time Entry shows <strong>Suggested Hours</strong> from allocation forecast and last week&apos;s pattern. You confirm every value manually.
+                    Time Entry shows suggested hours from allocation forecast. You confirm every value manually.
                 </Card>
             </section>
         </PageContainer>

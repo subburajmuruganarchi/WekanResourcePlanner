@@ -40,8 +40,22 @@ export interface StaffingRiskAssessment {
     level: StaffingRiskLevel;
     score: number;
     reasons: string[];
+    category?: 'Current Delivery Risk';
+    allocationRisks?: {
+        type: string;
+        message: string;
+        severity: StaffingRiskLevel;
+    }[];
+    capacityRisks?: {
+        type: string;
+        message: string;
+        severity: StaffingRiskLevel;
+        memberCount?: number;
+    }[];
+    recommendations?: string[];
     missingSkillSlots: number;
     unfulfilledHeadcount: number;
+    /** @deprecated Use capacityRisks / recommendations — never shown as current delivery risk */
     requiredSkills: {
         skill: string;
         minLevel: string;
@@ -49,6 +63,7 @@ export interface StaffingRiskAssessment {
         filled: number;
         gap: number;
     }[];
+    /** @deprecated Use capacityRisks / recommendations */
     requiredRoles: {
         role: string;
         effortHours: number;

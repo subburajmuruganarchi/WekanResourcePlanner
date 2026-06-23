@@ -15,6 +15,7 @@ import {
     WorkspaceSection,
 } from '@/components/workspaces/shared';
 import { useDeliveryCommandMetrics } from '@/lib/use-delivery-metrics';
+import { RaidSuggestionPanel } from '@/components/workspaces/ai/RaidSuggestionPanel';
 import { KPIGridSkeleton } from '@/components/dashboard/KPICard';
 
 export default function DeliveryCommandPage() {
@@ -41,11 +42,15 @@ export default function DeliveryCommandPage() {
                     <WorkspaceMetricCard label="Managed Projects" value={String(metrics.managedProjects)} icon={FolderKanban} />
                     <WorkspaceMetricCard label="Projects At Risk" value={String(metrics.atRisk)} accent="amber" icon={AlertTriangle} />
                     <WorkspaceMetricCard label="Blocked Projects" value={String(metrics.blocked)} accent="rose" icon={Ban} />
-                    <WorkspaceMetricCard label="Resource Gaps" value={String(metrics.resourceGaps)} icon={Users} />
+                    <WorkspaceMetricCard label="Planner Gaps" value={String(metrics.resourceGaps)} icon={Users} />
                     <WorkspaceMetricCard label="Pending Decisions" value={String(metrics.pendingDecisions)} accent="sky" icon={ClipboardList} />
                     <WorkspaceMetricCard label="Upcoming Releases" value={String(metrics.upcomingReleases)} accent="emerald" icon={Rocket} />
                 </div>
             )}
+
+            <WorkspaceSection title="AI RAID suggestions" description="Planner-detected risks — approve to add to your RAID board (RAID remains independent).">
+                <RaidSuggestionPanel />
+            </WorkspaceSection>
 
             <WorkspaceSection title="Quick actions">
                 <div className="flex flex-wrap gap-2">

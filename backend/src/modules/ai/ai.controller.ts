@@ -2,7 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { buildDashboardInsight } from '../../services/ai/dashboard-ai.service';
 import { parseDashboardPeriodQuery } from '../dashboard/dashboard-period.util';
 import { explainAllocationRank } from '../../services/ai/allocation-ai.service';
-import { assessStaffingRisk } from '../../services/ai/staffing-risk.service';
+import { assessStaffingRisk, assessProjectRiskIntelligence } from '../../services/ai/staffing-risk.service';
+import { buildRaidSuggestions } from '../../services/risk/risk-intelligence.service';
 import { analyzePendingApprovals } from '../../services/ai/approval-ai.service';
 import { buildTimeEntrySuggestions } from '../../services/ai/forecast-ai.service';
 import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
@@ -58,6 +59,29 @@ export class AiController {
                 res.status(404).json({ status: 'error', message: error.message });
                 return;
             }
+            next(error);
+        }
+    }
+
+    async riskIntelligence(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { projectId } = req.params;
+            const intelligence = await assessProjectRiskIntelligence(projectId);
+            if (!intelligence) {
+                res.status(404).json({ status: 'error', message: 'Project not found' });
+                return;
+            }
+            res.json({ status: 'success', data: intelligence });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async raidSuggestions(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const data = await buildRaidSuggestions(10);
+            res.json({ status: 'success', data });
+        } catch (error) {
             next(error);
         }
     }

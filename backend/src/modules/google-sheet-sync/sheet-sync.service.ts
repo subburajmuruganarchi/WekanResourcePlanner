@@ -44,7 +44,31 @@ import { buildBatchSheetStatus } from './sheet-sync.status';
 
 export type { SupportedSheet };
 
+/** Webhook tab name; Weekly Planner imports using Project_Allocation logic. */
+type WebhookSheet = SupportedSheet | 'Weekly Planner';
+
 const SHEET_ORDER: SupportedSheet[] = ['Resource', 'Project', 'Project_Allocation'];
+
+function parseWebhookSheet(raw: string | undefined): WebhookSheet {
+    const sheet = raw?.trim();
+    if (!sheet) {
+        throw new AppError('Missing sheet name', 400);
+    }
+    if (SHEET_ORDER.includes(sheet as SupportedSheet)) {
+        return sheet as SupportedSheet;
+    }
+    if (sheet === 'Weekly Planner') {
+        return 'Weekly Planner';
+    }
+    throw new AppError(
+        `Unsupported sheet: ${sheet}. Use Resource, Project, Project_Allocation, or Weekly Planner.`,
+        400
+    );
+}
+
+function webhookToImportSheet(sheet: WebhookSheet): SupportedSheet {
+    return sheet === 'Weekly Planner' ? 'Project_Allocation' : sheet;
+}
 /** Only wait this long for GAS web app to accept the kickoff request. */
 const APPS_SCRIPT_KICKOFF_TIMEOUT_MS = 30_000;
 /** Background job waits for all sheet webhooks (not limited by GAS runtime). */
@@ -171,7 +195,8 @@ export const sheetSyncService = {
         requestId: string,
         syncBatchId?: string
     ): Promise<GoogleSheetSyncResponse> {
-        const sheet = body.sheet as SupportedSheet;
+        const webhookSheet = parseWebhookSheet(body.sheet);
+        const importSheet = webhookToImportSheet(webhookSheet);
         const startedAt = Date.now();
         const received = body.rows?.length ?? 0;
 
@@ -180,27 +205,21 @@ export const sheetSyncService = {
         structuredLogger.info('START SHEET IMPORT', {
             requestId,
             syncBatchId,
-            sheet,
+            sheet: webhookSheet,
+            importSheet,
             rowsReceived: received,
         });
 
-        if (!SHEET_ORDER.includes(sheet)) {
-            throw new AppError(
-                `Unsupported sheet: ${sheet}. Use Resource, Project, or Project_Allocation.`,
-                400
-            );
-        }
-
         if (syncBatchId) {
-            await markBatchSheetRunning(syncBatchId, sheet, requestId);
+            await markBatchSheetRunning(syncBatchId, importSheet, requestId);
         }
 
-        await waitForSheetPrerequisites(sheet, syncBatchId, requestId);
+        await waitForSheetPrerequisites(importSheet, syncBatchId, requestId);
 
         const syncId = uuidv4();
         const { run: syncRun, mode: acquireMode } = await acquireSyncRun({
             syncBatchId,
-            sheet,
+            sheet: webhookSheet,
             received,
             syncId,
             allowRetry: body.retry === true,
@@ -211,7 +230,7 @@ export const sheetSyncService = {
                 structuredLogger.info('SHEET IMPORT IDEMPOTENT HIT', {
                     requestId,
                     syncBatchId,
-                    sheet,
+                    sheet: webhookSheet,
                     mode: acquireMode,
                     cached: acquireMode === 'cached',
                 });
@@ -221,15 +240,16 @@ export const sheetSyncService = {
                 const reason =
                     syncRun.errorMessage ??
                     syncRun.errorMessages?.[0] ??
-                    `${sheet} import failed`;
+                    `${webhookSheet} import failed`;
                 throw new AppError(reason, 422);
             }
         }
 
-        structuredLogger.info(SHEET_IMPORT_LOG[sheet].start, {
+        structuredLogger.info(SHEET_IMPORT_LOG[importSheet].start, {
             requestId,
             syncBatchId,
-            sheet,
+            sheet: webhookSheet,
+            importSheet,
             rowsReceived: received,
         });
 
@@ -240,7 +260,7 @@ export const sheetSyncService = {
             let rowsFilteredFromSheet: number | undefined;
             const normalizedRows = coerceWebhookRows(body.rows, body.headers);
 
-            if (sheet === 'Resource') {
+            if (importSheet === 'Resource') {
                 rawRowsReceived = body.rows?.length ?? 0;
                 const resourceRows = googleSheetRowsToImportableResourceRows(normalizedRows);
                 const skippedRowCount = rawRowsReceived - resourceRows.length;
@@ -263,8 +283,8 @@ export const sheetSyncService = {
                 });
 
                 rowsImported = resourceRows.length;
-                validateSheetResult(sheet, rowsImported, result);
-            } else if (sheet === 'Project') {
+                validateSheetResult(importSheet, rowsImported, result);
+            } else if (importSheet === 'Project') {
                 const projectRows = googleSheetRowsToProjectRows(normalizedRows);
                 result = await runPlannerSheetImport({
                     projectRows,
@@ -273,7 +293,7 @@ export const sheetSyncService = {
                     atomic: true,
                 });
                 rowsImported = projectRows.length;
-                validateSheetResult(sheet, rowsImported, result);
+                validateSheetResult(importSheet, rowsImported, result);
             } else {
                 rawRowsReceived = body.rows?.length ?? 0;
                 const weekHeaders = extractWeekHeadersFromWebhook(normalizedRows, body.weekHeaders);
@@ -299,13 +319,13 @@ export const sheetSyncService = {
                 });
 
                 rowsImported = allocationRows.length;
-                validateSheetResult(sheet, rowsImported, result);
+                validateSheetResult(importSheet, rowsImported, result);
             }
 
             const durationMs = Date.now() - startedAt;
             const response: GoogleSheetSyncResponse = {
                 success: true,
-                sheet,
+                sheet: webhookSheet,
                 rowsReceived: rowsImported,
                 rowsProcessed: result.rowsProcessed ?? 0,
                 rowsSkipped: result.rowsSkipped ?? 0,
@@ -316,7 +336,7 @@ export const sheetSyncService = {
                 requestId,
                 durationMs,
             };
-            if (sheet === 'Resource' || sheet === 'Project_Allocation') {
+            if (importSheet === 'Resource' || importSheet === 'Project_Allocation') {
                 response.rawRowsReceived = rawRowsReceived;
                 response.rowsFilteredFromSheet = rowsFilteredFromSheet;
             }
@@ -332,17 +352,18 @@ export const sheetSyncService = {
             if (syncBatchId) {
                 await markBatchSheetCompleted(
                     syncBatchId,
-                    sheet,
+                    importSheet,
                     rowsImported,
                     response.rowsProcessed
                 );
             }
 
-            structuredLogger.info(SHEET_IMPORT_LOG[sheet].success, {
+            structuredLogger.info(SHEET_IMPORT_LOG[importSheet].success, {
                 event: 'SHEET_SYNC_COMPLETED',
                 requestId,
                 syncBatchId,
-                sheet,
+                sheet: webhookSheet,
+                importSheet,
                 status: 'SUCCESS',
                 rowsReceived: rowsImported,
                 rowsProcessed: response.rowsProcessed,
@@ -358,36 +379,37 @@ export const sheetSyncService = {
                     requestId,
                     syncBatchId,
                     syncId,
-                    sheet,
+                    sheet: webhookSheet,
                     errors: err.errors,
                     validationReport: err.validationReport,
                 });
             }
             if (syncBatchId) {
-                await markBatchSheetFailed(syncBatchId, sheet, message);
-                await cascadeBatchSheetFailure(syncBatchId, sheet, message);
+                await markBatchSheetFailed(syncBatchId, importSheet, message);
+                await cascadeBatchSheetFailure(syncBatchId, importSheet, message);
                 await SyncBatch.updateOne(
                     { batchId: syncBatchId },
                     {
                         $set: {
                             status: 'FAILED',
                             completedAt: new Date(),
-                            failureMessages: [`${sheet}: ${message}`],
+                            failureMessages: [`${webhookSheet}: ${message}`],
                         },
                     }
                 );
             }
             structuredLogger.error('SYNC_FAILED', {
                 event:
-                    sheet === 'Resource'
+                    importSheet === 'Resource'
                         ? 'RESOURCE_IMPORT_FAILED'
-                        : sheet === 'Project'
+                        : importSheet === 'Project'
                           ? 'PROJECT_IMPORT_FAILED'
                           : 'ALLOCATION_IMPORT_FAILED',
                 requestId,
                 syncBatchId,
                 syncId,
-                sheet,
+                sheet: webhookSheet,
+                importSheet,
                 error: message,
                 stack: err instanceof Error ? err.stack : undefined,
             });

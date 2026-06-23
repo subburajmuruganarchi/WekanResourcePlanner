@@ -43,6 +43,8 @@ const envSchema = z.object({
     GOOGLE_APPS_SCRIPT_WEB_APP_URL: z.string().url().optional(),
     /** Apps Script web app URL for Mongo → Project_Allocation cell updates */
     GOOGLE_SHEET_SYNC_URL: z.string().url().optional(),
+    /** Tab name for R360 weekly planner mirror (default: Weekly Planner) */
+    GOOGLE_WEEKLY_PLANNER_SHEET_NAME: z.string().optional().default('Weekly Planner'),
     FRONTEND_URL: z
         .string({
             required_error: 'FRONTEND_URL is required for CORS',

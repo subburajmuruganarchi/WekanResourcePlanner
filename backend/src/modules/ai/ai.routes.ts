@@ -19,6 +19,14 @@ router.get('/staffing-risk/:projectId', requireRole(...MANAGEMENT_VIEW_ROLES), (
     aiController.staffingRisk(req, res, next)
 );
 
+router.get('/risk-intelligence/:projectId', requireRole(...MANAGEMENT_VIEW_ROLES), (req, res, next) =>
+    aiController.riskIntelligence(req, res, next)
+);
+
+router.get('/raid-suggestions', requireRole(...MANAGEMENT_VIEW_ROLES), (req, res, next) =>
+    aiController.raidSuggestions(req, res, next)
+);
+
 router.get('/approval-anomalies', requireRole(...MANAGEMENT_VIEW_ROLES), (req, res, next) =>
     aiController.approvalAnomalies(req, res, next)
 );

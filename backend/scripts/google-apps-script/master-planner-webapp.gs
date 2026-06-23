@@ -14,6 +14,7 @@ const CONFIG = {
   FTE_DIVISOR: 40,
   SOURCE: {
     ALLOCATION_SHEET: "Project_Allocation",
+    WEEKLY_PLANNER_SHEET: "Weekly Planner",
     RESOURCE_SHEET: "Resource",
     COL_NAME: "Name",
     COL_ROLE: "Role",
@@ -1242,6 +1243,20 @@ function doPost(e) {
     return handleUpdateProjectAllocation(body);
   }
 
+  if (body.action === 'UPSERT_WEEKLY_PLANNER_ROWS') {
+    var upsertSecret = PropertiesService.getScriptProperties().getProperty('R360_SYNC_SECRET');
+    if (upsertSecret) {
+      var upsertKey =
+        (e && e.parameter && e.parameter['x-r360-sync-key']) ||
+        body.syncKey ||
+        null;
+      if (upsertKey !== upsertSecret) {
+        return jsonResponse({ status: 'FAILED', error: 'Unauthorized' });
+      }
+    }
+    return handleUpsertWeeklyPlannerRows(body);
+  }
+
   try {
     var action = body.action;
     var tabName = body.tabName;
@@ -1314,6 +1329,30 @@ function doGet(e) {
   });
 }
 
+function isAllocationTabName(tabName) {
+  return (
+    tabName === CONFIG.SOURCE.ALLOCATION_SHEET ||
+    tabName === CONFIG.SOURCE.WEEKLY_PLANNER_SHEET
+  );
+}
+
+function resolvePatchTargetSheets(payload) {
+  var requested = payload.targetSheets || [];
+  var defaults = [CONFIG.SOURCE.ALLOCATION_SHEET];
+  var names = requested.length > 0 ? requested : defaults;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var resolved = [];
+  names.forEach(function (name) {
+    if (ss.getSheetByName(name)) {
+      resolved.push(name);
+    }
+  });
+  if (resolved.length === 0 && ss.getSheetByName(CONFIG.SOURCE.ALLOCATION_SHEET)) {
+    resolved.push(CONFIG.SOURCE.ALLOCATION_SHEET);
+  }
+  return resolved;
+}
+
 function handleUpdateProjectAllocation(payload) {
   var cells = payload.cells || payload.updates || [];
   Logger.log('PATCH_ALLOCATION_CELLS received, cells=' + cells.length);
@@ -1324,27 +1363,71 @@ function handleUpdateProjectAllocation(payload) {
 
   var applied = 0;
   var failed = [];
-  var ctx;
+  var targetSheets = resolvePatchTargetSheets(payload);
 
-  try {
-    ctx = loadProjectAllocationPatchContext();
-  } catch (err) {
-    return jsonResponse({
-      status: 'FAILED',
-      applied: 0,
-      failed: [{ reason: err.message || String(err) }],
+  targetSheets.forEach(function (sheetName) {
+    var ctx;
+    try {
+      ctx = loadAllocationPatchContext(sheetName);
+    } catch (err) {
+      failed.push({ sheet: sheetName, reason: err.message || String(err) });
+      return;
+    }
+
+    cells.forEach(function (cell) {
+      try {
+        applyAllocationCellPatch(ctx, cell, true);
+        applied++;
+      } catch (err) {
+        failed.push({
+          sheet: sheetName,
+          pid: cell.pid,
+          eid: cell.eid,
+          weekHeader: cell.weekHeader || cell.weekStart,
+          reason: err.message || String(err),
+        });
+      }
     });
+  });
+
+  return jsonResponse({
+    status: failed.length === 0 ? 'SUCCESS' : applied > 0 ? 'PARTIAL' : 'FAILED',
+    applied: applied,
+    failed: failed,
+    sheets: targetSheets,
+  });
+}
+
+function handleUpsertWeeklyPlannerRows(payload) {
+  var rows = payload.rows || [];
+  var sheetName = payload.sheetName || CONFIG.SOURCE.WEEKLY_PLANNER_SHEET;
+  Logger.log('UPSERT_WEEKLY_PLANNER_ROWS rows=' + rows.length + ' sheet=' + sheetName);
+
+  if (rows.length === 0) {
+    return jsonResponse({ status: 'SUCCESS', applied: 0, failed: [] });
   }
 
-  cells.forEach(function (cell) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    return jsonResponse({ status: 'FAILED', error: 'Sheet not found: ' + sheetName });
+  }
+
+  var weekTriples = collectWeekTriplesFromPlannerRows(rows);
+  ensureWeeklyPlannerHeaders(ss, sheet, weekTriples);
+
+  var applied = 0;
+  var failed = [];
+
+  rows.forEach(function (row) {
     try {
-      applyProjectAllocationCellPatch(ctx, cell);
+      var ctx = loadWeeklyPlannerPatchContext(sheetName);
+      upsertWeeklyPlannerRow(ctx, row);
       applied++;
     } catch (err) {
       failed.push({
-        pid: cell.pid,
-        eid: cell.eid,
-        weekHeader: cell.weekHeader || cell.weekStart,
+        pid: row.pid,
+        eid: row.eid,
         reason: err.message || String(err),
       });
     }
@@ -1357,15 +1440,93 @@ function handleUpdateProjectAllocation(payload) {
   });
 }
 
-function loadProjectAllocationPatchContext() {
+var WEEKLY_PLANNER_BASE_HEADERS = [
+  'PID',
+  'EID',
+  'Project',
+  'Resource',
+  'Resource Role',
+  'Project Type',
+  'Project Status',
+  'Active',
+];
+
+function collectWeekTriplesFromPlannerRows(rows) {
+  var map = {};
+  rows.forEach(function (row) {
+    var weeks = row.weeklyWeeks || row.weeklyHours || [];
+    weeks.forEach(function (week) {
+      var key = week.weekStart || week.weekHeader;
+      if (!key) return;
+      map[key] = {
+        weekHeader: week.weekHeader || week.weekStart,
+        weekStart: week.weekStart || null,
+      };
+    });
+  });
+  return Object.keys(map).map(function (k) {
+    return map[k];
+  });
+}
+
+function ensureWeeklyPlannerHeaders(ss, weeklySheet, weekTriples) {
+  weekTriples = weekTriples || [];
+  var lastCol = Math.max(weeklySheet.getLastColumn(), 1);
+  var weeklyHeaders = weeklySheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var hasPid = weeklyHeaders.some(function (h) {
+    var col = String(h).trim().toLowerCase();
+    return col === 'pid' || col === 'p-id' || col === 'p_id';
+  });
+
+  if (!hasPid) {
+    weeklySheet.getRange(1, 1, 1, WEEKLY_PLANNER_BASE_HEADERS.length).setValues([WEEKLY_PLANNER_BASE_HEADERS]);
+    weeklyHeaders = WEEKLY_PLANNER_BASE_HEADERS.slice();
+  }
+
+  ensureWeeklyPlannerWeekColumns(weeklySheet, weeklyHeaders, weekTriples, ss.getSpreadsheetTimeZone());
+}
+
+function ensureWeeklyPlannerWeekColumns(sheet, headers, weekTriples, timezone) {
+  headers = headers ? headers.slice() : [];
+  var changed = false;
+
+  weekTriples.forEach(function (week) {
+    ['Plan', 'Act', 'Delta'].forEach(function (metric) {
+      var metricKey = metric.toLowerCase();
+      if (
+        findWeeklyPlannerMetricColumn(
+          headers,
+          week.weekHeader,
+          week.weekStart,
+          metricKey,
+          timezone
+        ) === -1
+      ) {
+        headers.push((week.weekHeader || week.weekStart) + ' ' + metric);
+        changed = true;
+      }
+    });
+  });
+
+  if (changed) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+
+  return headers;
+}
+
+function loadWeeklyPlannerPatchContext(sheetName) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('Project_Allocation');
+  var sheet = ss.getSheetByName(sheetName);
   if (!sheet) {
-    throw new Error('Project_Allocation sheet not found');
+    throw new Error(sheetName + ' sheet not found');
   }
 
   var timezone = ss.getSpreadsheetTimeZone();
   var data = sheet.getDataRange().getValues();
+  if (data.length === 0) {
+    throw new Error(sheetName + ' has no header row');
+  }
   var headers = data[0];
 
   var pidCol = -1;
@@ -1378,11 +1539,12 @@ function loadProjectAllocationPatchContext() {
   });
 
   if (pidCol === -1 || eidCol === -1) {
-    throw new Error('PID/EID columns missing on Project_Allocation');
+    throw new Error('PID/EID columns missing on ' + sheetName);
   }
 
   return {
     sheet: sheet,
+    sheetName: sheetName,
     timezone: timezone,
     data: data,
     headers: headers,
@@ -1391,16 +1553,121 @@ function loadProjectAllocationPatchContext() {
   };
 }
 
-function applyProjectAllocationCellPatch(ctx, cell) {
+function parseWeeklyPlannerColumnHeader(header) {
+  var s = String(header || '').trim();
+  var m = s.match(/^(.+?)\s+(Plan|Act|Actual|Delta)$/i);
+  if (!m) return null;
+  var metric = m[2].toLowerCase();
+  if (metric === 'actual') metric = 'act';
+  return { weekLabel: m[1].trim(), metric: metric };
+}
+
+function findWeeklyPlannerMetricColumn(headers, weekHeader, weekStartIso, metric, timezone) {
+  var targetWeek = normalizeWeekHeaderLabel(weekHeader);
+  var targetMetric = String(metric || '').toLowerCase();
+
+  for (var i = 0; i < headers.length; i++) {
+    var parsed = parseWeeklyPlannerColumnHeader(headers[i]);
+    if (!parsed || parsed.metric !== targetMetric) continue;
+
+    var weekMatch = normalizeWeekHeaderLabel(parsed.weekLabel) === targetWeek;
+    if (!weekMatch && weekStartIso) {
+      weekMatch =
+        headerMatchesWeekStartIso(parsed.weekLabel, weekStartIso, timezone) ||
+        headerMatchesWeekColumn(parsed.weekLabel, weekHeader, timezone);
+    }
+    if (weekMatch) return i;
+  }
+
+  return -1;
+}
+
+function upsertWeeklyPlannerRow(ctx, row) {
+  var pid = String(row.pid || '').trim().toUpperCase();
+  var eid = String(row.eid || '').trim().toUpperCase();
+  if (!pid || !eid) {
+    throw new Error('Missing pid or eid on upsert row');
+  }
+
+  var weeklyWeeks = row.weeklyWeeks || row.weeklyHours || [];
+  ctx.headers = ensureWeeklyPlannerWeekColumns(
+    ctx.sheet,
+    ctx.headers,
+    weeklyWeeks,
+    ctx.timezone
+  );
+  ctx.data = ctx.sheet.getDataRange().getValues();
+
+  var targetRow = findAllocationRowIndex(ctx, pid, eid);
+  if (targetRow === -1) {
+    targetRow = appendAllocationRow(ctx, row);
+    ctx.data = ctx.sheet.getDataRange().getValues();
+  }
+
+  weeklyWeeks.forEach(function (week) {
+    var weekHeader = week.weekHeader || week.weekStart;
+    var weekStart = week.weekStart || null;
+    var planned = Number(week.plannedHours != null ? week.plannedHours : week.hours) || 0;
+    var actual = Number(week.actualHours) || 0;
+    var delta = Number(week.deltaHours);
+    if (!Number.isFinite(delta)) {
+      delta = actual - planned;
+    }
+
+    var planCol = findWeeklyPlannerMetricColumn(ctx.headers, weekHeader, weekStart, 'plan', ctx.timezone);
+    var actCol = findWeeklyPlannerMetricColumn(ctx.headers, weekHeader, weekStart, 'act', ctx.timezone);
+    var deltaCol = findWeeklyPlannerMetricColumn(ctx.headers, weekHeader, weekStart, 'delta', ctx.timezone);
+
+    if (planCol > -1) ctx.sheet.getRange(targetRow, planCol + 1).setValue(planned);
+    if (actCol > -1) ctx.sheet.getRange(targetRow, actCol + 1).setValue(actual);
+    if (deltaCol > -1) ctx.sheet.getRange(targetRow, deltaCol + 1).setValue(delta);
+  });
+}
+
+function loadAllocationPatchContext(sheetName) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    throw new Error(sheetName + ' sheet not found');
+  }
+
+  var timezone = ss.getSpreadsheetTimeZone();
+  var data = sheet.getDataRange().getValues();
+  if (data.length === 0) {
+    throw new Error(sheetName + ' has no header row');
+  }
+  var headers = data[0];
+
+  var pidCol = -1;
+  var eidCol = -1;
+
+  headers.forEach(function (h, i) {
+    var col = String(h).trim().toLowerCase();
+    if (col === 'pid' || col === 'p-id' || col === 'p_id') pidCol = i;
+    if (col === 'eid' || col === 'e-id' || col === 'e_id') eidCol = i;
+  });
+
+  if (pidCol === -1 || eidCol === -1) {
+    throw new Error('PID/EID columns missing on ' + sheetName);
+  }
+
+  return {
+    sheet: sheet,
+    sheetName: sheetName,
+    timezone: timezone,
+    data: data,
+    headers: headers,
+    pidCol: pidCol,
+    eidCol: eidCol,
+  };
+}
+
+function applyAllocationCellPatch(ctx, cell, appendIfMissing) {
   var weekHeader = cell.weekHeader || cell.weekStart;
   var weekStartIso = cell.weekStart || null;
   var pid = String(cell.pid || '').trim().toUpperCase();
   var eid = String(cell.eid || '').trim().toUpperCase();
   var hours = Number(cell.plannedHours);
-
-  Logger.log(
-    'PATCH_ALLOCATION_CELLS pid=' + pid + ' eid=' + eid + ' week=' + weekHeader + ' hours=' + hours
-  );
 
   if (!pid || !eid || !weekHeader) {
     throw new Error('Missing pid, eid, or weekHeader');
@@ -1414,22 +1681,95 @@ function applyProjectAllocationCellPatch(ctx, cell) {
     throw new Error('Week column missing: ' + weekHeader);
   }
 
-  var targetRow = -1;
+  var targetRow = findAllocationRowIndex(ctx, pid, eid);
+  if (targetRow === -1) {
+    if (!appendIfMissing) {
+      throw new Error('Row not found for PID=' + pid + ' EID=' + eid);
+    }
+    targetRow = appendAllocationRow(ctx, cell);
+    ctx.data = ctx.sheet.getDataRange().getValues();
+  }
+
+  ctx.sheet.getRange(targetRow, weekCol + 1).setValue(hours);
+}
+
+function findAllocationRowIndex(ctx, pid, eid) {
   for (var r = 1; r < ctx.data.length; r++) {
     var rowPid = String(ctx.data[r][ctx.pidCol] || '').trim().toUpperCase();
     var rowEid = String(ctx.data[r][ctx.eidCol] || '').trim().toUpperCase();
     if (rowPid === pid && rowEid === eid) {
-      targetRow = r + 1;
-      break;
+      return r + 1;
     }
   }
+  return -1;
+}
 
-  if (targetRow === -1) {
-    throw new Error('Row not found for PID=' + pid + ' EID=' + eid);
+function appendAllocationRow(ctx, cell) {
+  var newRow = new Array(ctx.headers.length).fill('');
+  newRow[ctx.pidCol] = String(cell.pid || '').trim().toUpperCase();
+  newRow[ctx.eidCol] = String(cell.eid || '').trim().toUpperCase();
+
+  var projectCol = findHeaderColumn(ctx.headers, ['project', 'project name']);
+  var typeCol = findHeaderColumn(ctx.headers, ['project type', 'type']);
+  var statusCol = findHeaderColumn(ctx.headers, ['project status', 'status']);
+  var resourceCol = findHeaderColumn(ctx.headers, ['resource', 'resource name', 'name']);
+  var roleCol = findHeaderColumn(ctx.headers, ['resource role', 'job role', 'role']);
+  var activeCol = findHeaderColumn(ctx.headers, ['active', 'availability']);
+
+  if (projectCol > -1) newRow[projectCol] = cell.projectName || '';
+  if (typeCol > -1) newRow[typeCol] = cell.projectType || '';
+  if (statusCol > -1) newRow[statusCol] = cell.projectStatus || 'Active';
+  if (resourceCol > -1) newRow[resourceCol] = cell.resourceName || '';
+  if (roleCol > -1) newRow[roleCol] = cell.jobRole || 'Consultant';
+  if (activeCol > -1) newRow[activeCol] = cell.activeFlag || 'Active';
+
+  var nextRow = ctx.sheet.getLastRow() + 1;
+  ctx.sheet.getRange(nextRow, 1, 1, newRow.length).setValues([newRow]);
+  return nextRow;
+}
+
+function findHeaderColumn(headers, candidates) {
+  for (var i = 0; i < headers.length; i++) {
+    var col = String(headers[i]).trim().toLowerCase();
+    for (var c = 0; c < candidates.length; c++) {
+      if (col === candidates[c]) return i;
+    }
+  }
+  return -1;
+}
+
+function upsertAllocationRow(ctx, row) {
+  var pid = String(row.pid || '').trim().toUpperCase();
+  var eid = String(row.eid || '').trim().toUpperCase();
+  if (!pid || !eid) {
+    throw new Error('Missing pid or eid on upsert row');
   }
 
-  ctx.sheet.getRange(targetRow, weekCol + 1).setValue(hours);
-  Logger.log('Updated row ' + targetRow + ' col ' + (weekCol + 1));
+  var targetRow = findAllocationRowIndex(ctx, pid, eid);
+  if (targetRow === -1) {
+    targetRow = appendAllocationRow(ctx, row);
+    ctx.data = ctx.sheet.getDataRange().getValues();
+  }
+
+  var weeklyHours = row.weeklyHours || [];
+  weeklyHours.forEach(function (week) {
+    var weekCol = findWeekColumn(
+      ctx.headers,
+      week.weekHeader || week.weekStart,
+      week.weekStart || null,
+      ctx.timezone
+    );
+    if (weekCol === -1) return;
+    ctx.sheet.getRange(targetRow, weekCol + 1).setValue(Number(week.hours) || 0);
+  });
+}
+
+function loadProjectAllocationPatchContext() {
+  return loadAllocationPatchContext(CONFIG.SOURCE.ALLOCATION_SHEET);
+}
+
+function applyProjectAllocationCellPatch(ctx, cell) {
+  applyAllocationCellPatch(ctx, cell, true);
 }
 
 function normalizeWeekHeaderLabel(value) {
@@ -1554,7 +1894,7 @@ function syncSheetToR360(tabName) {
   // ======================================
   var projectMap = {};
 
-  if (tabName === "Project_Allocation") {
+  if (tabName === "Project_Allocation" || tabName === CONFIG.SOURCE.WEEKLY_PLANNER_SHEET) {
 
     var projectSheet = ss.getSheetByName("Project");
 
@@ -1648,7 +1988,7 @@ for (var p = 1; p < pdata.length; p++) {
     // ======================================
     // PROJECT ALLOCATION (FIXED)
     // ======================================
-    if (tabName === "Project_Allocation") {
+    if (tabName === "Project_Allocation" || tabName === CONFIG.SOURCE.WEEKLY_PLANNER_SHEET) {
 
       var pid = obj.PID || obj["P-id"];
 
@@ -1703,22 +2043,34 @@ var allocation = {
       // ======================================
       // FIXED WEEK LOGIC (FLATTENED)
       // ======================================
-      headers.forEach(function (header, index) {
+      if (tabName === CONFIG.SOURCE.WEEKLY_PLANNER_SHEET) {
+        headers.forEach(function (header, index) {
+          var parsed = parseWeeklyPlannerColumnHeader(header);
+          if (!parsed || parsed.metric !== 'plan') return;
 
-        if (!isDateColumn(header)) return;
+          var value = row[index];
+          var num = parseFloat(value);
+          if (isNaN(num)) num = 0;
 
-        var value = row[index];
-        var num = parseFloat(value);
+          var weekLabel = parsed.weekLabel.toString().trim().replace(/\s+/g, '-');
+          allocation[weekLabel] = num;
+        });
+      } else {
+        headers.forEach(function (header, index) {
+          if (!isDateColumn(header)) return;
 
-        if (isNaN(num)) {
-          num = 0;
-        }
+          var value = row[index];
+          var num = parseFloat(value);
 
-        var weekLabel = header.toString().trim().replace(/\s+/g, "-");
+          if (isNaN(num)) {
+            num = 0;
+          }
 
-        // IMPORTANT: FLAT STRUCTURE (backend requirement)
-        allocation[weekLabel] = num;
-      });
+          var weekLabel = header.toString().trim().replace(/\s+/g, '-');
+
+          allocation[weekLabel] = num;
+        });
+      }
 
         if (
   allocation.PID &&
@@ -1862,7 +2214,7 @@ function normalizeHeader(tabName, header) {
 
   var value = header.toString().trim();
 
-  if (tabName === "Project_Allocation") {
+  if (tabName === "Project_Allocation" || tabName === CONFIG.SOURCE.WEEKLY_PLANNER_SHEET) {
 
     // switch (value.toLowerCase()) {
 switch (value.toLowerCase().trim()) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { fetchStaffingRisk, type StaffingRiskAssessment } from '@/lib/use-ai-insights';
+import { fetchProjectRiskIntelligence } from '@/lib/risk-intelligence';
 
 const styles: Record<string, string> = {
     LOW: 'bg-green-50 text-green-700 border-green-200',
@@ -9,17 +9,26 @@ const styles: Record<string, string> = {
 };
 
 export function StaffingRiskBadge({ projectId }: { projectId: string }) {
-    const [risk, setRisk] = useState<StaffingRiskAssessment | null>(null);
+    const [level, setLevel] = useState<string | null>(null);
+    const [title, setTitle] = useState('');
 
     useEffect(() => {
-        fetchStaffingRisk(projectId).then(setRisk);
+        fetchProjectRiskIntelligence(projectId)
+            .then((data) => {
+                if (!data) return;
+                setLevel(data.deliveryRisk.level);
+                setTitle(data.deliveryRisk.reasons.join(' '));
+            })
+            .catch(() => {
+                setLevel(null);
+            });
     }, [projectId]);
 
-    if (!risk) return null;
+    if (!level || level === 'LOW') return null;
 
     return (
-        <Badge variant="outline" className={styles[risk.level] ?? ''} title={risk.reasons.join(' ')}>
-            Staffing risk: {risk.level}
+        <Badge variant="outline" className={styles[level] ?? ''} title={title}>
+            Current delivery risk: {level}
         </Badge>
     );
 }

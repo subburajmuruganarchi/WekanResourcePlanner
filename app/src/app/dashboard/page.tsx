@@ -23,7 +23,8 @@ import {
 import { useDashboardInsight } from '@/lib/use-ai-insights';
 import { useNavigate } from 'react-router-dom';
 import type { HeatmapCell, HeatmapMeta } from '@/components/dashboard/allocation-heatmap';
-import type { StaffingRiskItem } from '@/components/dashboard/staffing-risk-cards';
+import type { DeliveryRiskItem } from '@/lib/risk-intelligence';
+import { fetchDeliveryRisks } from '@/lib/risk-intelligence';
 import { useUtilizationVariance } from '@/lib/use-utilization';
 import { api as apiClient } from '@/lib/api-client';
 import {
@@ -83,7 +84,7 @@ export default function Dashboard() {
         meta?: HeatmapMeta;
     } | null>(null);
     const [heatmapLoading, setHeatmapLoading] = useState(true);
-    const [staffingRisks, setStaffingRisks] = useState<StaffingRiskItem[]>([]);
+    const [staffingRisks, setStaffingRisks] = useState<DeliveryRiskItem[]>([]);
     const [risksLoading, setRisksLoading] = useState(true);
 
     const [periodMode, setPeriodMode] = useState<DashboardPeriodMode>('week');
@@ -138,8 +139,7 @@ export default function Dashboard() {
                 .then((data) => setHeatmap(data))
                 .catch(() => setHeatmap(null))
                 .finally(() => setHeatmapLoading(false));
-            apiClient
-                .get<StaffingRiskItem[]>('/dashboard/staffing-risks')
+            fetchDeliveryRisks()
                 .then(setStaffingRisks)
                 .catch(() => setStaffingRisks([]))
                 .finally(() => setRisksLoading(false));
@@ -215,7 +215,7 @@ export default function Dashboard() {
     );
 
     const riskByProject = useMemo(() => {
-        const m = new Map<string, StaffingRiskItem>();
+        const m = new Map<string, DeliveryRiskItem>();
         for (const r of staffingRisks) m.set(r.projectId, r);
         return m;
     }, [staffingRisks]);
@@ -273,11 +273,11 @@ export default function Dashboard() {
                 onClick: () => navigate('/allocation'),
             },
             {
-                title: 'Skill gap analysis',
+                title: 'Planner capacity',
                 headline:
                     staffingRisks.length > 0
-                        ? `${staffingRisks.length} projects need role or skill coverage`
-                        : 'No critical skill gaps detected',
+                        ? `${staffingRisks.length} projects flagged for current delivery risk`
+                        : 'No planner capacity issues detected',
                 icon: Brain,
                 tone: 'amber' as const,
                 onClick: () => navigate('/insights'),
@@ -286,7 +286,7 @@ export default function Dashboard() {
                 title: 'Delivery forecast',
                 headline:
                     staffingRisks.filter((r) => r.level === 'HIGH').length > 0
-                        ? `${staffingRisks.filter((r) => r.level === 'HIGH').length} projects are at delivery risk`
+                        ? `${staffingRisks.filter((r) => r.level === 'HIGH').length} projects need immediate planner action`
                         : 'Delivery pipeline appears on track',
                 icon: LineChart,
                 tone: 'emerald' as const,
@@ -453,8 +453,8 @@ export default function Dashboard() {
 
                     <section>
                         <DashboardSectionHeader
-                            title="AI workforce risk detection"
-                            description="Predictive staffing gaps ranked by delivery impact."
+                            title="Current delivery risk"
+                            description="Allocation and planner capacity signals from Project_Allocation — not project-plan skill estimates."
                             action={
                                 <Button variant="ghost" size="sm" className="gap-1.5 text-brand-600">
                                     <Sparkles className="w-4 h-4" />

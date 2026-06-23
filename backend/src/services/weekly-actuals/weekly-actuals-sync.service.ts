@@ -157,6 +157,23 @@ export class WeeklyActualsSyncService {
             aggregatedGroups: groups.length,
         });
 
+        if (groups.length > 0) {
+            const { syncAllocationToGoogleSheet } = await import(
+                '../../modules/google-sheet-sync/allocation-sheet-sync.service'
+            );
+            const sheetUpdates = groups.map((g) => ({
+                employeeId: g.employeeId.toString(),
+                projectId: g.projectId.toString(),
+                weekStart: weekStartToIsoDate(g.weekStart),
+            }));
+            void syncAllocationToGoogleSheet(sheetUpdates).catch((err) => {
+                const message = err instanceof Error ? err.message : String(err);
+                structuredLogger.error('WEEKLY PLANNER SHEET SYNC AFTER ACTUALS FAILED', {
+                    error: message,
+                });
+            });
+        }
+
         return {
             syncBatchId,
             weeksProcessed: weekSet.size,

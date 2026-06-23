@@ -9,7 +9,8 @@ import {
     periodQueryString,
     getCurrentMonthValue,
 } from '@/lib/dashboard-period';
-import type { StaffingRiskItem } from '@/components/dashboard/staffing-risk-cards';
+import type { DeliveryRiskItem } from '@/lib/risk-intelligence';
+import { fetchDeliveryRisks } from '@/lib/risk-intelligence';
 
 export interface DeliveryCommandMetrics {
     managedProjects: number;
@@ -32,7 +33,7 @@ export function useDeliveryCommandMetrics() {
     const { user } = useAuth();
     const { projectIds } = usePortfolioScope(user?.role);
     const { projects, loading: projectsLoading } = useProjects();
-    const [risks, setRisks] = useState<StaffingRiskItem[]>([]);
+    const [risks, setRisks] = useState<DeliveryRiskItem[]>([]);
     const [pendingApprovals, setPendingApprovals] = useState(0);
     const [loading, setLoading] = useState(true);
 
@@ -46,7 +47,7 @@ export function useDeliveryCommandMetrics() {
         try {
             const period = buildDashboardPeriodRange('week', getCurrentWeekStart(), getCurrentMonthValue());
             const [risksRes, statsRes] = await Promise.all([
-                api.get<StaffingRiskItem[]>('/dashboard/staffing-risks'),
+                fetchDeliveryRisks(),
                 api.get<{ pendingApprovals: number }>(`/dashboard/stats?${periodQueryString(period)}`),
             ]);
             const scopedRisks =
@@ -73,7 +74,11 @@ export function useDeliveryCommandMetrics() {
         managedProjects: portfolioProjects.length,
         atRisk,
         blocked,
-        resourceGaps: risks.filter((r) => (r.unfulfilledHeadcount ?? 0) > 0).length,
+        resourceGaps: risks.filter(
+            (r) =>
+                r.capacityRisks?.some((c) => c.type === 'zero_planned_hours' || c.type === 'under_allocation') &&
+                r.level !== 'LOW'
+        ).length,
         pendingDecisions: pendingApprovals,
         upcomingReleases: Math.min(portfolioProjects.length, 3),
     };
@@ -83,7 +88,7 @@ export function useDeliveryCommandMetrics() {
         developer: 'Available bench resource',
         fromProject: portfolioProjects[i % Math.max(1, portfolioProjects.length)]?.name ?? 'Bench',
         toProject: r.name,
-        impact: 'Reduce delivery risk by ~20%',
+        impact: r.recommendations?.[0] ?? 'Update planner hours for the current week',
     }));
 
     return {

@@ -10,7 +10,7 @@ export default function RiskRadarPage() {
             <WorkspacePageHeader
                 eyebrow="Executive Command Center"
                 title="Executive Risk Radar"
-                description="Business-level delivery risks — impact, cause, and recommended executive action."
+                description="Current delivery risk from Project_Allocation and the weekly planner. Future capability gaps are shown separately in Insights."
             />
             <WorkspaceSection title="Active business risks">
                 <div className="space-y-3">
