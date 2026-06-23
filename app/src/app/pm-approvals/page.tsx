@@ -104,9 +104,9 @@ function groupEntries(entries: PendingEntry[]): GroupedByProject[] {
         for (const emp of proj.employees) {
             for (const week of emp.weeks) {
                 const statuses = week.entries.map(e => e.status)
-                if (statuses.includes('PM_Rejected')) week.weekStatus = 'PARTIAL_REJECTED'
-                else if (statuses.every(s => s === 'PM_Approved')) week.weekStatus = 'APPROVED'
-                else if (statuses.some(s => s === 'Submitted')) week.weekStatus = 'PENDING_APPROVAL'
+                if (statuses.some((s) => String(s).toUpperCase().includes('REJECT'))) week.weekStatus = 'PARTIAL_REJECTED'
+                else if (statuses.every((s) => String(s).toUpperCase().includes('APPROVED'))) week.weekStatus = 'APPROVED'
+                else if (statuses.some((s) => String(s).toUpperCase() === 'SUBMITTED')) week.weekStatus = 'PENDING_APPROVAL'
                 else week.weekStatus = 'DRAFT'
             }
             emp.weeks.sort((a, b) => b.weekStartDate.localeCompare(a.weekStartDate))

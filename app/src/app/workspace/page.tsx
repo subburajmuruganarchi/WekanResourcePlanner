@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Clock, Target, FolderKanban, Bell, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Clock, Target, FolderKanban, Bell, CheckCircle2, ArrowRight, Loader2 } from 'lucide-react';
 import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { WorkspacePageHeader, WorkspaceSection } from '@/components/workspaces/shared';
@@ -9,6 +9,7 @@ import { useOkrs } from '@/lib/use-okrs';
 import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { getCurrentWeekStart } from '@/lib/time-entry-week';
+import { isOperationalProject } from '@/lib/project-status';
 
 function getCurrentQuarter(): string {
     const now = new Date();
@@ -19,12 +20,12 @@ function getCurrentQuarter(): string {
 export default function EmployeeWorkspacePage() {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const { projects } = useProjects();
+    const { projects, loading: projectsLoading } = useProjects();
     const { okrs, overallScore, loading: okrLoading } = useOkrs(user?.id, getCurrentQuarter());
     const [timesheetStatus, setTimesheetStatus] = useState<'Draft' | 'Submitted' | 'Approved' | 'Unknown'>('Unknown');
     const [weekHours, setWeekHours] = useState(0);
 
-    const myProjects = projects.slice(0, 4);
+    const myProjects = projects.filter((p) => isOperationalProject(p));
 
     useEffect(() => {
         if (!user?.id) return;
@@ -35,8 +36,8 @@ export default function EmployeeWorkspacePage() {
                 const entries = Array.isArray(data) ? data : [];
                 setWeekHours(entries.reduce((s, e) => s + (e.hours ?? 0), 0));
                 const statuses = entries.map((e) => e.status).filter(Boolean);
-                if (statuses.every((s) => s === 'PM_APPROVED')) setTimesheetStatus('Approved');
-                else if (statuses.some((s) => s === 'SUBMITTED')) setTimesheetStatus('Submitted');
+                if (statuses.every((s) => s === 'PM_APPROVED' || s === 'PM_Approved')) setTimesheetStatus('Approved');
+                else if (statuses.some((s) => s === 'SUBMITTED' || s === 'Submitted')) setTimesheetStatus('Submitted');
                 else setTimesheetStatus('Draft');
             })
             .catch(() => setTimesheetStatus('Unknown'));
@@ -81,17 +82,29 @@ export default function EmployeeWorkspacePage() {
             </div>
 
             <WorkspaceSection title="My Projects">
-                <div className="grid gap-3 sm:grid-cols-2">
-                    {myProjects.map((p) => (
-                        <div key={p.id} className="dashboard-card p-4 flex items-center gap-3">
-                            <FolderKanban className="w-5 h-5 text-brand-600" />
-                            <div>
-                                <p className="font-medium text-slate-900">{p.name}</p>
-                                <p className="text-xs text-slate-500">{p.code}</p>
+                {projectsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-slate-500 p-4">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading your projects…
+                    </div>
+                ) : myProjects.length === 0 ? (
+                    <p className="text-sm text-slate-500 p-4">
+                        You are not allocated to any active projects yet. Log time on a project or ask your PM to add
+                        you to the roster.
+                    </p>
+                ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {myProjects.map((p) => (
+                            <div key={p.id} className="dashboard-card p-4 flex items-center gap-3">
+                                <FolderKanban className="w-5 h-5 text-brand-600" />
+                                <div>
+                                    <p className="font-medium text-slate-900">{p.name}</p>
+                                    <p className="text-xs text-slate-500">{p.code}</p>
+                                </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )}
             </WorkspaceSection>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

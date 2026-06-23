@@ -31,6 +31,12 @@ import type {
     ReportPreviewId,
     ReportPreviewPayload,
 } from "@/types/report-preview"
+import {
+    readDailyCache,
+    writeDailyCache,
+    REPORTS_PREVIEW_CACHE_KEY,
+    REPORTS_RISKS_CACHE_KEY,
+} from "@/lib/report-cache"
 
 interface ReportCard {
     id: ReportPreviewId
@@ -64,7 +70,18 @@ export default function ReportsPage() {
     const [skillForecasts, setSkillForecasts] = useState<SkillGapForecastItem[]>([])
     const [riskLoading, setRiskLoading] = useState(true)
 
-    const loadPreviews = useCallback(async () => {
+    const loadPreviews = useCallback(async (force = false) => {
+        if (!force) {
+            const cached = readDailyCache<{ reports: ReportPreviewPayload[]; generatedAt: string }>(
+                REPORTS_PREVIEW_CACHE_KEY
+            )
+            if (cached) {
+                setPreviews(cached.reports)
+                setLastLoadedAt(cached.generatedAt)
+                return
+            }
+        }
+
         setIsRefreshing(true)
         setPreviewError(null)
         try {
@@ -76,6 +93,10 @@ export default function ReportsPage() {
             setPreviews(payload.reports)
             setLastLoadedAt(payload.generatedAt)
             setSheetIndices({})
+            writeDailyCache(REPORTS_PREVIEW_CACHE_KEY, {
+                reports: payload.reports,
+                generatedAt: payload.generatedAt,
+            })
         } catch (error) {
             const message =
                 error instanceof Error ? error.message : "Failed to load report previews. Please try again."
@@ -85,23 +106,43 @@ export default function ReportsPage() {
         }
     }, [])
 
-    useEffect(() => {
-        void loadPreviews()
-    }, [loadPreviews])
+    const loadRisks = useCallback(async (force = false) => {
+        if (!force) {
+            const cached = readDailyCache<{
+                deliveryRisks: DeliveryRiskItem[]
+                skillForecasts: SkillGapForecastItem[]
+            }>(REPORTS_RISKS_CACHE_KEY)
+            if (cached) {
+                setDeliveryRisks(cached.deliveryRisks)
+                setSkillForecasts(cached.skillForecasts)
+                setRiskLoading(false)
+                return
+            }
+        }
+
+        setRiskLoading(true)
+        try {
+            const [dr, fc] = await Promise.all([fetchDeliveryRisks(), fetchSkillGapForecasts()])
+            const risks = dr ?? []
+            const forecasts = fc ?? []
+            setDeliveryRisks(risks)
+            setSkillForecasts(forecasts)
+            writeDailyCache(REPORTS_RISKS_CACHE_KEY, {
+                deliveryRisks: risks,
+                skillForecasts: forecasts,
+            })
+        } catch {
+            setDeliveryRisks([])
+            setSkillForecasts([])
+        } finally {
+            setRiskLoading(false)
+        }
+    }, [])
 
     useEffect(() => {
-        setRiskLoading(true)
-        Promise.all([fetchDeliveryRisks(), fetchSkillGapForecasts()])
-            .then(([dr, fc]) => {
-                setDeliveryRisks(dr ?? [])
-                setSkillForecasts(fc ?? [])
-            })
-            .catch(() => {
-                setDeliveryRisks([])
-                setSkillForecasts([])
-            })
-            .finally(() => setRiskLoading(false))
-    }, [])
+        void loadPreviews(false)
+        void loadRisks(false)
+    }, [loadPreviews, loadRisks])
 
     const previewsById = useMemo(() => {
         const map = new Map<ReportPreviewId, ReportPreviewPayload>()
@@ -112,7 +153,8 @@ export default function ReportsPage() {
     }, [previews])
 
     const handleRefresh = () => {
-        void loadPreviews()
+        void loadPreviews(true)
+        void loadRisks(true)
     }
 
     const setSheetIndex = (id: ReportPreviewId, index: number) => {

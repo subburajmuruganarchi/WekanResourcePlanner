@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ArrowLeft, Users, Calendar, Clock, DollarSign, Loader2 } from "lucide-react"
 import { useProject } from "@/lib/use-projects"
+import { projectStatusOf } from "@/lib/project-status"
 import { useAuth } from "@/lib/auth-context"
 import { TimesheetApprovalsTab } from "./components/timesheet-approvals-tab"
 import { StaffingRiskBadge } from "@/components/ai/staffing-risk-badge"
@@ -43,6 +44,8 @@ export function ProjectDetail() {
         )
     }
 
+    const status = projectStatusOf(project)
+
     // Calculate duration in months
     const startDate = new Date(project.startDate)
     const endDate = project.endDate ? new Date(project.endDate) : new Date()
@@ -65,8 +68,8 @@ export function ProjectDetail() {
                     <div>
                         <div className="flex items-center gap-3 mb-2">
                             <h1 className="text-2xl font-semibold text-gray-900">{project.name}</h1>
-                            <Badge variant={project.status === "Active" ? "success" : project.status === "OnHold" ? "warning" : "secondary"}>
-                                {project.status}
+                            <Badge variant={status === "Active" ? "success" : status === "OnHold" ? "warning" : "secondary"}>
+                                {status}
                             </Badge>
                             <Badge variant={project.priority === "High" ? "warning" : project.priority === "Low" ? "secondary" : "default"}>
                                 {project.priority} Priority
@@ -144,6 +147,39 @@ export function ProjectDetail() {
                                     <div><p className="text-xs text-gray-500">End Date</p><p className="font-medium">{project.endDate ? new Date(project.endDate).toLocaleDateString() : 'Ongoing'}</p></div>
                                 </div>
                             </div>
+
+                            {(project.teamMembers?.length ?? 0) > 0 && (
+                                <div className="pt-6 border-t border-gray-100">
+                                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Team Members</h3>
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-gray-50">
+                                                <TableHead>Name</TableHead>
+                                                <TableHead>Role</TableHead>
+                                                <TableHead className="text-right">Allocation</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {project.teamMembers!.map((member) => (
+                                                <TableRow key={member.employeeId}>
+                                                    <TableCell>
+                                                        <p className="font-medium text-gray-900">{member.name}</p>
+                                                        {member.email && (
+                                                            <p className="text-xs text-gray-500">{member.email}</p>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-gray-600">
+                                                        {member.roleName ?? '—'}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {member.allocationPercent}%
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            )}
                         </div>
                         <div className="col-span-1 border-l border-gray-100 pl-8">
                             <h3 className="text-sm font-semibold text-gray-900 mb-4">Summary</h3>

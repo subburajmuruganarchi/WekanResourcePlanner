@@ -7,7 +7,10 @@ import { notificationService } from '../notifications/notification.service';
 import { structuredLogger } from '../../common/logger';
 import { NotificationType } from '../notifications/notification.model';
 import { Types, startSession } from 'mongoose';
-import { TimeEntryStatus, ProjectStatus } from '../../common/types/enums';
+import { TimeEntryStatus, ProjectStatus, CreatedByRole, WeeklyAllocationSource, WeeklyAllocationStatus } from '../../common/types/enums';
+import { normalizeProjectStatus } from '../../common/utils/project-status.util';
+import { WeeklyAllocationEntry } from '../weekly-allocations/weekly-allocation-entry.model';
+import { WeeklyCapacityEngine } from '../../services/weekly-capacity/weekly-capacity.engine';
 import { features } from '../../config/features';
 import { weeklyActualsSyncService } from '../../services/weekly-actuals/weekly-actuals-sync.service';
 import { isFutureUtcWeek } from '../../common/utils/week.util';
@@ -107,10 +110,8 @@ export class TimeEntryService {
             const project = await Project.findById(request.projectId).session(session);
             if (!project) throw new Error('Project not found');
 
-            if (
-                project.status === ProjectStatus.COMPLETED ||
-                project.is_active === false
-            ) {
+            const projectStatus = normalizeProjectStatus(project.status);
+            if (project.is_active === false || projectStatus === ProjectStatus.COMPLETED) {
                 throw new Error(
                     'Cannot log time against an inactive or completed project.'
                 );
@@ -187,6 +188,15 @@ export class TimeEntryService {
                 { upsert: true, new: true, session }
             );
 
+            await this.ensureWeekStaffingForTimeEntry(
+                session,
+                request.employeeId,
+                project._id as Types.ObjectId,
+                project,
+                weekStartDate,
+                request.hours
+            );
+
             await session.commitTransaction();
 
             if (!timeEntry) throw new Error('Failed to save time entry');
@@ -207,6 +217,97 @@ export class TimeEntryService {
         const diff = day === 0 ? 6 : day - 1;
         d.setUTCDate(d.getUTCDate() - diff);
         return d;
+    }
+
+    /** When logging time on a project without allocation, create allocation + weekly planner row for the week. */
+    private async ensureWeekStaffingForTimeEntry(
+        session: import('mongoose').ClientSession,
+        employeeId: string,
+        projectId: Types.ObjectId,
+        project: { start_date?: Date; end_date?: Date },
+        weekStartDate: Date,
+        hoursLogged: number
+    ): Promise<void> {
+        const empOid = new Types.ObjectId(employeeId);
+        let allocation = await ProjectAllocation.findOne({
+            project_id: projectId,
+            employee_id: empOid,
+        }).session(session);
+
+        if (!allocation) {
+            const employee = await Employee.findById(empOid).session(session);
+            let roleId = employee?.job_role_id ?? employee?.role_id;
+            if (!roleId) {
+                const fallback = await Role.findOne().session(session);
+                roleId = fallback?._id;
+            }
+            if (!roleId) return;
+
+            const capacity = features.weeklyCapacityHours ?? 40;
+            const allocPercent = Math.min(100, Math.max(10, Math.round((hoursLogged / capacity) * 100)));
+            const weekEnd = new Date(weekStartDate);
+            weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
+            const defaultEnd = new Date(weekStartDate);
+            defaultEnd.setUTCMonth(defaultEnd.getUTCMonth() + 3);
+            const endDate =
+                project.end_date && new Date(project.end_date) > weekEnd
+                    ? new Date(project.end_date)
+                    : defaultEnd;
+
+            allocation = new ProjectAllocation({
+                project_id: projectId,
+                employee_id: empOid,
+                role_id: roleId,
+                start_date: weekStartDate,
+                end_date: endDate,
+                allocation_percent: allocPercent,
+                is_active: true,
+                created_by_role: CreatedByRole.SYSTEM,
+                allocation_reason: 'Auto-created from time entry',
+            });
+            await allocation.save({ session });
+        } else if (!allocation.is_active) {
+            allocation.is_active = true;
+            await allocation.save({ session });
+        }
+
+        const existingWeek = await WeeklyAllocationEntry.findOne({
+            employee_id: empOid,
+            project_id: projectId,
+            week_start: weekStartDate,
+        }).session(session);
+
+        const plannedFromAlloc = WeeklyCapacityEngine.plannedHoursFromAllocationPercent(
+            allocation.allocation_percent ?? 0
+        );
+        const targetPlanned = Math.max(hoursLogged, plannedFromAlloc);
+
+        if (!existingWeek) {
+            await WeeklyAllocationEntry.create(
+                [
+                    {
+                        allocation_id: allocation._id,
+                        employee_id: empOid,
+                        project_id: projectId,
+                        week_start: weekStartDate,
+                        planned_hours: targetPlanned,
+                        actual_hours: 0,
+                        forecast_hours: 0,
+                        variance_hours: targetPlanned,
+                        source: WeeklyAllocationSource.MANUAL,
+                        status: WeeklyAllocationStatus.DRAFT,
+                    },
+                ],
+                { session }
+            );
+        } else if ((existingWeek.planned_hours ?? 0) <= 0) {
+            existingWeek.planned_hours = targetPlanned;
+            existingWeek.variance_hours = targetPlanned - (existingWeek.actual_hours ?? 0);
+            if (!existingWeek.allocation_id) {
+                existingWeek.allocation_id = allocation._id;
+            }
+            await existingWeek.save({ session });
+        }
     }
 
     private mapToResponse(entry: ITimeEntry): TimeEntryResponse {

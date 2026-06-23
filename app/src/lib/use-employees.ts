@@ -5,6 +5,8 @@ import type { Employee } from '@/types/api';
 interface UseEmployeesOptions {
     /** When true, PMs only receive employees allocated to their managed projects. */
     allocatedToMyProjects?: boolean;
+    /** When true, only active employees are returned. */
+    activeOnly?: boolean;
 }
 
 interface UseEmployeesResult {
@@ -17,7 +19,7 @@ interface UseEmployeesResult {
 }
 
 export function useEmployees(options: UseEmployeesOptions = {}): UseEmployeesResult {
-    const { allocatedToMyProjects = false } = options;
+    const { allocatedToMyProjects = false, activeOnly = false } = options;
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -26,7 +28,10 @@ export function useEmployees(options: UseEmployeesOptions = {}): UseEmployeesRes
         setLoading(true);
         setError(null);
         try {
-            const query = allocatedToMyProjects ? '?allocatedToMyProjects=true' : '';
+            const params = new URLSearchParams();
+            if (allocatedToMyProjects) params.set('allocatedToMyProjects', 'true');
+            if (activeOnly) params.set('isActive', 'true');
+            const query = params.toString() ? `?${params.toString()}` : '';
             const data = await api.get<Employee[]>(`/employees${query}`);
             setEmployees(data);
         } catch (err) {
@@ -34,7 +39,7 @@ export function useEmployees(options: UseEmployeesOptions = {}): UseEmployeesRes
         } finally {
             setLoading(false);
         }
-    }, [allocatedToMyProjects]);
+    }, [allocatedToMyProjects, activeOnly]);
 
     useEffect(() => {
         fetchEmployees();

@@ -3,6 +3,7 @@ import { features } from '../../config/features';
 import { AppError } from '../../common/errors/app-error';
 import { structuredLogger } from '../../common/logger';
 import { ProjectStatus, WeeklyAllocationSource, WeeklyAllocationStatus } from '../../common/types/enums';
+import { activeProjectMongoFilter } from '../../common/utils/project-status.util';
 import {
     assertWeekRangeWithinLimit,
     endOfUtcWeek,
@@ -320,8 +321,7 @@ export class WeeklyAllocationService {
             );
 
             const candidateProjects = await Project.find({
-                status: ProjectStatus.ACTIVE,
-                is_active: { $ne: false },
+                ...activeProjectMongoFilter(),
                 start_date: { $lte: endOfUtcWeek(weekTo) },
                 end_date: { $gte: weekFrom },
                 project_code: { $ne: UNASSIGNED_BENCH_PROJECT_CODE },

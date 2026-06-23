@@ -10,6 +10,9 @@ import {
     SkillLevel,
 } from '../../common/types/enums';
 import { startOfUtcWeek } from '../../common/utils/week.util';
+import { normalizeProjectStatus as normalizeProjectStatusCanonical } from '../../common/utils/project-status.util';
+
+export { normalizeProjectStatusCanonical as normalizeProjectStatus };
 
 export const SEED_TAG = 'wekan-planner-2026';
 export const PASSWORD_PLAIN = 'Admin123!';
@@ -66,31 +69,7 @@ export function allocationImportEmail(employeeCode: string): string {
 }
 
 export function mapProjectStatus(sheetStatus: string): ProjectStatus {
-    const s = sheetStatus.trim().toLowerCase();
-    if (!s) return ProjectStatus.PLANNING;
-    if (
-        s === 'active' ||
-        s === 'in progress' ||
-        s === 'in-progress' ||
-        s === 'ongoing' ||
-        s === 'live' ||
-        s === 'started'
-    ) {
-        return ProjectStatus.ACTIVE;
-    }
-    if (s === 'completed' || s === 'done' || s === 'closed') return ProjectStatus.COMPLETED;
-    if (
-        s === 'proposal lost' ||
-        s === 'lost' ||
-        s === 'on hold' ||
-        s === 'on-hold' ||
-        s === 'onhold' ||
-        s === 'hold'
-    ) {
-        return ProjectStatus.ON_HOLD;
-    }
-    if (s === 'planning' || s === 'planned' || s === 'proposal') return ProjectStatus.PLANNING;
-    return ProjectStatus.PLANNING;
+    return normalizeProjectStatusCanonical(sheetStatus);
 }
 
 export function mapPriority(type: string, status: ProjectStatus): ProjectPriority {

@@ -1,6 +1,7 @@
 import type { Project } from '@/types/api';
 import type { DeliveryRiskItem } from '@/lib/risk-intelligence';
 import { projectCustomerLabel } from '@/lib/project-customer-label';
+import { isOperationalProject } from '@/lib/project-status';
 
 export type PortfolioHealth = 'Green' | 'Amber' | 'Red';
 
@@ -34,7 +35,7 @@ export function buildPortfolioHealthRows(
 ): PortfolioHealthRow[] {
     const activeOnly = options?.activeOnly !== false;
     const list = activeOnly
-        ? projects.filter((p) => p.status === 'Active' || p.status === 'Planning')
+        ? projects.filter((p) => isOperationalProject(p))
         : projects;
 
     return list.map((p) => {

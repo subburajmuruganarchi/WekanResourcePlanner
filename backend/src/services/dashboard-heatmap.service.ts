@@ -5,7 +5,7 @@ import { WeeklyAllocationEntry } from '../modules/weekly-allocations/weekly-allo
 import { computePeakCommittedPercent } from '../modules/allocations/allocation-availability.util';
 import type { DashboardPeriodRange } from '../modules/dashboard/dashboard-period.util';
 import type { DashboardScopeFilter } from '../modules/dashboard/dashboard-metrics.service';
-import { activeDashboardProjectFilter } from '../modules/dashboard/dashboard-metrics.service';
+import { operationalDashboardProjectFilter } from '../modules/dashboard/dashboard-metrics.service';
 import { features } from '../config/features';
 
 const WEEKLY_CAPACITY = features.weeklyCapacityHours ?? 40;

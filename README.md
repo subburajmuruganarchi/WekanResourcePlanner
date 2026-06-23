@@ -103,6 +103,10 @@ Imports Excel files from `backend/data/planner/`:
 
 Admins can also upload planner files via **Inputs** in the sidebar (`/inputs`).
 
+## Documentation
+
+- **[Role Feature Guide (PM / DM / CEO)](./docs/ROLE_FEATURE_GUIDE.md)** — persona workspaces, module features, and screenshots
+
 ## Environment variables
 
 ### Backend (`backend/.env`)

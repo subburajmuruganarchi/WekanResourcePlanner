@@ -11,6 +11,7 @@ import { Types } from 'mongoose';
 import { AppError } from '../../common/errors/app-error';
 import { SkillLevel } from '../../common/types/enums';
 import { getEmployeesAllocatedToManagedProjects } from '../../common/utils/pm-scope.util';
+import { activeEmployeeMongoFilter } from '../../common/utils/employee-status.util';
 import { getEmployeesAllocatedToPortfolioProjects } from '../../common/utils/delivery-scope.util';
 
 export interface EmployeeListParams {
@@ -92,9 +93,9 @@ export class EmployeeService {
 
         if (typeof params.isActive === 'boolean') {
             if (params.isActive) {
-                query.$or = [{ is_active: true }, { status: 'Active' }];
+                Object.assign(query, activeEmployeeMongoFilter());
             } else {
-                query.$or = [{ is_active: false }, { status: { $ne: 'Active' } }];
+                query.$or = [{ is_active: false }, { status: { $regex: /^(inactive|terminated)$/i } }];
             }
         }
 

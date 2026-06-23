@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 import { Project } from '../../modules/projects/project.model';
-import { activeDashboardProjectFilter } from '../../modules/dashboard/dashboard-metrics.service';
+import { operationalDashboardProjectFilter } from '../../modules/dashboard/dashboard-metrics.service';
 import type { DashboardScopeFilter } from '../../modules/dashboard/dashboard-metrics.service';
 import { assessAllocationRisk } from './allocation-risk.service';
 import { assessCapacityRisk } from './capacity-risk.service';
@@ -157,7 +157,7 @@ export async function assessProjectRiskIntelligence(projectId: string): Promise<
 }
 
 async function scopedActiveProjects(scope?: DashboardScopeFilter) {
-    const query: Record<string, unknown> = { ...activeDashboardProjectFilter() };
+    const query: Record<string, unknown> = { ...operationalDashboardProjectFilter() };
     if (scope?.projectIds?.length) {
         query._id = { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) };
     }

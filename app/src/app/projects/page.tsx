@@ -12,6 +12,7 @@ import { ProjectDialog } from "./components/project-dialog"
 import { EmployeeListCards } from "./components/employee-list-cards"
 import { ProjectListCards } from "./components/project-list-cards"
 import type { Employee, EmployeeStatus, Project, ProjectPriority, ProjectStatus } from "@/types/api"
+import { projectStatusMatches } from "@/lib/project-status"
 
 const EMPLOYEE_STATUS_OPTIONS: { value: EmployeeStatus | "all"; label: string }[] = [
     { value: "all", label: "All statuses" },
@@ -99,7 +100,7 @@ export function Projects() {
         return (projects || []).filter((project) => {
             const query = projectSearch.trim()
             if (query && !matchesProjectSearch(project, query)) return false
-            if (projectStatusFilter !== "all" && project.status !== projectStatusFilter) return false
+            if (projectStatusFilter !== "all" && !projectStatusMatches(project, projectStatusFilter)) return false
             if (projectPriorityFilter !== "all" && project.priority !== projectPriorityFilter) return false
             return true
         })

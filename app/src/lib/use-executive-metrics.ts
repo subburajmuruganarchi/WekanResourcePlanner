@@ -15,6 +15,7 @@ import {
     type PortfolioHealthRow,
     type ProjectDeliveryCard,
 } from '@/lib/portfolio-health-rows';
+import { isOperationalProject } from '@/lib/project-status';
 
 export type { PortfolioHealthRow as PortfolioRow, ProjectDeliveryCard as CustomerDeliveryRow };
 
@@ -65,7 +66,8 @@ export function useExecutiveMetrics() {
             setRisks(risksRes ?? []);
             const critical = (risksRes ?? []).filter((r) => r.level === 'HIGH').length;
             const atRisk = (risksRes ?? []).filter((r) => r.level === 'MEDIUM').length;
-            const active = statsRes?.activeProjects ?? projects.filter((p) => p.status === 'Active').length;
+            const active =
+                statsRes?.activeProjects ?? projects.filter((p) => isOperationalProject(p)).length;
             const onTrack = Math.max(0, active - atRisk - critical);
             const util = statsRes?.avgUtilization ?? 0;
             const bench = Math.max(0, Math.round((statsRes?.totalEmployees ?? 0) * (1 - util / 100) * 0.3));

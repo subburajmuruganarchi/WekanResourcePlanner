@@ -14,6 +14,8 @@ import {
     type PortfolioHealthRow,
 } from '@/lib/portfolio-health-rows';
 import { projectCustomerLabel } from '@/lib/project-customer-label';
+import { isDeliveryManager } from '@/lib/roles';
+import { isOperationalProject } from '@/lib/project-status';
 import type { DeliveryRiskItem } from '@/lib/risk-intelligence';
 import { fetchDeliveryRisks } from '@/lib/risk-intelligence';
 
@@ -45,7 +47,9 @@ export function useDeliveryCommandMetrics() {
     const portfolioProjects =
         projectIds.length > 0
             ? projects.filter((p) => projectIds.includes(p.id))
-            : projects.filter((p) => p.status === 'Active' || p.status === 'Planning');
+            : isDeliveryManager(user?.role)
+              ? []
+              : projects.filter((p) => isOperationalProject(p));
 
     const fetchData = useCallback(async () => {
         setLoading(true);

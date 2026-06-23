@@ -18,6 +18,7 @@ import { Card } from "@/components/ui/card"
 import { useTimeEntries } from "@/lib/use-time-entries"
 import { useEmployees } from "@/lib/use-employees"
 import { useProjects } from "@/lib/use-projects"
+import { isOperationalProject } from "@/lib/project-status"
 import { useAuth } from "@/lib/auth-context"
 import { isTeamTimeManager } from "@/lib/roles"
 import { api } from "@/lib/api-client"
@@ -97,7 +98,10 @@ export function TimeEntry() {
     const isSelfOnly = user?.role === "Employee" || user?.role === "User"
     const isTeamLead = isTeamTimeManager(user?.role)
     const { submitTimeEntry, submitWeeklyTimesheet, deleteTimeEntry, loading } = useTimeEntries()
-    const { employees, loading: loadingEmployees } = useEmployees({ allocatedToMyProjects: isTeamLead })
+    const { employees, loading: loadingEmployees } = useEmployees({
+        allocatedToMyProjects: isTeamLead,
+        activeOnly: true,
+    })
     const { projects, loading: loadingProjects } = useProjects()
 
     useEffect(() => {
@@ -238,7 +242,7 @@ export function TimeEntry() {
 
         const byId = new Map<string, ProjectOption>()
         for (const p of projects) {
-            const isActive = !p.status || p.status === "Active" || p.status === "Planning"
+            const isActive = !p.status || isOperationalProject(p)
             if (!isActive && !usedCodes.has(p.code)) continue
             byId.set(p.id, { code: p.code, name: p.name, id: p.id, isAllocated: allocatedIds.has(p.id) })
         }

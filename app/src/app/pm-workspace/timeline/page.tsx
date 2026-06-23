@@ -1,12 +1,13 @@
 import { PageContainer } from '@/components/layout/page-container';
 import { WorkspacePageHeader, WorkspaceSection } from '@/components/workspaces/shared';
 import { useProjects } from '@/lib/use-projects';
+import { isActiveProject } from '@/lib/project-status';
 
 const PHASES = ['Requirements', 'Development', 'Testing', 'Release'];
 
 export default function PmTimelinePage() {
     const { projects } = useProjects();
-    const active = projects.filter((p) => p.status === 'Active').slice(0, 5);
+    const active = projects.filter((p) => isActiveProject(p)).slice(0, 5);
 
     return (
         <PageContainer className="space-y-6">

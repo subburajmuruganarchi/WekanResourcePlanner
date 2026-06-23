@@ -3,7 +3,9 @@ import { Project } from '../projects/project.model';
 import { Employee } from '../employees/employee.model';
 import { ProjectAllocation } from '../allocations/allocation.model';
 import { TimeEntry } from '../time-entries/time-entry.model';
-import { TimeEntryStatus, ProjectStatus } from '../../common/types/enums';
+import { TimeEntryStatus } from '../../common/types/enums';
+import { activeProjectMongoFilter, operationalProjectMongoFilter } from '../../common/utils/project-status.util';
+import { activeEmployeeMongoFilter } from '../../common/utils/employee-status.util';
 import { WeeklyAllocationEntry } from '../weekly-allocations/weekly-allocation-entry.model';
 import { features } from '../../config/features';
 import { computePeakCommittedPercent } from '../allocations/allocation-availability.util';
@@ -26,12 +28,14 @@ export interface DashboardMetrics {
     periodLabel?: string;
 }
 
-/** Operational projects for dashboard counts and staffing risk (not completed / on hold). */
+/** Strictly Active projects for dashboard KPI counts. */
 export function activeDashboardProjectFilter(): Record<string, unknown> {
-    return {
-        is_active: true,
-        status: { $in: [ProjectStatus.ACTIVE, ProjectStatus.PLANNING] },
-    };
+    return activeProjectMongoFilter();
+}
+
+/** Active + Planning — used for delivery risk and heatmap scope. */
+export function operationalDashboardProjectFilter(): Record<string, unknown> {
+    return operationalProjectMongoFilter();
 }
 
 /** UTC Monday 00:00 through Sunday 23:59:59.999 for current week. */
@@ -129,9 +133,7 @@ export async function collectDashboardMetrics(
         });
         totalEmployees = employeeIds.length;
     } else {
-        totalEmployees = await Employee.countDocuments({
-            $or: [{ is_active: true }, { status: 'Active' }],
-        });
+        totalEmployees = await Employee.countDocuments(activeEmployeeMongoFilter());
     }
 
     const avgUtilization = await computeAvgUtilizationForPeriod(period, scope);

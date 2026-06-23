@@ -95,6 +95,14 @@ export interface Employee {
     joinDate?: string;
 }
 
+export interface ProjectTeamMember {
+    employeeId: string;
+    name: string;
+    email?: string;
+    roleName?: string;
+    allocationPercent: number;
+}
+
 export interface Project {
     id: string;
     code: string;
@@ -116,6 +124,7 @@ export interface Project {
     businessGoal?: string;
     staffingStrategy?: StaffingStrategy;
     teamSize?: number;
+    teamMembers?: ProjectTeamMember[];
     skillRequirements?: SkillRequirement[];
     roleEfforts?: RoleEffort[];
 }

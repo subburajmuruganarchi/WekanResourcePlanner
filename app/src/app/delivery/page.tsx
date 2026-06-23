@@ -49,8 +49,8 @@ export default function DeliveryCommandPage() {
                     <WorkspaceMetricCard label="Projects At Risk" value={String(metrics.atRisk)} accent="amber" icon={AlertTriangle} />
                     <WorkspaceMetricCard label="Blocked Projects" value={String(metrics.blocked)} accent="rose" icon={Ban} />
                     <WorkspaceMetricCard label="Planner Gaps" value={String(metrics.resourceGaps)} icon={Users} />
-                    <WorkspaceMetricCard label="Pending Decisions" value={String(metrics.pendingDecisions)} accent="sky" icon={ClipboardList} />
-                    <WorkspaceMetricCard label="Upcoming Releases" value={String(metrics.upcomingReleases)} accent="emerald" icon={Rocket} />
+                    <WorkspaceMetricCard label="Pending Timesheet Approvals" value={String(metrics.pendingDecisions)} accent="sky" icon={ClipboardList} />
+                    <WorkspaceMetricCard label="Active Releases (est.)" value={String(metrics.upcomingReleases)} accent="emerald" icon={Rocket} />
                 </div>
             )}
 

@@ -8,11 +8,25 @@ import { Skill } from '../skills/skill.model';
 import { Types } from 'mongoose';
 import { AppError } from '../../common/errors/app-error';
 import { deriveProjectTypeLabel } from '../../services/planner-import/planner-import.utils';
+import {
+    normalizeProjectStatus,
+    projectStatusListMongoFilter,
+} from '../../common/utils/project-status.util';
 
 export interface ProjectListParams {
     status?: string;
     managerId?: string;
     ownerId?: string;
+    /** Restrict to specific project IDs (e.g. employee allocations). */
+    projectIds?: string[];
+}
+
+export interface ProjectTeamMember {
+    employeeId: string;
+    name: string;
+    email?: string;
+    roleName?: string;
+    allocationPercent: number;
 }
 
 export interface ProjectResponse {
@@ -53,6 +67,7 @@ export interface ProjectResponse {
         hoursPerDay: number;
     }[];
     teamSize: number;
+    teamMembers?: ProjectTeamMember[];
 }
 
 interface PopulatedProject {
@@ -99,21 +114,34 @@ interface PopulatedRoleEffort {
 
 export class ProjectService {
     async findAll(params: ProjectListParams = {}): Promise<ProjectResponse[]> {
-        const query: Record<string, unknown> = {};
+        const clauses: Record<string, unknown>[] = [];
 
         if (params.status) {
-            query.status = params.status;
+            clauses.push(projectStatusListMongoFilter(normalizeProjectStatus(params.status)));
         }
 
         if (params.managerId || params.ownerId) {
-            const orConditions: any[] = [];
-            if (params.managerId) orConditions.push({ project_manager_id: params.managerId });
-            if (params.ownerId) orConditions.push({ project_owner_id: params.ownerId });
-            
+            const orConditions: Record<string, unknown>[] = [];
+            if (params.managerId && Types.ObjectId.isValid(params.managerId)) {
+                orConditions.push({ project_manager_id: new Types.ObjectId(params.managerId) });
+            }
+            if (params.ownerId && Types.ObjectId.isValid(params.ownerId)) {
+                orConditions.push({ project_owner_id: new Types.ObjectId(params.ownerId) });
+            }
+
             if (orConditions.length > 0) {
-                query.$or = orConditions;
+                clauses.push({ $or: orConditions });
             }
         }
+
+        if (params.projectIds?.length) {
+            clauses.push({
+                _id: { $in: params.projectIds.map((id) => new Types.ObjectId(id)) },
+            });
+        }
+
+        const query: Record<string, unknown> =
+            clauses.length === 0 ? {} : clauses.length === 1 ? clauses[0] : { $and: clauses };
 
         const projects = await Project.find(query)
             .populate('project_owner_id', 'first_name last_name')
@@ -153,7 +181,11 @@ export class ProjectService {
 
         const allAllocations = await ProjectAllocation.find({
             project_id: { $in: projectIds },
-        }).lean();
+            is_active: true,
+        })
+            .populate('employee_id', 'first_name last_name email')
+            .populate('role_id', 'role_name')
+            .lean();
 
         const allocationsByProject = new Map<string, typeof allAllocations>();
         allAllocations.forEach((allocation) => {
@@ -196,7 +228,10 @@ export class ProjectService {
             .populate('role_id', 'role_name')
             .lean() as unknown as PopulatedRoleEffort[];
 
-        const allocations = await ProjectAllocation.find({ project_id: id, is_active: true }).lean();
+        const allocations = await ProjectAllocation.find({ project_id: id, is_active: true })
+            .populate('employee_id', 'first_name last_name email')
+            .populate('role_id', 'role_name')
+            .lean();
         const employeeIds = allocations.map(a => a.employee_id);
         const employeeSkills = await EmployeeSkill.find({ employee_id: { $in: employeeIds } }).lean();
 
@@ -418,7 +453,7 @@ export class ProjectService {
             managerName,
             startDate: formatDate(proj.start_date),
             endDate: formatDate(proj.end_date),
-            status: proj.status,
+            status: normalizeProjectStatus(proj.status),
             priority: proj.priority || 'Medium',
             billingType: proj.billing_type,
             deliveryModel: proj.delivery_model,
@@ -429,7 +464,42 @@ export class ProjectService {
             staffingStrategy: proj.staffing_strategy,
             skillRequirements: mappedSkillReqs,
             roleEfforts: mappedRoleEfforts,
-            teamSize: new Set(allocations.map(a => a.employee_id.toString())).size,
+            teamSize: new Set(
+                allocations.map((a) => {
+                    const emp = a.employee_id;
+                    if (emp && typeof emp === 'object' && '_id' in emp) {
+                        return (emp as { _id: Types.ObjectId })._id.toString();
+                    }
+                    return emp?.toString() ?? '';
+                })
+            ).size,
+            teamMembers: allocations.map((a) => {
+                const emp = a.employee_id as {
+                    _id?: Types.ObjectId;
+                    first_name?: string;
+                    last_name?: string;
+                    email?: string;
+                } | Types.ObjectId;
+                const role = a.role_id as { role_name?: string } | Types.ObjectId | undefined;
+                const employeeId =
+                    emp && typeof emp === 'object' && '_id' in emp
+                        ? emp._id!.toString()
+                        : emp?.toString() ?? '';
+                const name =
+                    emp && typeof emp === 'object' && 'first_name' in emp
+                        ? `${emp.first_name ?? ''} ${emp.last_name ?? ''}`.trim()
+                        : 'Unknown';
+                return {
+                    employeeId,
+                    name,
+                    email: emp && typeof emp === 'object' && 'email' in emp ? emp.email : undefined,
+                    roleName:
+                        role && typeof role === 'object' && 'role_name' in role
+                            ? role.role_name
+                            : undefined,
+                    allocationPercent: a.allocation_percent ?? 0,
+                };
+            }),
         };
     }
 }

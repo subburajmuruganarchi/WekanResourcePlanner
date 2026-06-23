@@ -161,6 +161,8 @@ describe('planner-import.utils', () => {
 
     it('maps common sheet status labels', () => {
         expect(mapProjectStatus('Active')).toBe(ProjectStatus.ACTIVE);
+        expect(mapProjectStatus('active')).toBe(ProjectStatus.ACTIVE);
+        expect(mapProjectStatus('ACTIVE')).toBe(ProjectStatus.ACTIVE);
         expect(mapProjectStatus('In Progress')).toBe(ProjectStatus.ACTIVE);
         expect(mapProjectStatus('completed')).toBe(ProjectStatus.COMPLETED);
         expect(mapProjectStatus('')).toBe(ProjectStatus.PLANNING);

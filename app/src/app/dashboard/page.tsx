@@ -357,7 +357,7 @@ export default function Dashboard() {
                     <KPICard
                         label="Active projects"
                         value={String(stats.activeProjects)}
-                        explanation="Operational initiatives in flight"
+                        explanation="Projects with Active status only"
                         icon={FolderKanban}
                         accent="indigo"
                         trend={{ value: '+12% this month', direction: 'up' }}

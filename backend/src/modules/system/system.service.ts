@@ -7,6 +7,7 @@ import { Employee } from '../employees/employee.model';
 import { Role } from '../roles/role.model';
 import { Notification } from '../notifications/notification.model';
 import { TimeEntryStatus } from '../../common/types/enums';
+import { operationalProjectMongoFilter } from '../../common/utils/project-status.util';
 
 export interface HealthSummary {
     timeEntryStatusCounts: Record<string, number>;
@@ -115,7 +116,7 @@ export async function runSystemVerify(): Promise<VerifyResult> {
         issues.push('No time codes configured');
     }
 
-    const activeProjects = await Project.countDocuments({ status: 'Active' });
+    const activeProjects = await Project.countDocuments(operationalProjectMongoFilter());
     if (activeProjects === 0) {
         issues.push('No active projects');
     }

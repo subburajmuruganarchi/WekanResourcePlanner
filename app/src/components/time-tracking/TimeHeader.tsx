@@ -1,5 +1,7 @@
-import { Save, Send, Copy, Download, Loader2 } from 'lucide-react';
+import { Save, Send, Copy, Download, Loader2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useMemo, useState } from 'react';
 import {
     Select,
     SelectContent,
@@ -55,6 +57,14 @@ export function TimeHeader({
     onExport,
     isProjectManager,
 }: TimeHeaderProps) {
+    const [employeeSearch, setEmployeeSearch] = useState('');
+
+    const filteredEmployees = useMemo(() => {
+        const q = employeeSearch.trim().toLowerCase();
+        if (!q) return employees;
+        return employees.filter((e) => e.name.toLowerCase().includes(q));
+    }, [employees, employeeSearch]);
+
     const statusLabel =
         weekTimesheetStatus === 'approved'
             ? 'Approved'
@@ -86,18 +96,35 @@ export function TimeHeader({
                             ) : employees.length === 0 ? (
                                 <span className="text-slate-400">No employees</span>
                             ) : (
-                                <Select value={selectedEmployeeId} onValueChange={onEmployeeChange}>
-                                    <SelectTrigger className="h-8 w-[200px] border-slate-200">
-                                        <SelectValue placeholder="Select employee" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {employees.map((emp) => (
-                                            <SelectItem key={emp.id} value={emp.id}>
-                                                {emp.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <div className="flex items-center gap-2">
+                                    <div className="relative">
+                                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                        <Input
+                                            className="h-8 w-[140px] pl-7 text-xs border-slate-200"
+                                            placeholder="Search…"
+                                            value={employeeSearch}
+                                            onChange={(e) => setEmployeeSearch(e.target.value)}
+                                        />
+                                    </div>
+                                    <Select value={selectedEmployeeId} onValueChange={onEmployeeChange}>
+                                        <SelectTrigger className="h-8 w-[200px] border-slate-200">
+                                            <SelectValue placeholder="Select employee" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {filteredEmployees.length === 0 ? (
+                                                <div className="px-2 py-4 text-xs text-slate-500 text-center">
+                                                    No matches
+                                                </div>
+                                            ) : (
+                                                filteredEmployees.map((emp) => (
+                                                    <SelectItem key={emp.id} value={emp.id}>
+                                                        {emp.name}
+                                                    </SelectItem>
+                                                ))
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             )}
                         </div>
                         <span

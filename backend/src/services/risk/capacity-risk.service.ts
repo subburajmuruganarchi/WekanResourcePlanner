@@ -76,28 +76,31 @@ export async function assessCapacityRisk(projectId: string): Promise<{
         });
     }
 
+    // Over-allocation: compare weekly planned hours (all projects) vs capacity — not legacy allocation %.
     const employeeIds = [...new Set(activeAllocations.map((a) => a.employee_id.toString()))];
-    let overAllocatedMembers = 0;
-    for (const employeeId of employeeIds) {
-        const totalPct = await ProjectAllocation.aggregate([
-            {
-                $match: {
-                    employee_id: new Types.ObjectId(employeeId),
-                    is_active: true,
-                },
-            },
-            { $group: { _id: null, total: { $sum: '$allocation_percent' } } },
-        ]);
-        const pct = totalPct[0]?.total ?? 0;
-        if (pct > 100) overAllocatedMembers++;
+    const orgWeekEntries = await WeeklyAllocationEntry.find({
+        employee_id: { $in: employeeIds.map((id) => new Types.ObjectId(id)) },
+        week_start: weekStart,
+    }).lean();
+
+    const orgPlannedByEmployee = new Map<string, number>();
+    for (const entry of orgWeekEntries) {
+        const id = entry.employee_id.toString();
+        orgPlannedByEmployee.set(id, (orgPlannedByEmployee.get(id) ?? 0) + (entry.planned_hours ?? 0));
     }
 
-    if (overAllocatedMembers > 0) {
+    let overPlannedMembers = 0;
+    for (const employeeId of employeeIds) {
+        const totalPlanned = orgPlannedByEmployee.get(employeeId) ?? 0;
+        if (totalPlanned > capacity) overPlannedMembers++;
+    }
+
+    if (overPlannedMembers > 0) {
         findings.push({
             type: 'over_allocation',
-            message: `${overAllocatedMembers} team member(s) are over-allocated above 100% capacity.`,
+            message: `${overPlannedMembers} team member(s) have weekly planned hours above ${capacity}h capacity.`,
             severity: 'HIGH',
-            memberCount: overAllocatedMembers,
+            memberCount: overPlannedMembers,
         });
     }
 

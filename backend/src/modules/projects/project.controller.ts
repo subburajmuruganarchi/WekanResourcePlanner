@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { projectService } from './project.service';
 import { CreateProjectSchema } from './project.schema';
 import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
+import { ProjectAllocation } from '../allocations/allocation.model';
+import { Types } from 'mongoose';
 
 export class ProjectController {
     /**
@@ -36,6 +38,18 @@ export class ProjectController {
                 if (employeeId) {
                     params.managerId = employeeId;
                     params.ownerId = employeeId;
+                }
+            }
+
+            // RBAC: Employees see only projects they are actively allocated to
+            if (user && (user.role === 'Employee' || user.role === 'User')) {
+                const employeeId = getAuthEmployeeId(user);
+                if (employeeId) {
+                    const projectIds = await ProjectAllocation.distinct('project_id', {
+                        employee_id: new Types.ObjectId(employeeId),
+                        is_active: true,
+                    });
+                    params.projectIds = projectIds.map((id) => id.toString());
                 }
             }
 
