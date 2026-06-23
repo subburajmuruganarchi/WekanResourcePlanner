@@ -43,13 +43,14 @@ export class ProjectController {
                 }
             }
 
-            // RBAC: Employees — assigned projects for workspace; all Active projects for time entry
             const forTimeEntry = req.query.forTimeEntry === 'true';
-            if (user && isEmployeeAccessRole(role)) {
+
+            // Time entry picker: all active-status projects (scoped by PM/DM filters above when applicable)
+            if (forTimeEntry) {
+                params.forTimeEntry = true;
+            } else if (user && isEmployeeAccessRole(role)) {
                 const employeeId = getAuthEmployeeId(user);
-                if (forTimeEntry) {
-                    params.status = 'Active';
-                } else if (employeeId) {
+                if (employeeId) {
                     params.projectIds = await resolveEmployeeAssignedProjectIds(employeeId);
                 }
             }

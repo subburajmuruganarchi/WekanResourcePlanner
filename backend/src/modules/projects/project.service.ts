@@ -11,12 +11,15 @@ import { deriveProjectTypeLabel } from '../../services/planner-import/planner-im
 import {
     normalizeProjectStatus,
     projectStatusListMongoFilter,
+    activeProjectStatusMongoFilter,
 } from '../../common/utils/project-status.util';
 
 export interface ProjectListParams {
     status?: string;
     managerId?: string;
     ownerId?: string;
+    /** Employee time entry — all active-status projects (ignores is_active soft-delete flag). */
+    forTimeEntry?: boolean;
     /** Restrict to specific project IDs (e.g. employee allocations). Empty array = none. */
     projectIds?: string[];
 }
@@ -120,7 +123,9 @@ export class ProjectService {
 
         const clauses: Record<string, unknown>[] = [];
 
-        if (params.status) {
+        if (params.forTimeEntry) {
+            clauses.push(activeProjectStatusMongoFilter());
+        } else if (params.status) {
             clauses.push(projectStatusListMongoFilter(normalizeProjectStatus(params.status)));
         }
 

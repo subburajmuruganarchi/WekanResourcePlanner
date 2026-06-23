@@ -18,7 +18,6 @@ import { Card } from "@/components/ui/card"
 import { useTimeEntries } from "@/lib/use-time-entries"
 import { useEmployees } from "@/lib/use-employees"
 import { useProjects, notifyProjectsChanged } from "@/lib/use-projects"
-import { isActiveProject } from "@/lib/project-status"
 import { useAuth } from "@/lib/auth-context"
 import { isEmployeeAccessRole, isTeamTimeManager } from "@/lib/roles"
 import { api } from "@/lib/api-client"
@@ -102,7 +101,7 @@ export function TimeEntry() {
         allocatedToMyProjects: isTeamLead,
         activeOnly: true,
     })
-    const { projects, loading: loadingProjects } = useProjects({ forTimeEntry: isSelfOnly })
+    const { projects, loading: loadingProjects, error: projectsError } = useProjects({ forTimeEntry: true })
 
     useEffect(() => {
         if (isSelfOnly && user?.id) {
@@ -242,8 +241,7 @@ export function TimeEntry() {
 
         const byId = new Map<string, ProjectOption>()
         for (const p of projects) {
-            const isActive = isActiveProject(p)
-            if (!isActive && !usedCodes.has(p.code)) continue
+            if (!p.id || !p.code) continue
             byId.set(p.id, { code: p.code, name: p.name, id: p.id, isAllocated: allocatedIds.has(p.id) })
         }
         for (const p of projects) {
@@ -765,6 +763,21 @@ export function TimeEntry() {
                 <Card className="p-4 border-amber-200 bg-amber-50 rounded-xl">
                     <p className="text-sm text-amber-900">
                         No employees allocated to your projects. Assign team members under Resource Allocation.
+                    </p>
+                </Card>
+            )}
+
+            {projectsError && (
+                <Card className="p-4 border-red-200 bg-red-50 rounded-xl">
+                    <p className="text-sm text-red-900">Could not load projects: {projectsError}</p>
+                </Card>
+            )}
+
+            {!projectsError && !loadingProjects && selectableProjects.length === 0 && (
+                <Card className="p-4 border-amber-200 bg-amber-50 rounded-xl">
+                    <p className="text-sm text-amber-900">
+                        No active projects are available. Ask your PM or admin to confirm project status in the
+                        master planner.
                     </p>
                 </Card>
             )}

@@ -86,13 +86,22 @@ export function operationalProjectMongoFilter(): Record<string, unknown> {
 export function activeProjectMongoFilter(): Record<string, unknown> {
     return {
         is_active: { $ne: false },
-        $or: [
-            { status: ProjectStatus.ACTIVE },
-            { status: { $regex: /^active$/i } },
-            { status: { $regex: /^in[\s-]?progress$/i } },
-            { status: { $regex: /^(ongoing|live|started)$/i } },
-        ],
+        $or: activeProjectStatusOrConditions(),
     };
+}
+
+/** Status-only active filter (time entry picker — do not exclude on is_active flag alone). */
+export function activeProjectStatusMongoFilter(): Record<string, unknown> {
+    return { $or: activeProjectStatusOrConditions() };
+}
+
+function activeProjectStatusOrConditions(): Record<string, unknown>[] {
+    return [
+        { status: ProjectStatus.ACTIVE },
+        { status: { $regex: /^active$/i } },
+        { status: { $regex: /^in[\s-]?progress$/i } },
+        { status: { $regex: /^(ongoing|live|started)$/i } },
+    ];
 }
 
 /** Mongo filter for list queries filtered by a canonical status value. */
