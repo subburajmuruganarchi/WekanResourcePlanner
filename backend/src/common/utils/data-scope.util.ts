@@ -9,6 +9,29 @@ export interface DataScope {
     readOnly: boolean;
 }
 
+/** Project filter passed to dashboard, risk, and metrics services. */
+export interface ProjectScopeFilter {
+    projectIds?: string[];
+}
+
+/**
+ * Converts resolved data scope to an API scope filter.
+ * - undefined → org-wide (Admin, CEO)
+ * - { projectIds: [] } → scoped role with no assigned projects (empty datasets)
+ * - { projectIds: [...] } → PM / DM project filter
+ */
+export function toProjectScopeFilter(scope: DataScope): ProjectScopeFilter | undefined {
+    if (scope.orgWide) {
+        return undefined;
+    }
+    return { projectIds: scope.projectIds ?? [] };
+}
+
+/** True when the caller is scope-limited but has zero accessible projects. */
+export function isScopedEmptyFilter(scope?: ProjectScopeFilter): boolean {
+    return scope !== undefined && Array.isArray(scope.projectIds) && scope.projectIds.length === 0;
+}
+
 /** Resolve org / portfolio / PM project scope for the authenticated user. */
 export async function resolveDataScope(user?: TokenPayload): Promise<DataScope> {
     if (!user?.employeeId) {

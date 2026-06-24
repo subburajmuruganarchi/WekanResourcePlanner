@@ -5,6 +5,7 @@ import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
 import { ROLES } from '../../common/constants/roles';
 import { normalizeRoleName, isEmployeeAccessRole } from '../../common/utils/role-normalize.util';
 import { resolveEmployeeAssignedProjectIds } from '../../common/utils/employee-project-scope.util';
+import { isProjectInDeliveryManagerPortfolio, getPortfolioProjectIds } from '../../common/utils/delivery-scope.util';
 
 export class ProjectController {
     /**
@@ -41,6 +42,12 @@ export class ProjectController {
                     params.managerId = employeeId;
                     params.ownerId = employeeId;
                 }
+            }
+
+            // RBAC: DM sees only delivery-portfolio projects
+            if (user && role === ROLES.DELIVERY_MANAGER) {
+                const employeeId = getAuthEmployeeId(user);
+                params.projectIds = employeeId ? await getPortfolioProjectIds(employeeId) : [];
             }
 
             const forTimeEntry = req.query.forTimeEntry === 'true';
@@ -83,6 +90,17 @@ export class ProjectController {
                 }
                 const assignedIds = await resolveEmployeeAssignedProjectIds(employeeId);
                 if (!assignedIds.includes(id)) {
+                    res.status(403).json({
+                        status: 'error',
+                        message: 'You do not have access to this project',
+                    });
+                    return;
+                }
+            }
+
+            if (user && role === ROLES.DELIVERY_MANAGER) {
+                const employeeId = getAuthEmployeeId(user);
+                if (!employeeId || !(await isProjectInDeliveryManagerPortfolio(employeeId, id))) {
                     res.status(403).json({
                         status: 'error',
                         message: 'You do not have access to this project',

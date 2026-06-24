@@ -6,6 +6,7 @@ import { computePeakCommittedPercent } from '../modules/allocations/allocation-a
 import type { DashboardPeriodRange } from '../modules/dashboard/dashboard-period.util';
 import type { DashboardScopeFilter } from '../modules/dashboard/dashboard-metrics.service';
 import { operationalDashboardProjectFilter } from '../modules/dashboard/dashboard-metrics.service';
+import { isScopedEmptyFilter } from '../common/utils/data-scope.util';
 import { features } from '../config/features';
 
 const WEEKLY_CAPACITY = features.weeklyCapacityHours ?? 40;
@@ -200,6 +201,10 @@ export async function buildAllocationHeatmap(
     period?: DashboardPeriodRange,
     scope?: DashboardScopeFilter
 ): Promise<AllocationHeatmapData> {
+    if (isScopedEmptyFilter(scope)) {
+        return emptyHeatmap();
+    }
+
     if (period) {
         const weekly = await buildAllocationHeatmapFromWeekly(period, scope);
         if (weekly.employees.length > 0) {

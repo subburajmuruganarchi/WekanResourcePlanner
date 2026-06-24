@@ -120,6 +120,19 @@ export class WeeklyAllocationService {
         const weeks = listUtcWeekStarts(weekFrom, weekTo);
         const weekIsoList = weeks.map(weekStartToIsoDate);
 
+        if (query.projectIds !== undefined && query.projectIds.length === 0) {
+            return {
+                weeks: weekIsoList,
+                rows: [],
+                pagination: {
+                    page: query.page,
+                    limit: query.limit,
+                    total: 0,
+                    totalPages: 1,
+                },
+            };
+        }
+
         const entryFilter: Record<string, unknown> = {
             week_start: { $gte: weekFrom, $lte: weekTo },
         };

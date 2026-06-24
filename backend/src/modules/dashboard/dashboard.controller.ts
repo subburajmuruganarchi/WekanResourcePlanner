@@ -7,7 +7,8 @@ import {
     buildSkillGapForecastSummary,
     buildRaidSuggestions,
 } from '../../services/risk/risk-intelligence.service';
-import { resolveDataScope } from '../../common/utils/data-scope.util';
+import { resolveDataScope, toProjectScopeFilter } from '../../common/utils/data-scope.util';
+import { buildPortfolioCapacityForecast } from '../../services/capacity/portfolio-capacity-forecast.service';
 
 function parsePeriod(req: Request, res: Response): ReturnType<typeof parseDashboardPeriodQuery> | null {
     try {
@@ -20,12 +21,7 @@ function parsePeriod(req: Request, res: Response): ReturnType<typeof parseDashbo
 }
 
 function scopeFilterFromRequest(req: Request): Promise<DashboardScopeFilter | undefined> {
-    return resolveDataScope(req.user).then((scope) => {
-        if (scope.orgWide || !scope.projectIds?.length) {
-            return scope.projectIds?.length ? { projectIds: scope.projectIds } : undefined;
-        }
-        return { projectIds: scope.projectIds };
-    });
+    return resolveDataScope(req.user).then((scope) => toProjectScopeFilter(scope));
 }
 
 export class DashboardController {
@@ -100,6 +96,16 @@ export class DashboardController {
         try {
             const scopeFilter = await scopeFilterFromRequest(req);
             const data = await buildRaidSuggestions(10, scopeFilter);
+            res.json({ status: 'success', data });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getCapacityForecast(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const scopeFilter = await scopeFilterFromRequest(req);
+            const data = await buildPortfolioCapacityForecast(scopeFilter);
             res.json({ status: 'success', data });
         } catch (error) {
             next(error);

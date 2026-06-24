@@ -17,12 +17,23 @@ export class WeeklyAllocationController {
         try {
             const parsed = weeklyGridQuerySchema.parse(req.query);
 
-            const employeeIds =
+            let employeeIds =
                 parseIdList(parsed.employeeIds) ??
                 (parsed.employeeId ? [parsed.employeeId] : undefined);
-            const projectIds =
+            let projectIds =
                 parseIdList(parsed.projectIds) ??
                 (parsed.projectId ? [parsed.projectId] : undefined);
+
+            if (req.user?.role === ROLES.DELIVERY_MANAGER) {
+                const actorId = getAuthEmployeeId(req.user);
+                const portfolioIds = actorId ? await getPortfolioProjectIds(actorId) : [];
+                const allowed = new Set(portfolioIds);
+                if (projectIds?.length) {
+                    projectIds = projectIds.filter((id) => allowed.has(id));
+                } else {
+                    projectIds = portfolioIds;
+                }
+            }
 
             const data = await weeklyAllocationService.getGrid({
                 weekStartFrom: startOfUtcWeek(parseWeekStartParam(parsed.weekStartFrom)),

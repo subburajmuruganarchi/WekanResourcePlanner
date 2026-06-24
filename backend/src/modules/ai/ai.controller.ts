@@ -7,6 +7,7 @@ import { buildRaidSuggestions } from '../../services/risk/risk-intelligence.serv
 import { analyzePendingApprovals } from '../../services/ai/approval-ai.service';
 import { buildTimeEntrySuggestions } from '../../services/ai/forecast-ai.service';
 import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
+import { resolveDataScope, toProjectScopeFilter } from '../../common/utils/data-scope.util';
 
 export class AiController {
     async dashboardSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -79,7 +80,9 @@ export class AiController {
 
     async raidSuggestions(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const data = await buildRaidSuggestions(10);
+            const scope = await resolveDataScope(req.user);
+            const scopeFilter = toProjectScopeFilter(scope);
+            const data = await buildRaidSuggestions(10, scopeFilter);
             res.json({ status: 'success', data });
         } catch (error) {
             next(error);

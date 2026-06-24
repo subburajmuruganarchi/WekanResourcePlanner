@@ -13,5 +13,6 @@ router.get('/staffing-risks', dashboardController.getStaffingRisks);
 router.get('/delivery-risks', dashboardController.getDeliveryRisks);
 router.get('/skill-gap-forecast', dashboardController.getSkillGapForecast);
 router.get('/raid-suggestions', dashboardController.getRaidSuggestions);
+router.get('/capacity-forecast', dashboardController.getCapacityForecast);
 
 export { router as dashboardRouter };

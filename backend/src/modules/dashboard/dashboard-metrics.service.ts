@@ -10,6 +10,7 @@ import { WeeklyAllocationEntry } from '../weekly-allocations/weekly-allocation-e
 import { features } from '../../config/features';
 import { computePeakCommittedPercent } from '../allocations/allocation-availability.util';
 import type { DashboardPeriodRange } from './dashboard-period.util';
+import { isScopedEmptyFilter } from '../../common/utils/data-scope.util';
 
 export interface DashboardScopeFilter {
     projectIds?: string[];
@@ -111,11 +112,33 @@ async function computeAvgUtilizationForPeriod(
     return Math.round(sum / byEmployee.size);
 }
 
+function emptyDashboardMetrics(period: DashboardPeriodRange): DashboardMetrics {
+    return {
+        activeProjects: 0,
+        totalEmployees: 0,
+        avgUtilization: 0,
+        plannedHours: 0,
+        hoursThisWeek: 0,
+        approvedHours: 0,
+        planDeliveryPercent: 0,
+        pendingApprovals: 0,
+        rejectedHours: 0,
+        periodLabel:
+            period.weekStartFromIso === period.weekStartToIso
+                ? period.weekStartFromIso
+                : `${period.weekStartFromIso} – ${period.weekStartToIso}`,
+    };
+}
+
 /** Single source of truth for dashboard stat cards and AI insight metrics. */
 export async function collectDashboardMetrics(
     period: DashboardPeriodRange,
     scope?: DashboardScopeFilter
 ): Promise<DashboardMetrics> {
+    if (isScopedEmptyFilter(scope)) {
+        return emptyDashboardMetrics(period);
+    }
+
     const projectFilter = scope?.projectIds?.length
         ? {
               ...activeDashboardProjectFilter(),

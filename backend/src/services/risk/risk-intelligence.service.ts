@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { Project } from '../../modules/projects/project.model';
 import { operationalDashboardProjectFilter } from '../../modules/dashboard/dashboard-metrics.service';
 import type { DashboardScopeFilter } from '../../modules/dashboard/dashboard-metrics.service';
+import { isScopedEmptyFilter } from '../../common/utils/data-scope.util';
 import { assessAllocationRisk } from './allocation-risk.service';
 import { assessCapacityRisk } from './capacity-risk.service';
 import { assessSkillGapForecast } from './skill-gap-forecast.service';
@@ -157,6 +158,10 @@ export async function assessProjectRiskIntelligence(projectId: string): Promise<
 }
 
 async function scopedActiveProjects(scope?: DashboardScopeFilter) {
+    if (isScopedEmptyFilter(scope)) {
+        return [];
+    }
+
     const query: Record<string, unknown> = { ...operationalDashboardProjectFilter() };
     if (scope?.projectIds?.length) {
         query._id = { $in: scope.projectIds.map((id) => new Types.ObjectId(id)) };
@@ -212,6 +217,10 @@ export async function buildRaidSuggestions(
     limit = 10,
     scope?: DashboardScopeFilter
 ): Promise<RaidSuggestion[]> {
+    if (isScopedEmptyFilter(scope)) {
+        return [];
+    }
+
     const deliveryRisks = await buildDeliveryRiskSummary(50, scope);
     const suggestions: RaidSuggestion[] = [];
 
