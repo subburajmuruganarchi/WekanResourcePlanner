@@ -69,6 +69,28 @@ export class ProjectController {
     async getById(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const { id } = req.params;
+            const user = req.user;
+            const role = user ? normalizeRoleName(user.role) : undefined;
+
+            if (user && isEmployeeAccessRole(role)) {
+                const employeeId = getAuthEmployeeId(user);
+                if (!employeeId) {
+                    res.status(403).json({
+                        status: 'error',
+                        message: 'You do not have access to this project',
+                    });
+                    return;
+                }
+                const assignedIds = await resolveEmployeeAssignedProjectIds(employeeId);
+                if (!assignedIds.includes(id)) {
+                    res.status(403).json({
+                        status: 'error',
+                        message: 'You do not have access to this project',
+                    });
+                    return;
+                }
+            }
+
             const project = await projectService.findById(id);
 
             if (!project) {

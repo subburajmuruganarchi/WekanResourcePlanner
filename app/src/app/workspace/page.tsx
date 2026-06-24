@@ -105,13 +105,19 @@ export default function EmployeeWorkspacePage() {
                 ) : (
                     <div className="grid gap-3 sm:grid-cols-2">
                         {myProjects.map((p) => (
-                            <div key={p.id} className="dashboard-card p-4 flex items-center gap-3">
-                                <FolderKanban className="w-5 h-5 text-brand-600" />
-                                <div>
-                                    <p className="font-medium text-slate-900">{p.name}</p>
+                            <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => navigate(`/projects/${p.id}`)}
+                                className="dashboard-card p-4 flex items-center gap-3 text-left w-full hover:border-brand-200 hover:shadow-sm transition-colors cursor-pointer"
+                            >
+                                <FolderKanban className="w-5 h-5 text-brand-600 shrink-0" />
+                                <div className="min-w-0">
+                                    <p className="font-medium text-slate-900 truncate">{p.name}</p>
                                     <p className="text-xs text-slate-500">{p.code}</p>
                                 </div>
-                            </div>
+                                <ArrowRight className="w-4 h-4 text-slate-400 ml-auto shrink-0" />
+                            </button>
                         ))}
                     </div>
                 )}

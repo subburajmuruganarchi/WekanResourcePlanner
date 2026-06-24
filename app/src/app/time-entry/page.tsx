@@ -22,6 +22,11 @@ import { useAuth } from "@/lib/auth-context"
 import { isEmployeeAccessRole, isTeamTimeManager } from "@/lib/roles"
 import { api } from "@/lib/api-client"
 import { TimeEntryEntryDialog } from "@/components/time-entry/time-entry-entry-dialog"
+import {
+    weekdaysInRange,
+    type DatePickMode,
+    type DateRangeValue,
+} from "@/components/time-entry/time-entry-date-picker"
 import type { DayData, DayEntry, ProjectOption, DailyForecastDay, DraggedProjectPayload } from "@/components/time-entry/time-entry-types"
 import { TimeHeader } from "@/components/time-tracking/TimeHeader"
 import { TimeKPICards } from "@/components/time-tracking/TimeKPICards"
@@ -90,6 +95,9 @@ export function TimeEntry() {
     const [rowSaveMessage, setRowSaveMessage] = useState<string | null>(null)
     const [entryDialog, setEntryDialog] = useState<{ dayIndex: number; tempId: string } | null>(null)
     const [dialogProjectLocked, setDialogProjectLocked] = useState(false)
+    const [dialogDateMode, setDialogDateMode] = useState<DatePickMode>("single")
+    const [dialogSelectedDate, setDialogSelectedDate] = useState<string>("")
+    const [dialogDateRange, setDialogDateRange] = useState<DateRangeValue | null>(null)
     const [viewMode, setViewMode] = useState<TimeViewMode>("calendar")
     const [insightsDrawerOpen, setInsightsDrawerOpen] = useState(false)
 
@@ -330,7 +338,7 @@ export function TimeEntry() {
     )
 
     const saveEntry = useCallback(
-        async (dayIndex: number, tempId: string) => {
+        async (dayIndex: number, tempId: string, dateOverride?: string) => {
             if (!selectedEmployee) {
                 setSubmitError("No employee selected.")
                 return
@@ -355,6 +363,9 @@ export function TimeEntry() {
                 return
             }
 
+            const entryDate = dateOverride ?? day.fullDate
+            const targetDayIndex = weekData.findIndex((d) => d.fullDate === entryDate)
+
             setSavingEntryId(tempId)
             setSubmitError(null)
             setRowSaveMessage(null)
@@ -364,25 +375,48 @@ export function TimeEntry() {
                     employeeId: selectedEmployee.id,
                     projectId,
                     timeCodeId,
-                    date: day.fullDate,
+                    date: entryDate,
                     hours: entry.hours,
                     comments: entry.comments || undefined,
                 })
 
-                setWeekData((prev) =>
-                    prev.map((d, i) =>
-                        i === dayIndex
-                            ? {
-                                  ...d,
-                                  entries: d.entries.map((e) =>
-                                      e.tempId === tempId
-                                          ? { ...e, serverEntryId: saved.id, status: saved.status, isDirty: false, isEditing: false }
-                                          : e
-                                  ),
-                              }
-                            : d
-                    )
-                )
+                setWeekData((prev) => {
+                    const savedEntry = {
+                        ...entry,
+                        serverEntryId: saved.id,
+                        status: saved.status,
+                        isDirty: false,
+                        isEditing: false,
+                    }
+
+                    return prev.map((d, i) => {
+                        let entries = d.entries.filter((e) => e.tempId !== tempId)
+
+                        if (targetDayIndex >= 0 && i === targetDayIndex) {
+                            const existing = entries.findIndex((e) => e.tempId === tempId)
+                            if (existing >= 0) {
+                                entries = entries.map((e) =>
+                                    e.tempId === tempId ? savedEntry : e
+                                )
+                            } else {
+                                entries = [...entries, savedEntry]
+                            }
+                        }
+
+                        return { ...d, entries }
+                    })
+                })
+
+                if (targetDayIndex < 0 && dateOverride && snapToMonday(dateOverride) !== selectedWeekStart) {
+                    const newWeekStart = snapToMonday(dateOverride)
+                    if (
+                        !hasUnsavedChanges ||
+                        window.confirm("Entry saved on another week. Jump to that week now?")
+                    ) {
+                        setSelectedWeekStart(newWeekStart)
+                    }
+                }
+
                 setRowSaveMessage(
                     saved.staffingUpdated
                         ? "Entry saved — you were added to this project for the week."
@@ -398,7 +432,17 @@ export function TimeEntry() {
                 setSavingEntryId(null)
             }
         },
-        [selectedEmployee, timeCodeId, weekData, selectableProjects, submitTimeEntry, fetchSavedEntries, fetchDailyForecast]
+        [
+            selectedEmployee,
+            timeCodeId,
+            weekData,
+            selectableProjects,
+            submitTimeEntry,
+            fetchSavedEntries,
+            fetchDailyForecast,
+            selectedWeekStart,
+            hasUnsavedChanges,
+        ]
     )
 
     const handleSaveDraft = useCallback(async () => {
@@ -491,9 +535,17 @@ export function TimeEntry() {
         [selectedWeekStart, hasUnsavedChanges]
     )
 
+    const resetDialogDateState = useCallback((fullDate: string) => {
+        setDialogDateMode("single")
+        setDialogSelectedDate(fullDate)
+        setDialogDateRange(null)
+    }, [])
+
     const addEntry = useCallback((dayIndex: number) => {
         const tempId = generateTempId()
+        const fullDate = weekDates[dayIndex]?.fullDate ?? getCurrentWeekStart()
         setDialogProjectLocked(false)
+        resetDialogDateState(fullDate)
         setWeekData((prev) =>
             prev.map((day, i) =>
                 i === dayIndex
@@ -508,7 +560,7 @@ export function TimeEntry() {
             )
         )
         setEntryDialog({ dayIndex, tempId })
-    }, [])
+    }, [weekDates, resetDialogDateState])
 
     const handleQuickAdd = useCallback(() => {
         const firstMissing = weekData.findIndex(
@@ -537,6 +589,7 @@ export function TimeEntry() {
             const day = weekDates[dayIndex]
             const defaultHours = day?.isWeekday ? 8 : 0
             setDialogProjectLocked(true)
+            resetDialogDateState(day?.fullDate ?? getCurrentWeekStart())
             setWeekData((prev) =>
                 prev.map((d, i) =>
                     i === dayIndex
@@ -559,13 +612,15 @@ export function TimeEntry() {
             )
             setEntryDialog({ dayIndex, tempId })
         },
-        [weekDates]
+        [weekDates, resetDialogDateState]
     )
 
     const openEditEntry = useCallback((dayIndex: number, tempId: string) => {
         setDialogProjectLocked(false)
+        const fullDate = weekDates[dayIndex]?.fullDate ?? getCurrentWeekStart()
+        resetDialogDateState(fullDate)
         setEntryDialog({ dayIndex, tempId })
-    }, [])
+    }, [weekDates, resetDialogDateState])
 
     const closeEntryDialog = useCallback(() => {
         if (entryDialog) {
@@ -582,6 +637,8 @@ export function TimeEntry() {
         }
         setEntryDialog(null)
         setDialogProjectLocked(false)
+        setDialogDateRange(null)
+        setDialogDateMode("single")
     }, [entryDialog, weekData])
 
     const removeEntry = useCallback(
@@ -631,11 +688,126 @@ export function TimeEntry() {
         [entryDialog, updateEntry]
     )
 
+    const handleDialogSelectedDateChange = useCallback(
+        (newDate: string) => {
+            setDialogSelectedDate(newDate)
+            if (!entryDialog) return
+
+            if (snapToMonday(newDate) !== selectedWeekStart) return
+
+            const newDayIndex = weekData.findIndex((d) => d.fullDate === newDate)
+            if (newDayIndex < 0 || newDayIndex === entryDialog.dayIndex) return
+
+            setWeekData((prev) => {
+                const entry = prev[entryDialog.dayIndex]?.entries.find(
+                    (e) => e.tempId === entryDialog.tempId
+                )
+                if (!entry) return prev
+
+                return prev.map((day, i) => {
+                    if (i === entryDialog.dayIndex) {
+                        return {
+                            ...day,
+                            entries: day.entries.filter((e) => e.tempId !== entryDialog.tempId),
+                        }
+                    }
+                    if (i === newDayIndex) {
+                        return { ...day, entries: [...day.entries, entry] }
+                    }
+                    return day
+                })
+            })
+            setEntryDialog({ dayIndex: newDayIndex, tempId: entryDialog.tempId })
+        },
+        [entryDialog, selectedWeekStart, weekData]
+    )
+
     const saveDialogEntry = useCallback(async () => {
-        if (!entryDialog) return
-        await saveEntry(entryDialog.dayIndex, entryDialog.tempId)
+        if (!entryDialog || !dialogEntry) return
+
+        if (dialogDateMode === "range" && dialogDateRange && !dialogEntry.serverEntryId) {
+            if (!selectedEmployee || !timeCodeId) {
+                setSubmitError("Employee or time code not configured.")
+                return
+            }
+            if (!dialogEntry.projectCode || dialogEntry.hours <= 0) {
+                setSubmitError("Select a project and enter hours before saving.")
+                return
+            }
+            const projectId = getProjectId(dialogEntry.projectCode)
+            if (!projectId) {
+                setSubmitError(`Invalid project: ${dialogEntry.projectCode}.`)
+                return
+            }
+
+            const dates = weekdaysInRange(dialogDateRange)
+            if (dates.length === 0) {
+                setSubmitError("Select a range that includes at least one weekday.")
+                return
+            }
+
+            setSavingEntryId(entryDialog.tempId)
+            setSubmitError(null)
+            setRowSaveMessage(null)
+
+            try {
+                let staffingCreated = false
+                for (const date of dates) {
+                    const saved = await submitTimeEntry({
+                        employeeId: selectedEmployee.id,
+                        projectId,
+                        timeCodeId,
+                        date,
+                        hours: dialogEntry.hours,
+                        comments: dialogEntry.comments || undefined,
+                    })
+                    if (saved.staffingUpdated) staffingCreated = true
+                }
+
+                setWeekData((prev) =>
+                    prev.map((day) => ({
+                        ...day,
+                        entries: day.entries.filter((e) => e.tempId !== entryDialog.tempId),
+                    }))
+                )
+
+                if (staffingCreated) notifyProjectsChanged()
+                setRowSaveMessage(
+                    `Saved ${dates.length} ${dates.length === 1 ? "entry" : "entries"} across the selected range.`
+                )
+                await Promise.all([fetchSavedEntries(), fetchDailyForecast()])
+
+                const rangeWeekStart = snapToMonday(dialogDateRange.from)
+                if (rangeWeekStart !== selectedWeekStart) {
+                    setSelectedWeekStart(rangeWeekStart)
+                }
+
+                setEntryDialog(null)
+            } catch (err) {
+                setSubmitError(err instanceof Error ? err.message : "Failed to save entries")
+            } finally {
+                setSavingEntryId(null)
+            }
+            return
+        }
+
+        await saveEntry(entryDialog.dayIndex, entryDialog.tempId, dialogSelectedDate)
         setEntryDialog(null)
-    }, [entryDialog, saveEntry])
+    }, [
+        entryDialog,
+        dialogEntry,
+        dialogDateMode,
+        dialogDateRange,
+        dialogSelectedDate,
+        selectedEmployee,
+        timeCodeId,
+        getProjectId,
+        submitTimeEntry,
+        saveEntry,
+        fetchSavedEntries,
+        fetchDailyForecast,
+        selectedWeekStart,
+    ])
 
     const deleteDialogEntry = useCallback(async () => {
         if (!entryDialog) return
@@ -943,12 +1115,20 @@ export function TimeEntry() {
             {entryDialog && dialogEntry && (
                 <TimeEntryEntryDialog
                     open={!!entryDialog}
-                    dayLabel={weekData[entryDialog.dayIndex]?.day ?? ""}
-                    dayDate={weekData[entryDialog.dayIndex]?.date ?? ""}
                     entry={dialogEntry}
                     projects={selectableProjects}
                     leaveTypes={leaveTypes}
                     otherCodes={otherCodes}
+                    dateMode={dialogDateMode}
+                    selectedDate={
+                        dialogSelectedDate ||
+                        weekData[entryDialog.dayIndex]?.fullDate ||
+                        getCurrentWeekStart()
+                    }
+                    dateRange={dialogDateRange}
+                    onDateModeChange={setDialogDateMode}
+                    onSelectedDateChange={handleDialogSelectedDateChange}
+                    onDateRangeChange={setDialogDateRange}
                     isLocked={
                         dialogEntry.status === "Submitted" ||
                         dialogEntry.status === "PM_Approved" ||
@@ -960,7 +1140,10 @@ export function TimeEntry() {
                         !!timeCodeId &&
                         !!dialogEntry.projectCode &&
                         dialogEntry.hours > 0 &&
-                        !!getProjectId(dialogEntry.projectCode)
+                        !!getProjectId(dialogEntry.projectCode) &&
+                        (dialogDateMode === "single" ||
+                            (dialogDateRange != null &&
+                                weekdaysInRange(dialogDateRange).length > 0))
                     }
                     onClose={closeEntryDialog}
                     onChange={updateDialogEntry}

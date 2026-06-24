@@ -18,6 +18,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import {
+    TimeEntryDatePicker,
+    type DatePickMode,
+    type DateRangeValue,
+} from "./time-entry-date-picker"
 import type { DayEntry, ProjectOption } from "./time-entry-types"
 
 interface CodeOption {
@@ -27,8 +32,6 @@ interface CodeOption {
 
 interface TimeEntryEntryDialogProps {
     open: boolean
-    dayLabel: string
-    dayDate: string
     entry: DayEntry | null
     projects: ProjectOption[]
     leaveTypes: CodeOption[]
@@ -37,6 +40,12 @@ interface TimeEntryEntryDialogProps {
     projectReadOnly?: boolean
     isSaving: boolean
     canSave: boolean
+    dateMode: DatePickMode
+    selectedDate: string
+    dateRange: DateRangeValue | null
+    onDateModeChange: (mode: DatePickMode) => void
+    onSelectedDateChange: (date: string) => void
+    onDateRangeChange: (range: DateRangeValue | null) => void
     onClose: () => void
     onChange: (field: keyof DayEntry, value: string | number) => void
     onSave: () => void
@@ -45,8 +54,6 @@ interface TimeEntryEntryDialogProps {
 
 export function TimeEntryEntryDialog({
     open,
-    dayLabel,
-    dayDate,
     entry,
     projects,
     leaveTypes,
@@ -55,6 +62,12 @@ export function TimeEntryEntryDialog({
     projectReadOnly = false,
     isSaving,
     canSave,
+    dateMode,
+    selectedDate,
+    dateRange,
+    onDateModeChange,
+    onSelectedDateChange,
+    onDateRangeChange,
     onClose,
     onChange,
     onSave,
@@ -68,11 +81,33 @@ export function TimeEntryEntryDialog({
                 <DialogHeader>
                     <DialogTitle>{isNew ? "Log time" : "Edit time entry"}</DialogTitle>
                     <DialogDescription>
-                        {dayLabel} · {dayDate}
+                        {isNew
+                            ? "Choose a single day or a date range, then log hours for your project."
+                            : "Update this time entry."}
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-2">
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">Date</label>
+                        <TimeEntryDatePicker
+                            mode={dateMode}
+                            onModeChange={onDateModeChange}
+                            singleDate={selectedDate}
+                            range={dateRange}
+                            onSingleDateChange={onSelectedDateChange}
+                            onRangeChange={onDateRangeChange}
+                            disabled={isLocked}
+                            allowRange={isNew}
+                        />
+                        {dateMode === "range" && dateRange && isNew && (
+                            <p className="text-xs text-slate-500">
+                                The same project and hours will be applied to each weekday in the
+                                selected range.
+                            </p>
+                        )}
+                    </div>
+
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-700">Project</label>
                         <Select
@@ -180,7 +215,7 @@ export function TimeEntryEntryDialog({
                             ) : (
                                 <Save className="w-4 h-4 mr-2" />
                             )}
-                            Save
+                            {dateMode === "range" && isNew ? "Save to range" : "Save"}
                         </Button>
                     )}
                 </DialogFooter>

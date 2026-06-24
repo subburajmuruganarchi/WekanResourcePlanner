@@ -9,7 +9,7 @@ import { useProject } from "@/lib/use-projects"
 import { projectStatusLabel, projectStatusOf } from "@/lib/project-status"
 import { useAuth } from "@/lib/auth-context"
 import { normalizeRoleName } from "@/lib/role-utils"
-import { ROLES } from "@/lib/roles"
+import { ROLES, isEmployeeAccessRole } from "@/lib/roles"
 import { TimesheetApprovalsTab } from "./components/timesheet-approvals-tab"
 import { StaffingRiskBadge } from "@/components/ai/staffing-risk-badge"
 import { ProjectLeadershipPanel } from "./components/project-leadership-panel"
@@ -21,9 +21,13 @@ export function ProjectDetail() {
     const { user } = useAuth()
 
     const isAdmin = normalizeRoleName(user?.role) === ROLES.ADMIN
+    const isReadOnlyEmployee = isEmployeeAccessRole(user?.role)
 
     // Check if logged-in user is the PM for this project
     const isPM = !!(user && project && project.managerId === user.id)
+
+    const backPath = isReadOnlyEmployee ? "/workspace" : "/projects"
+    const backLabel = isReadOnlyEmployee ? "Back to My Workspace" : "Back to Projects"
 
     if (loading) {
         return (
@@ -41,8 +45,8 @@ export function ProjectDetail() {
             <PageContainer>
                 <div className="text-center py-12">
                     <p className="text-red-600 mb-4">{error || "Project not found"}</p>
-                    <Button variant="outline" onClick={() => navigate("/projects")}>
-                        <ArrowLeft className="w-4 h-4 mr-2" /> Back to Projects
+                    <Button variant="outline" onClick={() => navigate(backPath)}>
+                        <ArrowLeft className="w-4 h-4 mr-2" /> {backLabel}
                     </Button>
                 </div>
             </PageContainer>
@@ -67,8 +71,8 @@ export function ProjectDetail() {
         <PageContainer>
             {/* Header */}
             <div className="mb-8">
-                <Button variant="link" className="pl-0 text-gray-500 mb-4" onClick={() => navigate("/projects")}>
-                    <ArrowLeft className="w-4 h-4 mr-2" /> Back to Projects
+                <Button variant="link" className="pl-0 text-gray-500 mb-4" onClick={() => navigate(backPath)}>
+                    <ArrowLeft className="w-4 h-4 mr-2" /> {backLabel}
                 </Button>
                 <div className="flex justify-between items-start">
                     <div>
@@ -80,14 +84,19 @@ export function ProjectDetail() {
                             <Badge variant={project.priority === "High" ? "warning" : project.priority === "Low" ? "secondary" : "default"}>
                                 {project.priority} Priority
                             </Badge>
-                            {id && <StaffingRiskBadge projectId={id} />}
+                            {isReadOnlyEmployee && (
+                                <Badge variant="secondary">Read-only</Badge>
+                            )}
+                            {id && !isReadOnlyEmployee && <StaffingRiskBadge projectId={id} />}
                         </div>
                         <p className="font-mono text-sm text-gray-500">{project.code}</p>
                     </div>
-                    <div className="flex gap-2">
-                        <Button variant="outline">Edit Project</Button>
-                        <Button onClick={() => navigate("/allocation")}>Allocate Resources</Button>
-                    </div>
+                    {!isReadOnlyEmployee && (
+                        <div className="flex gap-2">
+                            <Button variant="outline">Edit Project</Button>
+                            <Button onClick={() => navigate("/allocation")}>Allocate Resources</Button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -244,7 +253,9 @@ export function ProjectDetail() {
                     ) : (
                         <div className="p-8 text-center text-gray-400">
                             <p>No skill requirements defined for this project.</p>
-                            <p className="text-sm mt-2">Edit the project to add skill requirements.</p>
+                            {!isReadOnlyEmployee && (
+                                <p className="text-sm mt-2">Edit the project to add skill requirements.</p>
+                            )}
                         </div>
                     )}
                 </TabsContent>
@@ -281,7 +292,9 @@ export function ProjectDetail() {
                     ) : (
                         <div className="p-8 text-center text-gray-400">
                             <p>No role efforts defined for this project.</p>
-                            <p className="text-sm mt-2">Edit the project to add role requirements.</p>
+                            {!isReadOnlyEmployee && (
+                                <p className="text-sm mt-2">Edit the project to add role requirements.</p>
+                            )}
                         </div>
                     )}
                 </TabsContent>

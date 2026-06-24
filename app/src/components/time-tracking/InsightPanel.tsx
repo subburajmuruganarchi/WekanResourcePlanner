@@ -31,27 +31,28 @@ export function InsightPanel({ kpis, topProject, missingDays }: InsightPanelProp
     ];
 
     return (
-        <div className="tt-card overflow-hidden w-full max-w-[360px]">
-            <div className="px-5 py-5 border-b border-slate-100">
-                <h2 className="text-lg font-semibold text-slate-900">Time Intelligence</h2>
-                <p className="text-sm text-slate-500 mt-1">Weekly productivity insights</p>
-            </div>
-            <div className="p-5 space-y-5">
+        <section className="tt-card w-full overflow-hidden">
+            <header className="border-b border-slate-100 px-4 py-3">
+                <h2 className="text-sm font-semibold text-slate-900">Time Intelligence</h2>
+                <p className="mt-0.5 text-xs text-slate-500">Weekly productivity insights</p>
+            </header>
+            <div className="grid gap-3 p-4">
                 {items.map((item) => {
                     const Icon = item.icon;
                     return (
                         <div
                             key={item.label}
-                            className="rounded-xl border border-slate-100 bg-slate-50/50 px-5 py-4"
+                            className="rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3"
                         >
                             <div className="flex items-center gap-2">
-                                <Icon className={`w-5 h-5 shrink-0 ${item.accent}`} />
-                                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                <Icon className={`h-4 w-4 shrink-0 ${item.accent}`} />
+                                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                                     {item.label}
                                 </span>
                             </div>
                             <p
-                                className={`mt-2 text-2xl font-semibold tabular-nums ${item.accent} ${item.truncate ? 'truncate' : ''}`}
+                                className={`mt-1.5 text-xl font-semibold tabular-nums ${item.accent} ${item.truncate ? 'truncate' : ''}`}
+                                title={item.truncate ? item.value : undefined}
                             >
                                 {item.value}
                             </p>
@@ -59,6 +60,6 @@ export function InsightPanel({ kpis, topProject, missingDays }: InsightPanelProp
                     );
                 })}
             </div>
-        </div>
+        </section>
     );
 }

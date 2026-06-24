@@ -13,11 +13,7 @@ export function RoleRoute({ children }: RoleRouteProps) {
 
     if (!user) return null;
 
-    const path = location.pathname.split('/').slice(0, 2).join('/') || location.pathname;
-    const basePath =
-        path.startsWith('/projects/') ? '/projects' : path;
-
-    if (!canAccessRoute(user.role, basePath)) {
+    if (!canAccessRoute(user.role, location.pathname)) {
         return <Navigate to={getHomeRoute(user.role)} replace />;
     }
 

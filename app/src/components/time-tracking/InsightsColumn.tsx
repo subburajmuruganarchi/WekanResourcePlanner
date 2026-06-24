@@ -18,7 +18,7 @@ export function InsightsColumn({
     onApplySuggestion,
 }: InsightsColumnProps) {
     return (
-        <div className="tt-insights-sticky space-y-0 w-full max-w-[360px]">
+        <div className="tt-insights-sticky flex w-full flex-col gap-4">
             <InsightPanel kpis={kpis} topProject={topProject} missingDays={missingDays} />
             <AISuggestionCard suggestions={suggestions} onApply={onApplySuggestion} />
         </div>

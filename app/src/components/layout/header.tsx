@@ -37,13 +37,6 @@ export function Header() {
         navigate('/login', { replace: true });
     };
 
-    const initials = user?.name
-        ?.split(' ')
-        .map((n) => n[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase();
-
     const getIcon = (type: string, read: boolean) => {
         const props = { className: `w-5 h-5 ${read ? 'text-gray-400' : ''}` };
         switch (type) {
@@ -158,19 +151,15 @@ export function Header() {
 
                     <div className="h-8 w-px bg-slate-200 hidden sm:block" aria-hidden />
 
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-brand-100 rounded-full flex items-center justify-center text-xs font-semibold text-brand-700 shrink-0">
-                            {initials || '?'}
-                        </div>
-                        <button
-                            type="button"
-                            onClick={handleSignOut}
-                            aria-label="Sign out"
-                            className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                            <LogOut className="w-4 h-4" />
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        onClick={handleSignOut}
+                        aria-label="Sign out"
+                        title={user?.name ? `Sign out (${user.name})` : 'Sign out'}
+                        className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                        <LogOut className="w-4 h-4" />
+                    </button>
                 </div>
             </header>
         </>

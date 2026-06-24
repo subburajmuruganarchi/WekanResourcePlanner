@@ -1,6 +1,6 @@
-import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { WeekJumpCalendar } from './WeekJumpCalendar';
 
 interface WeeklyNavigatorProps {
     weekLabel: string;
@@ -59,16 +59,10 @@ export function WeeklyNavigator({
                 <div className="flex items-center gap-3 justify-center sm:justify-end">
                     {!isCurrentWeek && (
                         <Button type="button" variant="outline" className="h-11 gap-2" onClick={onToday}>
-                            <CalendarDays className="w-4 h-4" />
                             Today
                         </Button>
                     )}
-                    <Input
-                        type="date"
-                        className="h-11 w-[160px] border-slate-200 text-sm"
-                        value={weekStart}
-                        onChange={(e) => onDatePick(e.target.value)}
-                    />
+                    <WeekJumpCalendar weekStart={weekStart} onWeekStartChange={onDatePick} />
                 </div>
             </div>
         </div>
