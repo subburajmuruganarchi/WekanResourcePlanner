@@ -1,16 +1,7 @@
-import { useMemo } from 'react';
 import { PageContainer } from '@/components/layout/page-container';
 import { WorkspacePageHeader, WorkspaceSection } from '@/components/workspaces/shared';
 import { useEmployees } from '@/lib/use-employees';
-import { useProjects } from '@/lib/use-projects';
-
-interface MemberAssignment {
-    projectName: string;
-    projectCode: string;
-    allocationPercent: number;
-    startDate?: string;
-    endDate?: string;
-}
+import type { EmployeeProjectAssignment } from '@/types/api';
 
 function availabilityLabel(percent: number): string {
     if (percent <= 0) return 'Fully allocated';
@@ -24,36 +15,24 @@ function availabilityClass(percent: number): string {
 }
 
 function formatPeriod(start?: string, end?: string): string {
-    const s = start?.slice(0, 10) ?? '—';
-    const e = end?.slice(0, 10) ?? 'Ongoing';
+    const s = start?.slice(0, 10) || '—';
+    const e = end?.slice(0, 10) || 'Ongoing';
     return `${s} → ${e}`;
+}
+
+function totalCommitted(assignments: EmployeeProjectAssignment[]): number {
+    return assignments.reduce((sum, a) => sum + a.allocationPercent, 0);
+}
+
+function sortAssignments(assignments: EmployeeProjectAssignment[]): EmployeeProjectAssignment[] {
+    return [...assignments].sort((a, b) => {
+        if (a.onYourProjects !== b.onYourProjects) return a.onYourProjects ? -1 : 1;
+        return b.allocationPercent - a.allocationPercent;
+    });
 }
 
 export default function PmTeamPage() {
     const { employees, loading } = useEmployees({ allocatedToMyProjects: true });
-    const { projects } = useProjects();
-
-    const assignmentsByEmployee = useMemo(() => {
-        const map = new Map<string, MemberAssignment[]>();
-        for (const project of projects) {
-            for (const member of project.teamMembers ?? []) {
-                const entry: MemberAssignment = {
-                    projectName: project.name,
-                    projectCode: project.code,
-                    allocationPercent: member.allocationPercent,
-                    startDate: member.startDate ?? project.startDate,
-                    endDate: member.endDate ?? project.endDate,
-                };
-                const list = map.get(member.employeeId) ?? [];
-                list.push(entry);
-                map.set(member.employeeId, list);
-            }
-        }
-        return map;
-    }, [projects]);
-
-    const totalOccupancy = (assignments: MemberAssignment[]) =>
-        assignments.reduce((sum, a) => sum + a.allocationPercent, 0);
 
     return (
         <PageContainer className="space-y-6">
@@ -72,9 +51,11 @@ export default function PmTeamPage() {
                         </p>
                     ) : (
                         employees.map((e) => {
-                            const assignments = assignmentsByEmployee.get(e.id) ?? [];
+                            const assignments = sortAssignments(e.projectAssignments ?? []);
                             const avail = e.availability ?? 100;
-                            const occupancy = totalOccupancy(assignments);
+                            const committed = totalCommitted(assignments);
+                            const onYourProjects = assignments.filter((a) => a.onYourProjects);
+                            const onYourCommitted = totalCommitted(onYourProjects);
 
                             return (
                                 <div key={e.id} className="dashboard-card p-4">
@@ -84,21 +65,42 @@ export default function PmTeamPage() {
                                     </p>
                                     <p className={`text-xs font-medium mt-2 ${availabilityClass(avail)}`}>
                                         {availabilityLabel(avail)}
-                                        {occupancy > 0 && (
+                                        {committed > 0 && (
                                             <span className="text-slate-500 font-normal">
                                                 {' '}
-                                                · {occupancy}% on your projects
+                                                · {committed}% committed across {assignments.length} project
+                                                {assignments.length === 1 ? '' : 's'}
                                             </span>
                                         )}
                                     </p>
+                                    {onYourCommitted > 0 && onYourCommitted !== committed && (
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            {onYourCommitted}% on your projects
+                                        </p>
+                                    )}
 
                                     {assignments.length > 0 ? (
                                         <ul className="mt-3 space-y-2 border-t border-slate-100 pt-3">
                                             {assignments.map((a) => (
-                                                <li key={`${e.id}-${a.projectCode}`} className="text-xs">
+                                                <li
+                                                    key={`${e.id}-${a.projectId}`}
+                                                    className="text-xs"
+                                                >
                                                     <div className="flex justify-between gap-2">
-                                                        <span className="font-medium text-slate-800 truncate">
+                                                        <span
+                                                            className={
+                                                                a.onYourProjects
+                                                                    ? 'font-medium text-slate-800 truncate'
+                                                                    : 'text-slate-600 truncate'
+                                                            }
+                                                        >
                                                             {a.projectName}
+                                                            {!a.onYourProjects && (
+                                                                <span className="text-slate-400 font-normal">
+                                                                    {' '}
+                                                                    (other)
+                                                                </span>
+                                                            )}
                                                         </span>
                                                         <span className="text-brand-600 font-semibold shrink-0">
                                                             {a.allocationPercent}%
@@ -112,7 +114,7 @@ export default function PmTeamPage() {
                                         </ul>
                                     ) : (
                                         <p className="text-xs text-slate-400 mt-3 border-t border-slate-100 pt-3">
-                                            No active allocation rows on your projects.
+                                            No active project allocations found.
                                         </p>
                                     )}
                                 </div>

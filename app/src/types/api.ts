@@ -82,6 +82,16 @@ export interface EmployeeSkill {
     isPrimary: boolean;
 }
 
+export interface EmployeeProjectAssignment {
+    projectId: string;
+    projectName: string;
+    projectCode: string;
+    allocationPercent: number;
+    startDate: string;
+    endDate: string;
+    onYourProjects: boolean;
+}
+
 export interface Employee {
     id: string;
     employeeCode?: string;
@@ -99,6 +109,7 @@ export interface Employee {
     maxAllocationPercent: number;
     profileImage?: string;
     joinDate?: string;
+    projectAssignments?: EmployeeProjectAssignment[];
 }
 
 export interface ProjectTeamMember {

@@ -10,15 +10,26 @@ import {
 import { Types } from 'mongoose';
 import { AppError } from '../../common/errors/app-error';
 import { SkillLevel } from '../../common/types/enums';
-import { getEmployeesAllocatedToManagedProjects } from '../../common/utils/pm-scope.util';
+import { getEmployeesAllocatedToManagedProjects, getManagedProjectIds } from '../../common/utils/pm-scope.util';
 import { activeEmployeeMongoFilter } from '../../common/utils/employee-status.util';
-import { getEmployeesAllocatedToPortfolioProjects } from '../../common/utils/delivery-scope.util';
+import { getEmployeesAllocatedToPortfolioProjects, getPortfolioProjectIds } from '../../common/utils/delivery-scope.util';
 
 export interface EmployeeListParams {
     skill?: string;
     minLevel?: string;
     isActive?: boolean;
     employeeIds?: string[];
+}
+
+export interface EmployeeProjectAssignment {
+    projectId: string;
+    projectName: string;
+    projectCode: string;
+    allocationPercent: number;
+    startDate: string;
+    endDate: string;
+    /** True when the project is managed by the requesting PM/DM. */
+    onYourProjects: boolean;
 }
 
 export interface EmployeeResponse {
@@ -44,6 +55,7 @@ export interface EmployeeResponse {
     profileImage?: string;
     joinDate?: string;
     is_active?: boolean;
+    projectAssignments?: EmployeeProjectAssignment[];
 }
 
 interface PopulatedEmployee {
@@ -75,12 +87,16 @@ interface PopulatedEmployeeSkill {
 export class EmployeeService {
     async findAllocatedToProjectManager(pmEmployeeId: string, params: EmployeeListParams = {}): Promise<EmployeeResponse[]> {
         const employeeIds = await getEmployeesAllocatedToManagedProjects(pmEmployeeId);
-        return this.findAll({ ...params, employeeIds });
+        const employees = await this.findAll({ ...params, employeeIds });
+        const managedProjectIds = new Set(await getManagedProjectIds(pmEmployeeId));
+        return this.attachProjectAssignments(employees, managedProjectIds);
     }
 
     async findAllocatedToDeliveryManager(dmEmployeeId: string, params: EmployeeListParams = {}): Promise<EmployeeResponse[]> {
         const employeeIds = await getEmployeesAllocatedToPortfolioProjects(dmEmployeeId);
-        return this.findAll({ ...params, employeeIds });
+        const employees = await this.findAll({ ...params, employeeIds });
+        const portfolioIds = new Set(await getPortfolioProjectIds(dmEmployeeId));
+        return this.attachProjectAssignments(employees, portfolioIds);
     }
 
     async findAll(params: EmployeeListParams = {}): Promise<EmployeeResponse[]> {
@@ -260,6 +276,72 @@ export class EmployeeService {
         }
 
         return result;
+    }
+
+    private formatAllocationDate(date: Date | string | undefined): string {
+        if (!date) return '';
+        if (typeof date === 'string') return date.split('T')[0];
+        return date.toISOString().split('T')[0];
+    }
+
+    private async attachProjectAssignments(
+        employees: EmployeeResponse[],
+        yourProjectIds: Set<string>
+    ): Promise<EmployeeResponse[]> {
+        if (employees.length === 0) return employees;
+
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+
+        const employeeOids = employees.map((e) => new Types.ObjectId(e.id));
+        const allocations = await ProjectAllocation.find({
+            employee_id: { $in: employeeOids },
+            is_active: true,
+            end_date: { $gte: today },
+        })
+            .populate('project_id', 'project_name project_code')
+            .sort({ start_date: 1 })
+            .lean();
+
+        const byEmployee = new Map<string, EmployeeProjectAssignment[]>();
+        for (const alloc of allocations) {
+            const empId = alloc.employee_id.toString();
+            const project = alloc.project_id as {
+                _id?: Types.ObjectId;
+                project_name?: string;
+                project_code?: string;
+            } | Types.ObjectId | null;
+            const projectId =
+                project && typeof project === 'object' && '_id' in project
+                    ? project._id!.toString()
+                    : alloc.project_id?.toString() ?? '';
+            const projectName =
+                project && typeof project === 'object' && 'project_name' in project
+                    ? project.project_name ?? 'Unknown project'
+                    : 'Unknown project';
+            const projectCode =
+                project && typeof project === 'object' && 'project_code' in project
+                    ? project.project_code ?? ''
+                    : '';
+
+            const entry: EmployeeProjectAssignment = {
+                projectId,
+                projectName,
+                projectCode,
+                allocationPercent: alloc.allocation_percent ?? 0,
+                startDate: this.formatAllocationDate(alloc.start_date),
+                endDate: this.formatAllocationDate(alloc.end_date),
+                onYourProjects: yourProjectIds.has(projectId),
+            };
+
+            if (!byEmployee.has(empId)) byEmployee.set(empId, []);
+            byEmployee.get(empId)!.push(entry);
+        }
+
+        return employees.map((emp) => ({
+            ...emp,
+            projectAssignments: byEmployee.get(emp.id) ?? [],
+        }));
     }
 
     private mapToResponse(
