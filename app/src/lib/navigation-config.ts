@@ -17,8 +17,6 @@ import {
     TrendingUp,
     AlertTriangle,
     Milestone,
-    MessageSquare,
-    ListChecks,
     GanttChart,
     Home,
     Brain,
