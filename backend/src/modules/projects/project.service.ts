@@ -35,6 +35,8 @@ export interface ProjectTeamMember {
     email?: string;
     roleName?: string;
     allocationPercent: number;
+    startDate?: string;
+    endDate?: string;
 }
 
 export interface ProjectResponse {
@@ -524,6 +526,8 @@ export class ProjectService {
                             ? role.role_name
                             : undefined,
                     allocationPercent: a.allocation_percent ?? 0,
+                    startDate: formatDate(a.start_date),
+                    endDate: formatDate(a.end_date),
                 };
             }),
             deliveryManagerIds: deliveryManagers?.deliveryManagerIds ?? [],

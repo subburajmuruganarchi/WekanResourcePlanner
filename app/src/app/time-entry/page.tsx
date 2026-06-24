@@ -105,10 +105,27 @@ export function TimeEntry() {
     const isSelfOnly = isEmployeeAccessRole(user?.role)
     const isTeamLead = isTeamTimeManager(user?.role)
     const { submitTimeEntry, submitWeeklyTimesheet, deleteTimeEntry, loading } = useTimeEntries()
-    const { employees, loading: loadingEmployees } = useEmployees({
+    const { employees: teamEmployees, loading: loadingEmployees } = useEmployees({
         allocatedToMyProjects: isTeamLead,
         activeOnly: true,
     })
+
+    const employees = useMemo(() => {
+        if (!isTeamLead || !user?.id) return teamEmployees
+        if (teamEmployees.some((e) => e.id === user.id)) return teamEmployees
+        return [
+            {
+                id: user.id,
+                name: `${user.name ?? 'Me'} (me)`,
+                email: user.email ?? '',
+                status: 'Active' as const,
+                skills: [],
+                availability: 100,
+                maxAllocationPercent: 100,
+            },
+            ...teamEmployees,
+        ]
+    }, [teamEmployees, isTeamLead, user?.id, user?.name, user?.email])
     const { projects, loading: loadingProjects, error: projectsError } = useProjects({ forTimeEntry: true })
 
     useEffect(() => {
@@ -118,6 +135,10 @@ export function TimeEntry() {
         }
         if (employees.length === 0) {
             setSelectedEmployeeId("")
+            return
+        }
+        if (isTeamLead && user?.id && !selectedEmployeeId) {
+            setSelectedEmployeeId(user.id)
             return
         }
         if (!selectedEmployeeId || !employees.some((e) => e.id === selectedEmployeeId)) {

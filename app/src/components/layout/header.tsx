@@ -8,6 +8,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { GlobalSearch } from './global-search';
 import { CommandPalette, type CommandItem } from './command-palette';
 import { ROUTE_TITLES } from '@/lib/navigation-config';
+import { AICopilotPanel } from '@/components/workspaces/ai/AICopilotPanel';
 
 const commandItems: CommandItem[] = [
     { id: 'dash', label: 'Dashboard', group: 'Workspace', path: '/dashboard' },
@@ -89,6 +90,8 @@ export function Header() {
                     <Button variant="ghost" size="sm" className="hidden md:flex text-slate-500" aria-label="Help">
                         <HelpCircle className="w-4 h-4" />
                     </Button>
+
+                    <AICopilotPanel />
 
                     <Popover>
                         <PopoverTrigger asChild>

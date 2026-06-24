@@ -85,8 +85,6 @@ export const PERSONA_NAV: Record<string, NavGroupDef[]> = {
                 { label: 'Resource Allocation', path: '/allocation', icon: CalendarRange, roles: [ROLES.PROJECT_MANAGER] },
                 { label: 'Status Reports', path: '/pm/status-report', icon: FileBarChart, roles: [ROLES.PROJECT_MANAGER] },
                 { label: 'Risks', path: '/pm/risks', icon: AlertTriangle, roles: [ROLES.PROJECT_MANAGER] },
-                { label: 'Decisions', path: '/pm/decisions', icon: ListChecks, roles: [ROLES.PROJECT_MANAGER] },
-                { label: 'Communication', path: '/pm/communication', icon: MessageSquare, roles: [ROLES.PROJECT_MANAGER] },
                 { label: 'Time & Approvals', path: '/time-entry', icon: Clock, roles: [ROLES.PROJECT_MANAGER] },
             ],
         },

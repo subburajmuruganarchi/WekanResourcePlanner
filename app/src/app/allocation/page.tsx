@@ -45,6 +45,11 @@ export function Allocation() {
 
     const { projects, loading: projLoading } = useProjects();
     const { employees } = useEmployees();
+    const isPM = normalizeRoleName(user?.role) === ROLES.PROJECT_MANAGER;
+    const managedProjectIds = useMemo(
+        () => new Set(projects.map((p) => p.id)),
+        [projects]
+    );
 
     const [weekWindowStart, setWeekWindowStart] = useState(0);
     const [searchProject, setSearchProject] = useState('');
@@ -136,7 +141,8 @@ export function Allocation() {
                 (row) =>
                     row.projectCode !== BENCH_PROJECT_CODE &&
                     row.projectName !== 'Available / Bench' &&
-                    !row.rowKey.startsWith('draft:')
+                    !row.rowKey.startsWith('draft:') &&
+                    (!isPM || managedProjectIds.has(row.projectId))
             )
             .map((row) => ({
                 ...row,
@@ -166,7 +172,7 @@ export function Allocation() {
                     sensitivity: 'base',
                 });
             });
-    }, [grid.plannerRows, employeeRoleMap, projectTypeById]);
+    }, [grid.plannerRows, employeeRoleMap, projectTypeById, isPM, managedProjectIds]);
 
     const filteredRows = useMemo(() => {
         return displayRows.filter((row) =>

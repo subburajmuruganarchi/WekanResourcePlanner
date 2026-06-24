@@ -107,6 +107,8 @@ export interface ProjectTeamMember {
     email?: string;
     roleName?: string;
     allocationPercent: number;
+    startDate?: string;
+    endDate?: string;
 }
 
 export interface Project {

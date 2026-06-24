@@ -6,6 +6,7 @@ import { fetchTimeEntrySuggestions, useDashboardInsight } from '@/lib/use-ai-ins
 import { buildDashboardPeriodRange, getCurrentMonthValue, getCurrentWeekStart } from '@/lib/dashboard-period';
 import { getRoleDisplayLabel, normalizeRoleName } from '@/lib/role-utils';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
 type PromptKind = 'management' | 'employee';
@@ -62,7 +63,7 @@ function promptsForRole(role: string | undefined): CopilotPrompt[] {
     return PROMPTS[canonical] ?? PROMPTS[ROLES.EMPLOYEE];
 }
 
-export function AICopilotPanel({ className }: { className?: string }) {
+export function AICopilotPanel() {
     const { user } = useAuth();
     const accessRole = normalizeRoleName(user?.role) as SystemRoleName;
     const roleLabel = getRoleDisplayLabel(user?.role, {
@@ -132,91 +133,80 @@ export function AICopilotPanel({ className }: { className?: string }) {
     };
 
     return (
-        <>
-            <button
-                type="button"
-                onClick={() => setOpen((v) => !v)}
-                className={cn(
-                    'fixed bottom-6 left-6 z-40 flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-white shadow-lg enterprise-gradient-bg transition-opacity hover:opacity-95',
-                    className
-                )}
-            >
-                <Sparkles className="h-4 w-4" />
-                AI Copilot
-            </button>
-
-            {open && (
-                <div className="fixed bottom-24 left-6 z-40 flex w-[min(420px,calc(100vw-2rem))] max-h-[min(70vh,520px)] flex-col dashboard-card overflow-hidden">
-                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
-                        <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-900">R360 AI Copilot</p>
-                            <p className="text-xs text-slate-500">{roleLabel} · role-aware assistant</p>
-                        </div>
-                        <button
-                            type="button"
-                            className="shrink-0 text-xs text-slate-400 hover:text-slate-600"
-                            onClick={() => setOpen(false)}
-                        >
-                            Close
-                        </button>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto">
-                        <div className="border-b border-slate-100 p-4">
-                            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                Suggested questions
-                            </p>
-                            <div className="space-y-2">
-                                {prompts.map((p) => (
-                                    <button
-                                        key={p.label}
-                                        type="button"
-                                        onClick={() => void runPrompt(p)}
-                                        disabled={loading}
-                                        className={cn(
-                                            'w-full rounded-lg border px-3 py-2.5 text-left text-sm text-slate-700 transition-colors',
-                                            activePrompt === p.label
-                                                ? 'border-brand-300 bg-brand-50/80 text-brand-900'
-                                                : 'border-slate-100 hover:border-brand-200 hover:bg-brand-50/50'
-                                        )}
-                                    >
-                                        {p.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {(loading || error || response) && (
-                            <div className="p-4">
-                                {loading && (
-                                    <div className="flex items-center gap-2 text-sm text-slate-500">
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        Analyzing…
-                                    </div>
-                                )}
-                                {error && (
-                                    <div className="rounded-lg border border-rose-100 bg-rose-50 p-3 text-sm text-rose-700">
-                                        {error}
-                                    </div>
-                                )}
-                                {activePrompt && response && !loading && !error && (
-                                    <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                                        <p className="mb-1 text-xs font-semibold text-brand-600">{activePrompt}</p>
-                                        <p className="text-sm leading-relaxed text-slate-700">{response}</p>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3">
-                        <Button size="sm" variant="outline" className="w-full gap-2" disabled>
-                            <Send className="h-3.5 w-3.5" />
-                            Ask a follow-up (coming soon)
-                        </Button>
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    className="relative p-2 text-slate-500 hover:text-brand-600 rounded-lg hover:bg-brand-50 transition-colors"
+                    aria-label="AI Copilot"
+                    title="AI Copilot"
+                >
+                    <Sparkles className="w-5 h-5" />
+                </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[min(420px,calc(100vw-2rem))] p-0 mr-4" align="end">
+                <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                    <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">R360 AI Copilot</p>
+                        <p className="text-xs text-slate-500">{roleLabel} · role-aware assistant</p>
                     </div>
                 </div>
-            )}
-        </>
+
+                <div className="max-h-[min(60vh,480px)] overflow-y-auto">
+                    <div className="border-b border-slate-100 p-4">
+                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            Suggested questions
+                        </p>
+                        <div className="space-y-2">
+                            {prompts.map((p) => (
+                                <button
+                                    key={p.label}
+                                    type="button"
+                                    onClick={() => void runPrompt(p)}
+                                    disabled={loading}
+                                    className={cn(
+                                        'w-full rounded-lg border px-3 py-2.5 text-left text-sm text-slate-700 transition-colors',
+                                        activePrompt === p.label
+                                            ? 'border-brand-300 bg-brand-50/80 text-brand-900'
+                                            : 'border-slate-100 hover:border-brand-200 hover:bg-brand-50/50'
+                                    )}
+                                >
+                                    {p.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {(loading || error || response) && (
+                        <div className="p-4">
+                            {loading && (
+                                <div className="flex items-center gap-2 text-sm text-slate-500">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Analyzing…
+                                </div>
+                            )}
+                            {error && (
+                                <div className="rounded-lg border border-rose-100 bg-rose-50 p-3 text-sm text-rose-700">
+                                    {error}
+                                </div>
+                            )}
+                            {activePrompt && response && !loading && !error && (
+                                <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                                    <p className="mb-1 text-xs font-semibold text-brand-600">{activePrompt}</p>
+                                    <p className="text-sm leading-relaxed text-slate-700">{response}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3">
+                    <Button size="sm" variant="outline" className="w-full gap-2" disabled>
+                        <Send className="h-3.5 w-3.5" />
+                        Ask a follow-up (coming soon)
+                    </Button>
+                </div>
+            </PopoverContent>
+        </Popover>
     );
 }

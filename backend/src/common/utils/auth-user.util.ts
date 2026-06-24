@@ -57,6 +57,9 @@ export async function assertTimeEntryEmployeeScope(
         if (!pmId) {
             return { ok: false, message: 'Authentication required.' };
         }
+        if (targetEmployeeId === pmId) {
+            return { ok: true };
+        }
         const allowed = await isEmployeeAllocatedToManagedProjects(pmId, targetEmployeeId);
         if (!allowed) {
             return {
