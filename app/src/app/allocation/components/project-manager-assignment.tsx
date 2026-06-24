@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import { Loader2, UserCog, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,6 +12,7 @@ import {
 import { useEmployees } from '@/lib/use-employees';
 import { useProjects } from '@/lib/use-projects';
 import { normalizeRoleName } from '@/lib/role-utils';
+import { LeadershipFieldCard } from '@/app/projects/components/leadership-field-card';
 
 interface ProjectManagerAssignmentProps {
     projectId: string;
@@ -18,6 +20,9 @@ interface ProjectManagerAssignmentProps {
     managerName?: string;
     readOnly?: boolean;
     onUpdated?: () => void;
+    variant?: 'default' | 'card';
+    icon?: LucideIcon;
+    hint?: string;
 }
 
 const fieldLabelClass =
@@ -29,6 +34,9 @@ export function ProjectManagerAssignment({
     managerName,
     readOnly = false,
     onUpdated,
+    variant = 'default',
+    icon: Icon = UserCog,
+    hint,
 }: ProjectManagerAssignmentProps) {
     const { employees, loading: employeesLoading } = useEmployees();
     const { updateProject } = useProjects();
@@ -82,70 +90,90 @@ export function ProjectManagerAssignment({
         }
     };
 
+    const control = readOnly ? (
+        <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800">
+            {displayManagerName}
+        </div>
+    ) : employeesLoading ? (
+        <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading…
+        </div>
+    ) : projectManagers.length === 0 ? (
+        <p className="flex min-h-10 items-center rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs text-amber-800">
+            No PM users — assign role in User Control
+        </p>
+    ) : (
+        <Select
+            key={`pm-select-${projectId}`}
+            value={selectedManagerId}
+            onValueChange={setSelectedManagerId}
+        >
+            <SelectTrigger className="h-10 w-full rounded-lg border-slate-200 bg-white text-sm">
+                <SelectValue placeholder="Select project manager" />
+            </SelectTrigger>
+            <SelectContent className="max-h-64 rounded-lg">
+                {projectManagers.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                        {emp.role ? `${emp.name} (${emp.role})` : emp.name}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+
+    const saveButton = !readOnly ? (
+        <Button
+            type="button"
+            size="sm"
+            variant={hasChanges ? 'default' : 'outline'}
+            className="h-9 w-full rounded-lg"
+            disabled={!hasChanges || saving || !selectedManagerId || projectManagers.length === 0}
+            onClick={() => void handleSave()}
+        >
+            {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+            ) : saved ? (
+                <>
+                    <Check className="mr-1.5 h-4 w-4" />
+                    Saved
+                </>
+            ) : (
+                'Save changes'
+            )}
+        </Button>
+    ) : null;
+
+    if (variant === 'card') {
+        return (
+            <LeadershipFieldCard
+                icon={Icon}
+                title="Project Manager"
+                hint={hint}
+                error={error}
+                action={saveButton}
+            >
+                {control}
+            </LeadershipFieldCard>
+        );
+    }
+
     return (
         <>
-            <div className="space-y-2 min-w-0">
+            <div className="min-w-0 space-y-2">
                 <label className={fieldLabelClass}>
-                    <UserCog className="w-3.5 h-3.5 shrink-0" />
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
                     Project Manager
                 </label>
-                {readOnly ? (
-                    <div className="flex h-11 items-center rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm font-medium text-gray-700">
-                        {displayManagerName}
-                    </div>
-                ) : employeesLoading ? (
-                    <div className="flex h-11 items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-500">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Loading…
-                    </div>
-                ) : projectManagers.length === 0 ? (
-                    <p className="flex min-h-11 items-center rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs text-amber-800">
-                        No PM users — assign role in User Control
-                    </p>
-                ) : (
-                    <Select
-                        key={`pm-select-${projectId}`}
-                        value={selectedManagerId}
-                        onValueChange={setSelectedManagerId}
-                    >
-                        <SelectTrigger className="h-11 w-full rounded-xl border-gray-200 text-sm">
-                            <SelectValue placeholder="Assign project manager…" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-64 rounded-xl">
-                            {projectManagers.map((emp) => (
-                                <SelectItem key={emp.id} value={emp.id}>
-                                    {emp.role ? `${emp.name} (${emp.role})` : emp.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                )}
+                {control}
                 {error && <p className="text-xs text-red-600">{error}</p>}
             </div>
-
-            {!readOnly && (
-                <div className="space-y-2 min-w-0">
+            {!readOnly && saveButton && (
+                <div className="min-w-0 space-y-2">
                     <span className={`${fieldLabelClass} invisible select-none`} aria-hidden>
                         Action
                     </span>
-                    <Button
-                        type="button"
-                        variant={hasChanges ? 'default' : 'outline'}
-                        className="h-11 w-full rounded-xl px-5 sm:w-auto"
-                        disabled={!hasChanges || saving || !selectedManagerId || projectManagers.length === 0}
-                        onClick={() => void handleSave()}
-                    >
-                        {saving ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : saved ? (
-                            <>
-                                <Check className="mr-1.5 h-4 w-4" />
-                                Saved
-                            </>
-                        ) : (
-                            'Save PM'
-                        )}
-                    </Button>
+                    {saveButton}
                 </div>
             )}
         </>

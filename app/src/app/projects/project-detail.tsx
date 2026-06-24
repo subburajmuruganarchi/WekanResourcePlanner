@@ -12,9 +12,7 @@ import { normalizeRoleName } from "@/lib/role-utils"
 import { ROLES } from "@/lib/roles"
 import { TimesheetApprovalsTab } from "./components/timesheet-approvals-tab"
 import { StaffingRiskBadge } from "@/components/ai/staffing-risk-badge"
-import { ProjectManagerAssignment } from "@/app/allocation/components/project-manager-assignment"
-import { DeliveryManagerAssignment } from "./components/delivery-manager-assignment"
-import { ProjectStatusAssignment } from "./components/project-status-assignment"
+import { ProjectLeadershipPanel } from "./components/project-leadership-panel"
 
 export function ProjectDetail() {
     const navigate = useNavigate()
@@ -158,26 +156,15 @@ export function ProjectDetail() {
 
                             {isAdmin && id && (
                                 <div className="pt-6 border-t border-gray-100">
-                                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Project leadership</h3>
-                                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                        <ProjectManagerAssignment
-                                            projectId={id}
-                                            managerId={project.managerId}
-                                            managerName={project.managerName}
-                                            onUpdated={() => void refetch()}
-                                        />
-                                        <DeliveryManagerAssignment
-                                            projectId={id}
-                                            managerIds={project.deliveryManagerIds}
-                                            managerNames={project.deliveryManagerNames}
-                                            onUpdated={() => void refetch()}
-                                        />
-                                        <ProjectStatusAssignment
-                                            projectId={id}
-                                            status={project.status}
-                                            onUpdated={() => void refetch()}
-                                        />
-                                    </div>
+                                    <ProjectLeadershipPanel
+                                        projectId={id}
+                                        managerId={project.managerId}
+                                        managerName={project.managerName}
+                                        deliveryManagerIds={project.deliveryManagerIds}
+                                        deliveryManagerNames={project.deliveryManagerNames}
+                                        status={project.status}
+                                        onUpdated={() => void refetch()}
+                                    />
                                 </div>
                             )}
 
