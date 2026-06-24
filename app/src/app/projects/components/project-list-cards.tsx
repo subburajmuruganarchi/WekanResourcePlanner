@@ -6,6 +6,8 @@ import { MasonryGrid, MasonryItem } from '@/components/shared/masonry-grid';
 import { cn } from '@/lib/utils';
 import { projectStatusLabel, projectStatusOf } from '@/lib/project-status';
 import type { Project, ProjectPriority, ProjectStatus } from '@/types/api';
+
+interface ProjectListCardsProps {
     projects: Project[];
     onEdit: (project: Project) => void;
     onOpen: (projectId: string) => void;

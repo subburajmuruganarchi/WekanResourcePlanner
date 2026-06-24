@@ -12,7 +12,7 @@ import { ProjectDialog } from "./components/project-dialog"
 import { EmployeeListCards } from "./components/employee-list-cards"
 import { ProjectListCards } from "./components/project-list-cards"
 import type { Employee, EmployeeStatus, Project, ProjectPriority, ProjectStatus } from "@/types/api"
-import { projectStatusLabel, projectStatusOf, PROJECT_STATUS_OPTIONS, projectStatusMatches } from "@/lib/project-status"
+import { projectStatusMatches, PROJECT_STATUS_OPTIONS } from "@/lib/project-status"
 
 const EMPLOYEE_STATUS_OPTIONS: { value: EmployeeStatus | "all"; label: string }[] = [
     { value: "all", label: "All statuses" },
