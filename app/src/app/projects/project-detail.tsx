@@ -6,16 +6,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ArrowLeft, Users, Calendar, Clock, DollarSign, Loader2 } from "lucide-react"
 import { useProject } from "@/lib/use-projects"
-import { projectStatusOf } from "@/lib/project-status"
+import { projectStatusLabel, projectStatusOf } from "@/lib/project-status"
 import { useAuth } from "@/lib/auth-context"
+import { normalizeRoleName } from "@/lib/role-utils"
+import { ROLES } from "@/lib/roles"
 import { TimesheetApprovalsTab } from "./components/timesheet-approvals-tab"
 import { StaffingRiskBadge } from "@/components/ai/staffing-risk-badge"
+import { ProjectManagerAssignment } from "@/app/allocation/components/project-manager-assignment"
+import { DeliveryManagerAssignment } from "./components/delivery-manager-assignment"
+import { ProjectStatusAssignment } from "./components/project-status-assignment"
 
 export function ProjectDetail() {
     const navigate = useNavigate()
     const { id } = useParams<{ id: string }>()
-    const { project, loading, error } = useProject(id)
+    const { project, loading, error, refetch } = useProject(id)
     const { user } = useAuth()
+
+    const isAdmin = normalizeRoleName(user?.role) === ROLES.ADMIN
 
     // Check if logged-in user is the PM for this project
     const isPM = !!(user && project && project.managerId === user.id)
@@ -45,6 +52,7 @@ export function ProjectDetail() {
     }
 
     const status = projectStatusOf(project)
+    const statusLabel = projectStatusLabel(project.status)
 
     // Calculate duration in months
     const startDate = new Date(project.startDate)
@@ -69,7 +77,7 @@ export function ProjectDetail() {
                         <div className="flex items-center gap-3 mb-2">
                             <h1 className="text-2xl font-semibold text-gray-900">{project.name}</h1>
                             <Badge variant={status === "Active" ? "success" : status === "OnHold" ? "warning" : "secondary"}>
-                                {status}
+                                {statusLabel}
                             </Badge>
                             <Badge variant={project.priority === "High" ? "warning" : project.priority === "Low" ? "secondary" : "default"}>
                                 {project.priority} Priority
@@ -147,6 +155,31 @@ export function ProjectDetail() {
                                     <div><p className="text-xs text-gray-500">End Date</p><p className="font-medium">{project.endDate ? new Date(project.endDate).toLocaleDateString() : 'Ongoing'}</p></div>
                                 </div>
                             </div>
+
+                            {isAdmin && id && (
+                                <div className="pt-6 border-t border-gray-100">
+                                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Project leadership</h3>
+                                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                        <ProjectManagerAssignment
+                                            projectId={id}
+                                            managerId={project.managerId}
+                                            managerName={project.managerName}
+                                            onUpdated={() => void refetch()}
+                                        />
+                                        <DeliveryManagerAssignment
+                                            projectId={id}
+                                            managerIds={project.deliveryManagerIds}
+                                            managerNames={project.deliveryManagerNames}
+                                            onUpdated={() => void refetch()}
+                                        />
+                                        <ProjectStatusAssignment
+                                            projectId={id}
+                                            status={project.status}
+                                            onUpdated={() => void refetch()}
+                                        />
+                                    </div>
+                                </div>
+                            )}
 
                             {(project.teamMembers?.length ?? 0) > 0 && (
                                 <div className="pt-6 border-t border-gray-100">

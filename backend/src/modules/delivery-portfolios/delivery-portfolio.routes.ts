@@ -15,6 +15,10 @@ router.get('/', requireRole(ROLES.ADMIN), (req, res, next) =>
     deliveryPortfolioController.list(req, res, next)
 );
 
+router.post('/assign-delivery-manager', requireRole(ROLES.ADMIN), (req, res, next) =>
+    deliveryPortfolioController.assignDeliveryManager(req, res, next)
+);
+
 router.get('/:id', requireRole(ROLES.ADMIN), (req, res, next) =>
     deliveryPortfolioController.getById(req, res, next)
 );

@@ -21,8 +21,8 @@ export const MANAGEMENT_VIEW_ROLES: SystemRoleName[] = [
 /** Org-wide read-only executive. */
 export const EXECUTIVE_READ_ROLES: SystemRoleName[] = [ROLES.CEO];
 
-/** Allocation and weekly planner grid edit (Admin: org-wide, DM: portfolio). */
-export const ALLOCATION_EDIT_ROLES: SystemRoleName[] = [ROLES.ADMIN, ROLES.DELIVERY_MANAGER];
+/** Weekly allocation grid edit (DM portfolio scope; Admin is read-only). */
+export const ALLOCATION_EDIT_ROLES: SystemRoleName[] = [ROLES.DELIVERY_MANAGER];
 
 /** Timesheet approval queue. */
 export const APPROVAL_ROLES: SystemRoleName[] = [
@@ -46,5 +46,5 @@ export function isExecutiveReadOnly(role: string | undefined): boolean {
 }
 
 export function canEditAllocations(role: string | undefined): boolean {
-    return role === ROLES.ADMIN || role === ROLES.DELIVERY_MANAGER;
+    return role === ROLES.DELIVERY_MANAGER;
 }

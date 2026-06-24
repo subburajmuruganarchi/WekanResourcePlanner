@@ -13,6 +13,11 @@ import {
     projectStatusListMongoFilter,
     activeProjectStatusMongoFilter,
 } from '../../common/utils/project-status.util';
+import {
+    buildDeliveryManagersByProjectId,
+    getDeliveryManagersForProject,
+    type ProjectDeliveryManagers,
+} from '../../common/utils/project-delivery-managers.util';
 
 export interface ProjectListParams {
     status?: string;
@@ -71,6 +76,8 @@ export interface ProjectResponse {
     }[];
     teamSize: number;
     teamMembers?: ProjectTeamMember[];
+    deliveryManagerIds?: string[];
+    deliveryManagerNames?: string[];
 }
 
 interface PopulatedProject {
@@ -205,12 +212,19 @@ export class ProjectService {
             allocationsByProject.get(projId)!.push(allocation);
         });
 
-        return projects.map(proj => this.mapToResponse(
-            proj,
-            skillReqsByProject.get(proj._id.toString()) || [],
-            roleEffortsByProject.get(proj._id.toString()) || [],
-            allocationsByProject.get(proj._id.toString()) || []
-        ));
+        const dmByProject = await buildDeliveryManagersByProjectId();
+
+        return projects.map((proj) => {
+            const dm = dmByProject.get(proj._id.toString());
+            return this.mapToResponse(
+                proj,
+                skillReqsByProject.get(proj._id.toString()) || [],
+                roleEffortsByProject.get(proj._id.toString()) || [],
+                allocationsByProject.get(proj._id.toString()) || [],
+                undefined,
+                dm
+            );
+        });
     }
 
     async findById(id: string): Promise<ProjectResponse | null> {
@@ -244,7 +258,9 @@ export class ProjectService {
         const employeeIds = allocations.map(a => a.employee_id);
         const employeeSkills = await EmployeeSkill.find({ employee_id: { $in: employeeIds } }).lean();
 
-        return this.mapToResponse(project, skillReqs, roleEfforts, allocations, employeeSkills);
+        const dm = await getDeliveryManagersForProject(id);
+
+        return this.mapToResponse(project, skillReqs, roleEfforts, allocations, employeeSkills, dm);
     }
 
     async create(data: Partial<IProject>): Promise<ProjectResponse> {
@@ -338,7 +354,8 @@ export class ProjectService {
         skillReqs: PopulatedSkillRequirement[],
         roleEfforts: PopulatedRoleEffort[],
         allocations: any[] = [],
-        employeeSkills: any[] = []
+        employeeSkills: any[] = [],
+        deliveryManagers?: ProjectDeliveryManagers
     ): ProjectResponse {
         const owner = proj.project_owner_id as { _id: Types.ObjectId; first_name: string; last_name: string } | undefined;
         let ownerName = 'Unassigned';
@@ -509,6 +526,8 @@ export class ProjectService {
                     allocationPercent: a.allocation_percent ?? 0,
                 };
             }),
+            deliveryManagerIds: deliveryManagers?.deliveryManagerIds ?? [],
+            deliveryManagerNames: deliveryManagers?.deliveryManagerNames ?? [],
         };
     }
 }

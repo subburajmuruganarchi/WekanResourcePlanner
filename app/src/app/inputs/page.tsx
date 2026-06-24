@@ -35,6 +35,25 @@ interface FullSyncSummary {
     allocation: SheetSyncSummary
 }
 
+interface SheetSyncProgress {
+    processed: number
+    skipped: number
+    state: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED"
+}
+
+const SHEET_CARD_ORDER = ["Resource", "Project", "Project_Allocation"] as const
+
+function defaultSheetCards(): SheetSyncStatus[] {
+    return SHEET_CARD_ORDER.map((sheet) => ({
+        sheet,
+        lastSyncAt: null,
+        status: null,
+        rowsProcessed: 0,
+        rowsSkipped: 0,
+        errors: [],
+    }))
+}
+
 function summaryToSyncStatus(summary: FullSyncSummary): SheetSyncStatus[] {
     const map = (sheet: string, s: SheetSyncSummary): SheetSyncStatus => ({
         sheet,
@@ -49,6 +68,22 @@ function summaryToSyncStatus(summary: FullSyncSummary): SheetSyncStatus[] {
         map("Project", summary.project),
         map("Project_Allocation", summary.allocation),
     ]
+}
+
+function sheetCountsToSyncStatus(
+    sheetCounts: Record<string, SheetSyncProgress>
+): SheetSyncStatus[] {
+    return SHEET_CARD_ORDER.map((sheet) => {
+        const entry = sheetCounts[sheet]
+        return {
+            sheet,
+            lastSyncAt: null,
+            status: entry?.state ?? null,
+            rowsProcessed: entry?.processed ?? 0,
+            rowsSkipped: entry?.skipped ?? 0,
+            errors: [],
+        }
+    })
 }
 
 export default function InputsPage() {
@@ -92,6 +127,11 @@ export default function InputsPage() {
                     Project: string
                     Project_Allocation: string
                 }
+                sheetCounts?: {
+                    Resource: SheetSyncProgress
+                    Project: SheetSyncProgress
+                    Project_Allocation: SheetSyncProgress
+                }
                 summary?: FullSyncSummary
                 errors: string[]
                 durationMs?: number
@@ -99,6 +139,11 @@ export default function InputsPage() {
             }>(`/google-sheet-sync/sync/status/${encodeURIComponent(syncBatchId)}`)
 
             setSyncProgress(res.data?.progress ?? null)
+
+            if (res.data?.sheetCounts) {
+                setSyncStatus(sheetCountsToSyncStatus(res.data.sheetCounts))
+            }
+
             const sheets = res.data?.sheets
             if (sheets) {
                 setSyncMessageTone("info")
@@ -157,6 +202,7 @@ export default function InputsPage() {
         setSyncMessage(null)
         setSyncMessageTone("info")
         setSyncProgress(null)
+        setSyncStatus(defaultSheetCards())
         setSyncRunning(true)
         try {
             const res = await api.post<{
@@ -208,6 +254,33 @@ export default function InputsPage() {
 
     return (
         <PageContainer>
+            {syncRunning && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 backdrop-blur-sm"
+                    role="status"
+                    aria-live="polite"
+                    aria-label="Full sync in progress"
+                >
+                    <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl border border-gray-200">
+                        <div className="flex flex-col items-center gap-3 text-center">
+                            <Loader2 className="w-10 h-10 animate-spin text-brand-600" />
+                            <p className="text-lg font-semibold text-gray-900">Full sync in progress</p>
+                            <p className="text-sm text-gray-600">
+                                {syncProgress != null
+                                    ? `${syncProgress}% complete`
+                                    : "Starting sync…"}
+                            </p>
+                            {syncMessage && (
+                                <p className="text-xs text-gray-500 max-w-sm">{syncMessage}</p>
+                            )}
+                            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                                Keep this tab open until sync finishes (large sheets may take 10–20 minutes).
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-2">
                     <div className="p-2 bg-brand-50 rounded-lg">
@@ -263,7 +336,7 @@ export default function InputsPage() {
                     </p>
                 )}
                 <div className="grid gap-3 md:grid-cols-3">
-                    {syncStatus.length === 0 && !statusLoading && (
+                    {syncStatus.length === 0 && !statusLoading && !syncRunning && (
                         <p className="text-sm text-gray-500 col-span-3">No Google Sheet sync runs yet.</p>
                     )}
                     {syncStatus.map((s) => (
@@ -293,7 +366,8 @@ export default function InputsPage() {
                                 </span>
                             </p>
                             <p className="text-xs text-gray-600 mt-1">
-                                Processed: {s.rowsProcessed} · Skipped: {s.rowsSkipped}
+                                Processed: {s.rowsProcessed}
+                                {syncRunning ? " (live)" : ""} · Skipped: {s.rowsSkipped}
                             </p>
                             {s.errors.length > 0 && (
                                 <p className="text-xs text-red-600 mt-1 truncate" title={s.errors.join("; ")}>

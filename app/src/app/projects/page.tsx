@@ -12,7 +12,7 @@ import { ProjectDialog } from "./components/project-dialog"
 import { EmployeeListCards } from "./components/employee-list-cards"
 import { ProjectListCards } from "./components/project-list-cards"
 import type { Employee, EmployeeStatus, Project, ProjectPriority, ProjectStatus } from "@/types/api"
-import { projectStatusMatches } from "@/lib/project-status"
+import { projectStatusLabel, projectStatusOf, PROJECT_STATUS_OPTIONS, projectStatusMatches } from "@/lib/project-status"
 
 const EMPLOYEE_STATUS_OPTIONS: { value: EmployeeStatus | "all"; label: string }[] = [
     { value: "all", label: "All statuses" },
@@ -23,12 +23,9 @@ const EMPLOYEE_STATUS_OPTIONS: { value: EmployeeStatus | "all"; label: string }[
     { value: "Terminated", label: "Terminated" },
 ]
 
-const PROJECT_STATUS_OPTIONS: { value: ProjectStatus | "all"; label: string }[] = [
+const PROJECT_STATUS_OPTIONS_FILTER: { value: ProjectStatus | "all"; label: string }[] = [
     { value: "all", label: "All statuses" },
-    { value: "Planning", label: "Planning" },
-    { value: "Active", label: "Active" },
-    { value: "Completed", label: "Completed" },
-    { value: "OnHold", label: "On hold" },
+    ...PROJECT_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
 ]
 
 const PROJECT_PRIORITY_OPTIONS: { value: ProjectPriority | "all"; label: string }[] = [
@@ -195,7 +192,7 @@ export function Projects() {
                         statusFilter={{
                             value: projectStatusFilter,
                             onChange: (value) => setProjectStatusFilter(value as ProjectStatus | "all"),
-                            options: PROJECT_STATUS_OPTIONS,
+                            options: PROJECT_STATUS_OPTIONS_FILTER,
                         }}
                         priorityFilter={{
                             value: projectPriorityFilter,

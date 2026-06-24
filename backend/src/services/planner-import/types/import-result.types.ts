@@ -104,6 +104,12 @@ export interface FullSyncResponse {
     progress?: number;
 }
 
+export interface SheetSyncProgress {
+    processed: number;
+    skipped: number;
+    state: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+}
+
 export interface FullSyncJobStatusResponse {
     status: 'STARTED' | 'RUNNING' | 'SUCCESS' | 'FAILED';
     syncId: string;
@@ -115,6 +121,11 @@ export interface FullSyncJobStatusResponse {
         Resource: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
         Project: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
         Project_Allocation: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+    };
+    sheetCounts?: {
+        Resource: SheetSyncProgress;
+        Project: SheetSyncProgress;
+        Project_Allocation: SheetSyncProgress;
     };
     summary?: FullSyncSummary;
     errors: string[];

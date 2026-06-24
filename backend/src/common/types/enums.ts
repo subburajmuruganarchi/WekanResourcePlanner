@@ -10,9 +10,12 @@ export enum SkillLevel {
 }
 
 export enum ProjectStatus {
+    PROPOSAL = 'Proposal',
+    /** @deprecated Use PROPOSAL — kept for legacy Mongo values */
     PLANNING = 'Planning',
     ACTIVE = 'Active',
     COMPLETED = 'Completed',
+    PROPOSAL_LOST = 'ProposalLost',
     ON_HOLD = 'OnHold',
 }
 

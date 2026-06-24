@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { deliveryPortfolioService } from './delivery-portfolio.service';
-import { createPortfolioSchema, updatePortfolioSchema } from './delivery-portfolio.schema';
+import { createPortfolioSchema, updatePortfolioSchema, assignDeliveryManagerSchema } from './delivery-portfolio.schema';
 import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
 import { ROLES } from '../../common/constants/roles';
 
@@ -57,6 +57,24 @@ export class DeliveryPortfolioController {
             const data = await deliveryPortfolioService.deactivate(req.params.id);
             res.json({ status: 'success', data });
         } catch (error) {
+            next(error);
+        }
+    }
+
+    /** POST /api/delivery-portfolios/assign-delivery-manager */
+    async assignDeliveryManager(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const parsed = assignDeliveryManagerSchema.parse(req.body);
+            const data = await deliveryPortfolioService.assignDeliveryManagerForProject(
+                parsed.projectId,
+                parsed.managerId
+            );
+            res.json({ status: 'success', data });
+        } catch (error) {
+            if (error instanceof ZodError) {
+                res.status(400).json({ status: 'fail', message: 'Validation Error', errors: error.errors });
+                return;
+            }
             next(error);
         }
     }

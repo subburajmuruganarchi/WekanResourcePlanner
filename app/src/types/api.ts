@@ -35,7 +35,13 @@ export type EmployeeDepartment =
     | 'Operations'
     | 'Administration';
 
-export type ProjectStatus = 'Planning' | 'Active' | 'Completed' | 'OnHold';
+export type ProjectStatus =
+    | 'Proposal'
+    | 'Planning'
+    | 'Active'
+    | 'Completed'
+    | 'ProposalLost'
+    | 'OnHold';
 export type ProjectPriority = 'High' | 'Medium' | 'Low';
 export type SkillLevel = 'Beginner' | 'Intermediate' | 'Expert';
 export type BillingType = 'Billable' | 'Non-billable';
@@ -125,6 +131,8 @@ export interface Project {
     staffingStrategy?: StaffingStrategy;
     teamSize?: number;
     teamMembers?: ProjectTeamMember[];
+    deliveryManagerIds?: string[];
+    deliveryManagerNames?: string[];
     skillRequirements?: SkillRequirement[];
     roleEfforts?: RoleEffort[];
 }

@@ -5,7 +5,8 @@ import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { useProjects } from '@/lib/use-projects';
 import { useAuth } from '@/lib/auth-context';
-import { canEditAllocations, isExecutiveReadOnly } from '@/lib/roles';
+import { canEditAllocations, isExecutiveReadOnly, ROLES } from '@/lib/roles';
+import { normalizeRoleName } from '@/lib/role-utils';
 import { usePortfolioScope } from '@/lib/use-portfolio-scope';
 import { useEmployees } from '@/lib/use-employees';
 import { useWeeklyAllocationGrid } from '@/lib/use-weekly-allocation-grid';
@@ -37,6 +38,8 @@ function employeeRoleLabel(emp: {
 export function Allocation() {
     const { user } = useAuth();
     const isReadOnlyExecutive = isExecutiveReadOnly(user?.role);
+    const isAdminReadOnly =
+        normalizeRoleName(user?.role) === ROLES.ADMIN || isReadOnlyExecutive;
     const canEditGrid = canEditAllocations(user?.role) && !isReadOnlyExecutive;
     const { editableProjectIds } = usePortfolioScope(user?.role);
 
@@ -269,8 +272,10 @@ export function Allocation() {
                 <h1 className="text-2xl font-semibold text-gray-900">Resource Allocation</h1>
                 <p className="text-sm text-gray-600 mt-1">
                     Allocate resources to projects based on skills, availability, and experience.
-                    {isReadOnlyExecutive && (
-                        <span className="ml-2 text-brand-600 font-medium">Executive view — read only</span>
+                    {isAdminReadOnly && (
+                        <span className="ml-2 text-brand-600 font-medium">
+                            {isReadOnlyExecutive ? 'Executive view — read only' : 'Admin view — read only'}
+                        </span>
                     )}
                 </p>
             </div>

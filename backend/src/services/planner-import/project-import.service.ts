@@ -465,9 +465,11 @@ export async function deactivateStaleProjects(
 }
 
 const PROJECT_STATUS_RANK: Record<ProjectStatus, number> = {
-    [ProjectStatus.ACTIVE]: 4,
-    [ProjectStatus.PLANNING]: 3,
-    [ProjectStatus.ON_HOLD]: 2,
+    [ProjectStatus.ACTIVE]: 5,
+    [ProjectStatus.PROPOSAL]: 4,
+    [ProjectStatus.PLANNING]: 4,
+    [ProjectStatus.ON_HOLD]: 3,
+    [ProjectStatus.PROPOSAL_LOST]: 2,
     [ProjectStatus.COMPLETED]: 1,
 };
 

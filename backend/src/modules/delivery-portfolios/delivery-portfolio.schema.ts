@@ -9,5 +9,11 @@ export const createPortfolioSchema = z.object({
 
 export const updatePortfolioSchema = createPortfolioSchema.partial();
 
+export const assignDeliveryManagerSchema = z.object({
+    projectId: z.string().min(1),
+    managerId: z.string().min(1),
+});
+
 export type CreatePortfolioInput = z.infer<typeof createPortfolioSchema>;
 export type UpdatePortfolioInput = z.infer<typeof updatePortfolioSchema>;
+export type AssignDeliveryManagerInput = z.infer<typeof assignDeliveryManagerSchema>;

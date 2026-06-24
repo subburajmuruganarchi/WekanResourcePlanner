@@ -4,9 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MasonryGrid, MasonryItem } from '@/components/shared/masonry-grid';
 import { cn } from '@/lib/utils';
+import { projectStatusLabel, projectStatusOf } from '@/lib/project-status';
 import type { Project, ProjectPriority, ProjectStatus } from '@/types/api';
-
-interface ProjectListCardsProps {
     projects: Project[];
     onEdit: (project: Project) => void;
     onOpen: (projectId: string) => void;
@@ -16,10 +15,13 @@ function statusStyles(status: ProjectStatus): string {
     switch (status) {
         case 'Active':
             return 'bg-green-50 text-green-700 border-green-200';
+        case 'Proposal':
         case 'Planning':
             return 'bg-blue-50 text-blue-700 border-blue-200';
         case 'Completed':
             return 'bg-gray-50 text-gray-700 border-gray-200';
+        case 'ProposalLost':
+            return 'bg-red-50 text-red-700 border-red-200';
         case 'OnHold':
             return 'bg-amber-50 text-amber-800 border-amber-200';
         default:
@@ -95,8 +97,11 @@ export function ProjectListCards({ projects, onEdit, onOpen }: ProjectListCardsP
                             </div>
 
                             <div className="flex flex-wrap gap-1.5 mt-3">
-                                <Badge variant="outline" className={cn('text-[10px]', statusStyles(project.status))}>
-                                    {project.status}
+                                <Badge
+                                    variant="outline"
+                                    className={cn('text-[10px]', statusStyles(projectStatusOf(project)))}
+                                >
+                                    {projectStatusLabel(project.status)}
                                 </Badge>
                                 {project.type && (
                                     <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-700 border-slate-200">
@@ -114,8 +119,16 @@ export function ProjectListCards({ projects, onEdit, onOpen }: ProjectListCardsP
                                     <span className="font-medium">{project.owner}</span>
                                 </p>
                                 <p>
-                                    <span className="text-gray-400">Manager </span>
-                                    <span className="font-medium">{project.managerName}</span>
+                                    <span className="text-gray-400">Project Manager </span>
+                                    <span className="font-medium">{project.managerName || 'Unassigned'}</span>
+                                </p>
+                                <p>
+                                    <span className="text-gray-400">Delivery Manager </span>
+                                    <span className="font-medium">
+                                        {project.deliveryManagerNames?.length
+                                            ? project.deliveryManagerNames.join(', ')
+                                            : 'Unassigned'}
+                                    </span>
                                 </p>
                                 <p className="tabular-nums">
                                     <span className="text-gray-400">Timeline </span>

@@ -23,9 +23,10 @@ export function isExecutiveReadOnly(role: string | undefined): boolean {
     return normalizeRoleName(role) === ROLES.CEO;
 }
 
+/** Weekly allocation grid edit — Delivery Manager only (Admin is read-only). */
 export function canEditAllocations(role: string | undefined): boolean {
     const r = normalizeRoleName(role);
-    return r === ROLES.ADMIN || r === ROLES.DELIVERY_MANAGER;
+    return r === ROLES.DELIVERY_MANAGER;
 }
 
 export function canSeeManagementDashboard(role: string | undefined): boolean {

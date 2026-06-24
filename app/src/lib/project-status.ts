@@ -1,10 +1,25 @@
 import type { Project, ProjectStatus } from '@/types/api';
 
-const CANONICAL: ProjectStatus[] = ['Planning', 'Active', 'Completed', 'OnHold'];
+const CANONICAL: ProjectStatus[] = [
+    'Proposal',
+    'Planning',
+    'Active',
+    'Completed',
+    'ProposalLost',
+    'OnHold',
+];
+
+const STATUS_LABELS: Record<ProjectStatus, string> = {
+    Proposal: 'Proposal',
+    Planning: 'Proposal',
+    Active: 'Active',
+    Completed: 'Completed',
+    ProposalLost: 'Proposal lost',
+    OnHold: 'On Hold',
+};
 
 /**
  * Normalize sheet/Mongo status strings to canonical API values.
- * Project sheet often uses "active", "Active", "In Progress", "On Hold", etc.
  */
 export function normalizeProjectStatus(raw: string | undefined | null): ProjectStatus {
     const s = String(raw ?? '')
@@ -13,7 +28,7 @@ export function normalizeProjectStatus(raw: string | undefined | null): ProjectS
         .replace(/_/g, ' ')
         .replace(/\s+/g, ' ');
 
-    if (!s) return 'Planning';
+    if (!s) return 'Proposal';
 
     if (
         s === 'active' ||
@@ -30,38 +45,41 @@ export function normalizeProjectStatus(raw: string | undefined | null): ProjectS
         return 'Completed';
     }
 
-    if (
-        s === 'on hold' ||
-        s === 'onhold' ||
-        s === 'hold' ||
-        s === 'proposal lost' ||
-        s === 'lost'
-    ) {
+    if (s === 'proposal lost' || s === 'lost' || s === 'proposallost') {
+        return 'ProposalLost';
+    }
+
+    if (s === 'on hold' || s === 'onhold' || s === 'hold') {
         return 'OnHold';
     }
 
     if (s === 'planning' || s === 'planned' || s === 'proposal') {
-        return 'Planning';
+        return 'Proposal';
     }
 
     const exact = CANONICAL.find((c) => c.toLowerCase() === s.replace(/\s/g, ''));
-    if (exact) return exact;
+    if (exact) return exact === 'Planning' ? 'Proposal' : exact;
 
-    return 'Planning';
+    return 'Proposal';
 }
 
 export function projectStatusOf(project: Pick<Project, 'status'>): ProjectStatus {
     return normalizeProjectStatus(project.status);
 }
 
+export function projectStatusLabel(status: ProjectStatus | string | undefined | null): string {
+    const canonical = normalizeProjectStatus(status);
+    return STATUS_LABELS[canonical] ?? canonical;
+}
+
 export function isActiveProject(project: Pick<Project, 'status'>): boolean {
     return projectStatusOf(project) === 'Active';
 }
 
-/** Active or Planning — used for portfolio / delivery operational views. */
+/** Active or Proposal — used for portfolio / delivery operational views. */
 export function isOperationalProject(project: Pick<Project, 'status'>): boolean {
     const status = projectStatusOf(project);
-    return status === 'Active' || status === 'Planning';
+    return status === 'Active' || status === 'Proposal';
 }
 
 export function projectStatusMatches(
@@ -69,5 +87,18 @@ export function projectStatusMatches(
     filter: ProjectStatus | 'all'
 ): boolean {
     if (filter === 'all') return true;
+    if (filter === 'Proposal') {
+        const status = projectStatusOf(project);
+        return status === 'Proposal';
+    }
     return projectStatusOf(project) === filter;
 }
+
+/** Admin-editable project status options (sheet-aligned). */
+export const PROJECT_STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
+    { value: 'Active', label: 'Active' },
+    { value: 'Completed', label: 'Completed' },
+    { value: 'ProposalLost', label: 'Proposal lost' },
+    { value: 'Proposal', label: 'Proposal' },
+    { value: 'OnHold', label: 'On Hold' },
+];

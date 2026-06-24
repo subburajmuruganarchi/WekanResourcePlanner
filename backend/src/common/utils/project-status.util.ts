@@ -2,10 +2,12 @@ import { ProjectStatus } from '../types/enums';
 
 /** Canonical labels returned by the API. */
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-    [ProjectStatus.PLANNING]: 'Planning',
+    [ProjectStatus.PROPOSAL]: 'Proposal',
+    [ProjectStatus.PLANNING]: 'Proposal',
     [ProjectStatus.ACTIVE]: 'Active',
     [ProjectStatus.COMPLETED]: 'Completed',
-    [ProjectStatus.ON_HOLD]: 'OnHold',
+    [ProjectStatus.PROPOSAL_LOST]: 'Proposal lost',
+    [ProjectStatus.ON_HOLD]: 'On Hold',
 };
 
 /**
@@ -19,7 +21,7 @@ export function normalizeProjectStatus(raw: string | undefined | null): ProjectS
         .replace(/_/g, ' ')
         .replace(/\s+/g, ' ');
 
-    if (!s) return ProjectStatus.PLANNING;
+    if (!s) return ProjectStatus.PROPOSAL;
 
     if (
         s === 'active' ||
@@ -36,36 +38,40 @@ export function normalizeProjectStatus(raw: string | undefined | null): ProjectS
         return ProjectStatus.COMPLETED;
     }
 
-    if (
-        s === 'on hold' ||
-        s === 'onhold' ||
-        s === 'hold' ||
-        s === 'proposal lost' ||
-        s === 'lost'
-    ) {
+    if (s === 'proposal lost' || s === 'lost' || s === 'proposallost') {
+        return ProjectStatus.PROPOSAL_LOST;
+    }
+
+    if (s === 'on hold' || s === 'onhold' || s === 'hold') {
         return ProjectStatus.ON_HOLD;
     }
 
     if (s === 'planning' || s === 'planned' || s === 'proposal') {
-        return ProjectStatus.PLANNING;
+        return ProjectStatus.PROPOSAL;
     }
 
     // Already canonical (case-insensitive)
-    if (s === 'planning') return ProjectStatus.PLANNING;
+    if (s === 'proposal') return ProjectStatus.PROPOSAL;
+    if (s === 'planning') return ProjectStatus.PROPOSAL;
     if (s === 'active') return ProjectStatus.ACTIVE;
     if (s === 'completed') return ProjectStatus.COMPLETED;
+    if (s === 'proposallost' || s === 'proposal lost') return ProjectStatus.PROPOSAL_LOST;
     if (s === 'onhold' || s === 'on hold') return ProjectStatus.ON_HOLD;
 
-    return ProjectStatus.PLANNING;
+    return ProjectStatus.PROPOSAL;
 }
 
 export function isActiveProjectStatus(status: ProjectStatus): boolean {
     return status === ProjectStatus.ACTIVE;
 }
 
-/** Active or Planning — operational / in-flight delivery work. */
+/** Active or Proposal — operational / in-flight delivery work. */
 export function isOperationalProjectStatus(status: ProjectStatus): boolean {
-    return status === ProjectStatus.ACTIVE || status === ProjectStatus.PLANNING;
+    return (
+        status === ProjectStatus.ACTIVE ||
+        status === ProjectStatus.PROPOSAL ||
+        status === ProjectStatus.PLANNING
+    );
 }
 
 /** Mongo filter: projects that count as operational for dashboards and staffing. */
@@ -73,11 +79,12 @@ export function operationalProjectMongoFilter(): Record<string, unknown> {
     return {
         is_active: { $ne: false },
         $or: [
-            { status: { $in: [ProjectStatus.ACTIVE, ProjectStatus.PLANNING] } },
+            { status: { $in: [ProjectStatus.ACTIVE, ProjectStatus.PROPOSAL, ProjectStatus.PLANNING] } },
             { status: { $regex: /^active$/i } },
             { status: { $regex: /^planning$/i } },
+            { status: { $regex: /^proposal$/i } },
             { status: { $regex: /^in[\s-]?progress$/i } },
-            { status: { $regex: /^(ongoing|live|started|planned|proposal)$/i } },
+            { status: { $regex: /^(ongoing|live|started|planned)$/i } },
         ],
     };
 }
@@ -109,13 +116,15 @@ export function projectStatusListMongoFilter(status: ProjectStatus): Record<stri
     switch (status) {
         case ProjectStatus.ACTIVE:
             return activeProjectMongoFilter();
+        case ProjectStatus.PROPOSAL:
         case ProjectStatus.PLANNING:
             return {
                 is_active: { $ne: false },
                 $or: [
-                    { status: ProjectStatus.PLANNING },
+                    { status: { $in: [ProjectStatus.PROPOSAL, ProjectStatus.PLANNING] } },
                     { status: { $regex: /^planning$/i } },
-                    { status: { $regex: /^(planned|proposal)$/i } },
+                    { status: { $regex: /^proposal$/i } },
+                    { status: { $regex: /^planned$/i } },
                 ],
             };
         case ProjectStatus.COMPLETED:
@@ -126,12 +135,20 @@ export function projectStatusListMongoFilter(status: ProjectStatus): Record<stri
                     { status: { $regex: /^(done|closed)$/i } },
                 ],
             };
+        case ProjectStatus.PROPOSAL_LOST:
+            return {
+                $or: [
+                    { status: ProjectStatus.PROPOSAL_LOST },
+                    { status: { $regex: /^proposal[\s-]?lost$/i } },
+                    { status: { $regex: /^lost$/i } },
+                ],
+            };
         case ProjectStatus.ON_HOLD:
             return {
                 $or: [
                     { status: ProjectStatus.ON_HOLD },
                     { status: { $regex: /^on[\s-]?hold$/i } },
-                    { status: { $regex: /^(hold|proposal lost|lost)$/i } },
+                    { status: { $regex: /^hold$/i } },
                 ],
             };
         default:

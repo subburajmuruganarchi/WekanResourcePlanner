@@ -40,7 +40,7 @@ import {
     cascadeBatchSheetFailure,
     type SupportedSheet,
 } from './sync-batch-coordinator';
-import { buildBatchSheetStatus } from './sheet-sync.status';
+import { buildBatchSheetStatus, buildSheetSyncProgress } from './sheet-sync.status';
 
 export type { SupportedSheet };
 
@@ -504,6 +504,30 @@ export const sheetSyncService = {
             ? batch.completedAt.getTime() - batch.startedAt.getTime()
             : Date.now() - batch.startedAt.getTime();
 
+        const runs = await SyncRun.find({ syncBatchId }).lean();
+        const runBySheet = new Map(runs.map((run) => [run.sheet, run]));
+
+        const sheetCounts = {
+            Resource: buildSheetSyncProgress(
+                'Resource',
+                sheets.Resource,
+                runBySheet.get('Resource'),
+                batch.sheets
+            ),
+            Project: buildSheetSyncProgress(
+                'Project',
+                sheets.Project,
+                runBySheet.get('Project'),
+                batch.sheets
+            ),
+            Project_Allocation: buildSheetSyncProgress(
+                'Project_Allocation',
+                sheets.Project_Allocation,
+                runBySheet.get('Project_Allocation'),
+                batch.sheets
+            ),
+        };
+
         return {
             status: derivedStatus,
             syncId: batch.batchId,
@@ -512,6 +536,7 @@ export const sheetSyncService = {
             currentSheet: batch.currentSheet,
             progress: batch.progress,
             sheets,
+            sheetCounts,
             summary: batch.summary,
             errors: batch.failureMessages ?? [],
             syncCompleted: derivedStatus === 'SUCCESS' || derivedStatus === 'FAILED',

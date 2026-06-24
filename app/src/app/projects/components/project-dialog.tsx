@@ -25,6 +25,7 @@ import { useSkills } from "@/lib/use-skills"
 import { useRoles } from "@/lib/use-roles"
 import { Loader2, Plus, Trash2, AlertCircle } from "lucide-react"
 import type { CreateProjectRequest, SkillRequirement, RoleEffort, SkillLevel, ProjectStatus, BillingType, DeliveryModel, Project } from "@/types/api"
+import { PROJECT_STATUS_OPTIONS } from "@/lib/project-status"
 import { normalizeRoleName } from "@/lib/role-utils"
 
 interface ProjectDialogProps {
@@ -298,10 +299,11 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                     >
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="Planning">Planning</SelectItem>
-                                            <SelectItem value="Active">Active</SelectItem>
-                                            <SelectItem value="Completed">Completed</SelectItem>
-                                            <SelectItem value="OnHold">On Hold</SelectItem>
+                                            {PROJECT_STATUS_OPTIONS.map((opt) => (
+                                                <SelectItem key={opt.value} value={opt.value}>
+                                                    {opt.label}
+                                                </SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
