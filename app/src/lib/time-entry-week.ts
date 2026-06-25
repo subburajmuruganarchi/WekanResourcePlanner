@@ -41,7 +41,19 @@ export function isCurrentWeek(weekStart: string): boolean {
 }
 
 export function isFutureWeek(weekStart: string): boolean {
-    return snapToMonday(weekStart) > getCurrentWeekStart();
+    const monday = snapToMonday(weekStart);
+    const mondayUtc = new Date(`${monday}T00:00:00.000Z`);
+    if (Number.isNaN(mondayUtc.getTime())) return false;
+
+    const now = new Date();
+    const currentMonday = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+    );
+    const day = currentMonday.getUTCDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    currentMonday.setUTCDate(currentMonday.getUTCDate() + diff);
+
+    return mondayUtc.getTime() > currentMonday.getTime();
 }
 
 /** Mon–Fri names that have no entry with hours > 0. */

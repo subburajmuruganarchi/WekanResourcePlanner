@@ -74,6 +74,19 @@ function generateTempId() {
     return `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
 
+/** Entries that must be persisted before weekly submit (skip already-submitted rows). */
+function entryNeedsPersistBeforeSubmit(entry: {
+    isDirty: boolean
+    serverEntryId?: string
+    status?: string
+}): boolean {
+    const status = entry.status ?? "Draft"
+    if (status === "Submitted" || status === "PM_Approved") return false
+    if (status === "PM_Rejected") return true
+    if (!entry.serverEntryId) return true
+    return entry.isDirty
+}
+
 export function TimeEntry() {
     const [selectedWeekStart, setSelectedWeekStart] = useState(() => getCurrentWeekStart())
     const weekDates = useMemo(() => getWeekDaysFromMonday(selectedWeekStart), [selectedWeekStart])
@@ -336,7 +349,6 @@ export function TimeEntry() {
         !isTimesheetLocked &&
         !isFutureWeek(selectedWeekStart) &&
         missingWeekdays.length === 0 &&
-        dirtyEntryCount === 0 &&
         totalHours > 0
 
     const kpis = useMemo(() => computeTimeKPIs(weekData, weekTimesheetStatus), [weekData, weekTimesheetStatus])
@@ -889,7 +901,9 @@ export function TimeEntry() {
                 invalidRows.push({ projectCode: entry.projectCode, date: entry.fullDate })
                 continue
             }
-            entriesToSave.push(entry)
+            if (entryNeedsPersistBeforeSubmit(entry)) {
+                entriesToSave.push(entry)
+            }
         }
 
         if (invalidRows.length > 0) {
@@ -916,7 +930,7 @@ export function TimeEntry() {
                 notifyProjectsChanged()
             }
 
-            const weekStart = weekDates[0].fullDate
+            const weekStart = snapToMonday(weekDates[0].fullDate)
             const submitResult = await submitWeeklyTimesheet(selectedEmployee.id, weekStart)
 
             setSubmitSuccess(true)
@@ -1179,7 +1193,7 @@ export function TimeEntry() {
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <p className="text-sm text-slate-600">
                             {dirtyEntryCount > 0
-                                ? `${dirtyEntryCount} unsaved ${dirtyEntryCount === 1 ? "entry" : "entries"} — save draft or submit when complete.`
+                                ? `${dirtyEntryCount} unsaved ${dirtyEntryCount === 1 ? "entry" : "entries"} — submit will save them first.`
                                 : missingWeekdays.length > 0
                                   ? `Complete ${missingWeekdays.join(", ")} before submitting.`
                                   : `${totalHours}h logged — ready to submit.`}

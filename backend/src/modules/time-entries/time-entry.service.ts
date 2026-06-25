@@ -13,7 +13,7 @@ import { WeeklyAllocationEntry } from '../weekly-allocations/weekly-allocation-e
 import { WeeklyCapacityEngine } from '../../services/weekly-capacity/weekly-capacity.engine';
 import { features } from '../../config/features';
 import { weeklyActualsSyncService } from '../../services/weekly-actuals/weekly-actuals-sync.service';
-import { isFutureUtcWeek } from '../../common/utils/week.util';
+import { endOfUtcWeek, isFutureUtcWeek, startOfUtcWeek } from '../../common/utils/week.util';
 import { ROLES } from '../../common/constants/roles';
 import {
     getPortfolioProjectIds,
@@ -103,7 +103,12 @@ export class TimeEntryService {
                 date: entryDate
             }).session(session);
 
-            if (existingEntry && existingEntry.status !== TimeEntryStatus.DRAFT && !userIsAdmin) {
+            const employeeEditableStatuses = [TimeEntryStatus.DRAFT, TimeEntryStatus.PM_REJECTED];
+            if (
+                existingEntry &&
+                !employeeEditableStatuses.includes(existingEntry.status) &&
+                !userIsAdmin
+            ) {
                 if (existingEntry.status === TimeEntryStatus.PM_APPROVED) {
                     throw new Error(
                         'This time entry has been approved by the Project Manager and is now immutable. It cannot be modified.'
@@ -111,12 +116,12 @@ export class TimeEntryService {
                 }
                 throw new Error(
                     `Cannot edit this time entry — it is currently "${existingEntry.status}". ` +
-                    'Only DRAFT entries can be modified.'
+                    'Only draft or rejected entries can be modified.'
                 );
             }
 
-            // Calculate week start date (Monday)
-            const weekStartDate = this.getWeekStartDate(entryDate);
+            // Calculate week start date (Monday UTC, aligned with submit/list queries)
+            const weekStartDate = startOfUtcWeek(entryDate);
 
             const project = await Project.findById(request.projectId).session(session);
             if (!project) throw new Error('Project not found');
@@ -129,8 +134,7 @@ export class TimeEntryService {
             }
 
             // Check weekly hour cap
-            const weekEndDate = new Date(weekStartDate);
-            weekEndDate.setDate(weekEndDate.getDate() + 6);
+            const weekEndDate = endOfUtcWeek(weekStartDate);
 
             const existingWeeklyEntries = await TimeEntry.find({
                 employeeId: new Types.ObjectId(request.employeeId),
@@ -242,13 +246,13 @@ export class TimeEntryService {
         }
     }
 
-    private getWeekStartDate(date: Date): Date {
-        const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-        const day = d.getUTCDay();
-        // Adjust to Monday (day 1). If Sunday (0), go back 6 days
-        const diff = day === 0 ? 6 : day - 1;
-        d.setUTCDate(d.getUTCDate() - diff);
-        return d;
+    /** Build an inclusive UTC week range for queries (tolerates ±1 day drift in stored weekStartDate). */
+    private weekStartQueryRange(weekStart: string): { from: Date; to: Date; monday: Date } {
+        const monday = startOfUtcWeek(new Date(`${weekStart}T00:00:00.000Z`));
+        const from = new Date(monday);
+        from.setUTCDate(from.getUTCDate() - 1);
+        const to = endOfUtcWeek(monday);
+        return { from, to, monday };
     }
 
     /** When logging time on a project without allocation, create allocation + weekly planner row for the week. */
@@ -393,20 +397,11 @@ export class TimeEntryService {
             throw new Error('Invalid employee ID');
         }
 
-        const weekStartDate = new Date(weekStart + 'T00:00:00.000Z');
-        if (isNaN(weekStartDate.getTime())) {
-            throw new Error('Invalid week start date');
-        }
-
-        // Use a date range to handle timezone variations in stored data
-        const dayBefore = new Date(weekStartDate);
-        dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
-        const dayAfter = new Date(weekStartDate);
-        dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+        const { from, to } = this.weekStartQueryRange(weekStart);
 
         const entries = await TimeEntry.find({
             employeeId: new Types.ObjectId(employeeId),
-            weekStartDate: { $gte: dayBefore, $lte: dayAfter }
+            weekStartDate: { $gte: from, $lte: to },
         }).sort({ date: 1 });
 
         return entries.map(e => this.mapToResponse(e));
@@ -608,24 +603,16 @@ export class TimeEntryService {
             throw new Error('Invalid employee ID');
         }
 
-        const weekStartDate = new Date(weekStart + 'T00:00:00.000Z');
-        if (isNaN(weekStartDate.getTime())) {
-            throw new Error('Invalid week start date');
-        }
+        const { from, to, monday: weekStartDate } = this.weekStartQueryRange(weekStart);
 
         if (isFutureUtcWeek(weekStartDate)) {
             throw new Error('Cannot submit timesheets for future weeks.');
         }
 
-        const dayBefore = new Date(weekStartDate);
-        dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
-        const dayAfter = new Date(weekStartDate);
-        dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
-
         // Fetch ALL entries for this employee & week (DRAFT and any already-submitted)
         const allEntries = await TimeEntry.find({
             employeeId: new Types.ObjectId(employeeId),
-            weekStartDate: { $gte: dayBefore, $lte: dayAfter },
+            weekStartDate: { $gte: from, $lte: to },
         });
 
         const draftEntries = allEntries.filter(e => e.status === TimeEntryStatus.DRAFT);
@@ -693,10 +680,10 @@ export class TimeEntryService {
         const result = await TimeEntry.updateMany(
             {
                 employeeId: new Types.ObjectId(employeeId),
-                weekStartDate: { $gte: dayBefore, $lte: dayAfter },
-                status: TimeEntryStatus.DRAFT
+                weekStartDate: { $gte: from, $lte: to },
+                status: TimeEntryStatus.DRAFT,
             },
-            { $set: { status: TimeEntryStatus.SUBMITTED } }
+            { $set: { status: TimeEntryStatus.SUBMITTED } },
         );
 
         // ---- Notifications: Notify Project Managers ----
