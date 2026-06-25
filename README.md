@@ -99,7 +99,12 @@ Imports Excel files from `backend/data/planner/`:
 | Role | Email |
 |------|--------|
 | Admin | `admin@r360.com` |
+| CEO | `ceo@r360.com` |
+| Delivery Manager | `dm@r360.com` |
 | Project Manager | `pm@r360.com` |
+| Employee | `employee@r360.com` |
+
+For a smaller demo dataset with sample timesheets (draft, submitted, approved, rejected), run `npm run seed:dev`.
 
 Admins can also upload planner files via **Inputs** in the sidebar (`/inputs`).
 
@@ -147,22 +152,98 @@ docker compose up --build
 
 MongoDB is **not** included in Compose; point `MONGO_URI` in `backend/.env` to Atlas or a local instance.
 
-## Main features
+## Features
 
-| Area | Routes / API |
-|------|----------------|
-| Dashboard & heatmap | `/dashboard`, `/api/dashboard/*` |
-| Employees & projects | `/projects`, `/api/employees`, `/api/projects` |
-| Resource allocation | `/allocation`, `/api/allocations` |
-| Weekly planner | `/weekly-planner`, `/api/weekly-allocations` |
-| Time entry & PM approvals | `/time-entry`, `/pm-approvals`, `/api/time-entries` |
-| OKRs | `/okrs`, `/api/okrs` |
-| Reports (Excel) | `/reports`, `/api/reports/*` |
-| Admin inputs (Excel upload) | `/inputs`, `/api/planner-import` |
-| Insights & AI (read-only) | `/insights`, `/api/ai/*` |
-| System health | `/system-health`, `/api/system/*` |
+R360 supports five access roles: **Employee**, **Project Manager**, **Delivery Manager**, **CEO**, and **Admin**. Navigation and API access are scoped per role.
 
-**Roles:** Admin, Project Manager, Employee — enforced in API and sidebar.
+### Platform capabilities
+
+| Capability | Description |
+|------------|-------------|
+| **Resource planning** | Project × employee allocation grid with weekly planned hours |
+| **Weekly planner** | Plan vs actual vs delta (approved time) by week |
+| **Time tracking** | Daily time entry by project; weekly submit with Mon–Fri validation |
+| **Timesheet approvals** | PM/DM/Admin approve or reject with reason; employee resubmit flow |
+| **Utilization & dashboard** | Workforce utilization trends, heatmaps, capacity signals |
+| **Delivery risk** | Portfolio and project risk engine with suggested actions |
+| **OKRs** | Personal and org objectives with rollup views |
+| **Reports** | Excel exports for staffing, utilization, and delivery |
+| **Planner import** | Excel upload (Resource, Project, Allocation) + Google Sheet sync |
+| **AI insights** | Read-only explainability over allocations and approvals (no auto-approve) |
+
+### Employee
+
+| Feature | Route |
+|---------|-------|
+| My Workspace — projects, timesheet status, OKR snapshot | `/workspace` |
+| Time Tracking — log hours, save draft, submit week | `/time-entry` |
+| My OKRs | `/okrs` |
+
+Own time entries only. Can edit and resubmit rejected timesheets with PM feedback shown in-app.
+
+### Project Manager
+
+| Feature | Route |
+|---------|-------|
+| Project Dashboard | `/pm` |
+| Timeline & team roster | `/pm/timeline`, `/pm/team` |
+| Resource allocation (view) | `/allocation` |
+| Status reports & project risks | `/pm/status-report`, `/pm/risks` |
+| Time entry & approvals | `/time-entry`, `/pm-approvals` |
+
+Scoped to **projects you manage**. Approve/reject team timesheets; rejection reasons are captured and visible to employees.
+
+### Delivery Manager
+
+| Feature | Route |
+|---------|-------|
+| Delivery Command Center | `/delivery` |
+| Portfolio projects | `/projects` |
+| Resource planning (edit, portfolio scope) | `/allocation` |
+| Capacity forecast | `/delivery/capacity` |
+| Timesheet approvals (portfolio) | `/pm-approvals` |
+| Reports & suggested actions | `/reports`, `/delivery/recommendations` |
+
+Scoped to **projects in assigned delivery portfolios**.
+
+### CEO
+
+| Feature | Route |
+|---------|-------|
+| Executive dashboard | `/executive` |
+| Risk radar | `/executive/risk-radar` |
+| OKR alignment & reports | `/okrs`, `/reports` |
+
+Read-only executive view — no timesheet approval or allocation editing.
+
+### Admin
+
+| Feature | Route |
+|---------|-------|
+| Resource intelligence dashboard | `/dashboard` |
+| Projects, allocation, weekly planner | `/projects`, `/allocation`, `/weekly-planner` |
+| Time tracking & approvals (org-wide) | `/time-entry`, `/pm-approvals` |
+| OKRs, reports, AI insights | `/okrs`, `/reports`, `/insights` |
+| Planner upload, portfolios, users | `/inputs`, `/portfolios`, `/user-control` |
+| System health & settings | `/system-health` |
+
+Full org access including Excel import and delivery portfolio assignment.
+
+### API overview
+
+| Area | Routes |
+|------|--------|
+| Dashboard & metrics | `/api/dashboard/*` |
+| Employees & projects | `/api/employees`, `/api/projects` |
+| Allocations & weekly planner | `/api/allocations`, `/api/weekly-allocations` |
+| Time entries & submit | `/api/time-entries`, `/api/time-entries/submit` |
+| Approve / reject | `/api/time-entries/approve`, `/api/time-entries/reject` |
+| OKRs | `/api/okrs` |
+| Reports (Excel) | `/api/reports/*` |
+| Planner import | `/api/planner-import` |
+| AI (read-only) | `/api/ai/*` |
+
+Persona walkthroughs and screenshots: **[docs/ROLE_FEATURE_GUIDE.md](./docs/ROLE_FEATURE_GUIDE.md)**
 
 ## Scripts
 
@@ -174,6 +255,7 @@ MongoDB is **not** included in Compose; point `MONGO_URI` in `backend/.env` to A
 | `npm run build` | Compile TypeScript → `dist/` |
 | `npm start` | Run production build |
 | `npm test` | Jest unit tests |
+| `npm run seed:dev` | Idempotent dev seed with sample timesheets |
 | `npm run seed:planner` | Import planner Excel sheets |
 | `npm run seed:resource` | Import `Resource.xlsx` only |
 | `npm run migrate:roles` | Normalize `ProjectManager` → `Project Manager` |
