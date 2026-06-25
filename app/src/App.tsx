@@ -17,15 +17,9 @@ import SystemHealthPage from "@/app/system-health/page"
 import WeeklyPlannerPage from "@/app/weekly-planner/page"
 import PortfoliosPage from "@/app/portfolios/page"
 import ExecutiveDashboardPage from "@/app/executive/page"
-import PortfolioHealthPage from "@/app/executive/portfolio-health/page"
-import CustomerDeliveryPage from "@/app/executive/customer-delivery/page"
-import StrategicCapacityPage from "@/app/executive/capacity/page"
 import RiskRadarPage from "@/app/executive/risk-radar/page"
-import ExecutiveBriefPage from "@/app/executive/brief/page"
 import DeliveryCommandPage from "@/app/delivery/page"
-import DeliveryMilestonesPage from "@/app/delivery/milestones/page"
 import DeliveryCapacityPage from "@/app/delivery/capacity/page"
-import RaidBoardPage from "@/app/delivery/raid/page"
 import DeliveryRecommendationsPage from "@/app/delivery/recommendations/page"
 import PmDashboardPage from "@/app/pm-workspace/page"
 import PmTimelinePage from "@/app/pm-workspace/timeline/page"
@@ -123,15 +117,15 @@ function AppRoutes() {
         <Route path="/" element={<HomeRedirect />} />
         <Route path="/workspace" element={<EmployeeWorkspacePage />} />
         <Route path="/executive" element={<ExecutiveDashboardPage />} />
-        <Route path="/executive/portfolio-health" element={<PortfolioHealthPage />} />
-        <Route path="/executive/customer-delivery" element={<CustomerDeliveryPage />} />
-        <Route path="/executive/capacity" element={<StrategicCapacityPage />} />
+        <Route path="/executive/portfolio-health" element={<Navigate to="/executive" replace />} />
+        <Route path="/executive/customer-delivery" element={<Navigate to="/executive" replace />} />
+        <Route path="/executive/capacity" element={<Navigate to="/executive" replace />} />
         <Route path="/executive/risk-radar" element={<RiskRadarPage />} />
-        <Route path="/executive/brief" element={<ExecutiveBriefPage />} />
+        <Route path="/executive/brief" element={<Navigate to="/executive" replace />} />
         <Route path="/delivery" element={<DeliveryCommandPage />} />
-        <Route path="/delivery/milestones" element={<DeliveryMilestonesPage />} />
+        <Route path="/delivery/milestones" element={<Navigate to="/delivery" replace />} />
         <Route path="/delivery/capacity" element={<DeliveryCapacityPage />} />
-        <Route path="/delivery/raid" element={<RaidBoardPage />} />
+        <Route path="/delivery/raid" element={<Navigate to="/delivery" replace />} />
         <Route path="/delivery/recommendations" element={<DeliveryRecommendationsPage />} />
         <Route path="/pm" element={<PmDashboardPage />} />
         <Route path="/pm/timeline" element={<PmTimelinePage />} />

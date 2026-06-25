@@ -36,11 +36,6 @@ export default function ExecutiveDashboardPage() {
                 eyebrow="Executive Command Center"
                 title="Executive Dashboard"
                 description="Organization-wide delivery and workforce intelligence — read-only decision view."
-                action={
-                    <Button variant="outline" onClick={() => navigate('/executive/brief')}>
-                        AI Executive Brief
-                    </Button>
-                }
             />
 
             {loading || !stats ? (
@@ -84,8 +79,8 @@ export default function ExecutiveDashboardPage() {
                 title="Portfolio at a glance"
                 description="Top projects by current delivery risk (allocation + planner)"
                 action={
-                    <Button variant="outline" size="sm" onClick={() => navigate('/executive/portfolio-health')}>
-                        View all
+                    <Button variant="outline" size="sm" onClick={() => navigate('/executive/risk-radar')}>
+                        View risks
                     </Button>
                 }
             >
