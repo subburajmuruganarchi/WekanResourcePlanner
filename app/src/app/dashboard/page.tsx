@@ -37,7 +37,8 @@ import {
 } from '@/lib/dashboard-period';
 import { KPICard, KPIGridSkeleton } from '@/components/dashboard/KPICard';
 import { DashboardCard, DashboardSectionHeader } from '@/components/dashboard/DashboardCard';
-import { UtilizationAnalytics, type UtilizationTrendPoint } from '@/components/dashboard/UtilizationAnalytics';
+import { UtilizationAnalytics } from '@/components/dashboard/UtilizationAnalytics';
+import { buildWorkforceUtilizationTrend } from '@/lib/utilization-trend';
 import {
     ProjectPerformanceGrid,
     type ProjectPerformanceRow,
@@ -169,29 +170,10 @@ export default function Dashboard() {
         return heatmap.employees.filter((e) => e.totalPercent < 20).length;
     }, [heatmap, stats]);
 
-    const utilizationTrend: UtilizationTrendPoint[] = useMemo(() => {
-        const rows = utilizationData?.rows ?? [];
-        const byWeek = new Map<string, { planned: number; actual: number }>();
-        for (const r of rows) {
-            const cur = byWeek.get(r.weekStart) ?? { planned: 0, actual: 0 };
-            cur.planned += r.plannedHours;
-            cur.actual += r.actualHours;
-            byWeek.set(r.weekStart, cur);
-        }
-        const weeks = [...byWeek.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-12);
-        if (weeks.length === 0) {
-            return Array.from({ length: 8 }, (_, i) => ({
-                week: `W${i + 1}`,
-                planned: plannedUtil,
-                actual: actualUtil - 5 + i,
-            }));
-        }
-        return weeks.map(([week, v]) => ({
-            week: week.slice(5),
-            planned: Math.min(100, Math.round((v.planned / Math.max(1, stats?.totalEmployees ?? 1) / 40) * 100)),
-            actual: Math.min(100, Math.round((v.actual / Math.max(1, stats?.totalEmployees ?? 1) / 40) * 100)),
-        }));
-    }, [utilizationData, plannedUtil, actualUtil, stats?.totalEmployees]);
+    const utilizationTrend = useMemo(
+        () => buildWorkforceUtilizationTrend(utilizationData?.rows ?? [], { maxWeeks: 12 }),
+        [utilizationData]
+    );
 
     const allocationDistribution = useMemo(() => {
         const billable = heatmap?.cells.filter((c) => c.percent > 0).length ?? 0;
@@ -204,15 +186,6 @@ export default function Dashboard() {
             { name: 'Leave', value: 2, color: '#cbd5e1' },
         ];
     }, [heatmap, benchCount]);
-
-    const forecastData = useMemo(
-        () =>
-            ['Jul', 'Aug', 'Sep'].map((month, i) => ({
-                month,
-                capacity: Math.min(100, plannedUtil + i * 3 - 2),
-            })),
-        [plannedUtil]
-    );
 
     const riskByProject = useMemo(() => {
         const m = new Map<string, DeliveryRiskItem>();
@@ -419,7 +392,6 @@ export default function Dashboard() {
                     <UtilizationAnalytics
                         trendData={utilizationTrend}
                         distribution={allocationDistribution}
-                        forecastData={forecastData}
                         loading={utilizationLoading}
                     />
 

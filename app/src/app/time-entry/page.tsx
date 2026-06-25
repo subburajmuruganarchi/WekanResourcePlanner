@@ -1080,6 +1080,7 @@ export function TimeEntry() {
                     kpis={kpis}
                     topProject={topProject}
                     missingDays={missingWeekdays.length}
+                    employeeId={selectedEmployeeId}
                     suggestions={suggestions}
                     onApplySuggestion={handleApplySuggestion}
                     insightsDrawerOpen={insightsDrawerOpen}

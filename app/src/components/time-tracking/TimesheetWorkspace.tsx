@@ -12,6 +12,7 @@ interface TimesheetWorkspaceProps {
     allocationByProject?: Map<string, { estimatedHours: number; percentage: number }>;
     isTimesheetLocked: boolean;
     disabled?: boolean;
+    employeeId?: string;
     onAddEntry: (dayIndex: number) => void;
     onEditEntry: (dayIndex: number, tempId: string) => void;
     onDropProject: (dayIndex: number, project: DraggedProjectPayload) => void;
@@ -32,6 +33,7 @@ export function TimesheetWorkspace({
     allocationByProject,
     isTimesheetLocked,
     disabled,
+    employeeId,
     onAddEntry,
     onEditEntry,
     onDropProject,
@@ -72,6 +74,7 @@ export function TimesheetWorkspace({
                     kpis={kpis}
                     topProject={topProject}
                     missingDays={missingDays}
+                    employeeId={employeeId}
                     suggestions={suggestions}
                     onApplySuggestion={onApplySuggestion}
                 />

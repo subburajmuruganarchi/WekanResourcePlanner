@@ -1,30 +1,41 @@
-import { BarChart3, FolderKanban, AlertTriangle } from 'lucide-react';
+import { useEffect } from 'react';
+import { FolderKanban, AlertTriangle, Clock } from 'lucide-react';
+import { useEmployeeWeeklyHours } from '@/lib/use-employee-weekly-hours';
+import { EmployeeUtilizationTrendChart } from './EmployeeUtilizationTrendChart';
 import type { TimeKPIs } from './types';
 
 interface InsightPanelProps {
     kpis: TimeKPIs;
     topProject?: string;
     missingDays: number;
+    employeeId?: string;
 }
 
-export function InsightPanel({ kpis, topProject, missingDays }: InsightPanelProps) {
+export function InsightPanel({ kpis, topProject, missingDays, employeeId }: InsightPanelProps) {
+    const { points: weeklyTrend, loading: trendLoading, refetch } = useEmployeeWeeklyHours(employeeId);
+
+    useEffect(() => {
+        void refetch();
+    }, [kpis.loggedHours, refetch]);
+
     const items = [
         {
-            icon: BarChart3,
-            label: 'Utilization',
-            value: `${kpis.utilizationPercent}%`,
-            accent: kpis.utilizationPercent >= 85 ? 'text-amber-600' : 'text-brand-600',
+            icon: Clock,
+            label: 'This week',
+            value: `${kpis.loggedHours}h`,
+            sub: `${kpis.utilizationPercent}% of ${kpis.weeklyCapacity}h`,
+            accent: kpis.utilizationPercent >= 100 ? 'text-emerald-600' : 'text-brand-600',
         },
         {
             icon: FolderKanban,
-            label: 'Top Project',
+            label: 'Top project',
             value: topProject ?? '—',
             accent: 'text-slate-900',
             truncate: true,
         },
         {
             icon: AlertTriangle,
-            label: 'Missing Entries',
+            label: 'Missing entries',
             value: `${missingDays} day${missingDays === 1 ? '' : 's'}`,
             accent: missingDays > 0 ? 'text-amber-600' : 'text-emerald-600',
         },
@@ -33,9 +44,18 @@ export function InsightPanel({ kpis, topProject, missingDays }: InsightPanelProp
     return (
         <section className="tt-card w-full overflow-hidden">
             <header className="border-b border-slate-100 px-4 py-3">
-                <h2 className="text-sm font-semibold text-slate-900">Time Intelligence</h2>
-                <p className="mt-0.5 text-xs text-slate-500">Weekly productivity insights</p>
+                <h2 className="text-sm font-semibold text-slate-900">Time intelligence</h2>
+                <p className="mt-0.5 text-xs text-slate-500">Your weekly hours and utilization trend</p>
             </header>
+
+            <div className="p-4 border-b border-slate-100">
+                <EmployeeUtilizationTrendChart
+                    points={weeklyTrend}
+                    loading={trendLoading}
+                    capacityHours={kpis.weeklyCapacity}
+                />
+            </div>
+
             <div className="grid gap-3 p-4">
                 {items.map((item) => {
                     const Icon = item.icon;
@@ -56,6 +76,9 @@ export function InsightPanel({ kpis, topProject, missingDays }: InsightPanelProp
                             >
                                 {item.value}
                             </p>
+                            {'sub' in item && item.sub && (
+                                <p className="text-xs text-slate-500 mt-0.5">{item.sub}</p>
+                            )}
                         </div>
                     );
                 })}
