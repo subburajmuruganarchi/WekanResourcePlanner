@@ -134,7 +134,7 @@ function StatusPill({ status }: { status: string }) {
         <span
             className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${styles[status] ?? 'bg-slate-100 text-slate-600'}`}
         >
-            {status === 'PM_Approved' ? 'Approved' : status}
+            {status === 'PM_Rejected' ? 'Rejected' : status === 'PM_Approved' ? 'Approved' : status}
         </span>
     );
 }

@@ -20,6 +20,8 @@ export interface TimeEntryResponse {
     comments?: string;
     weekStartDate: string;
     status: string;
+    rejectionComment?: string;
+    rejectedAt?: string;
     staffingUpdated?: boolean;
 }
 

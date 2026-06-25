@@ -62,6 +62,20 @@ export interface TimeEntryResponse {
 // Weekly hour cap constant (40 hours standard, can be overridden)
 const WEEKLY_HOUR_CAP = 40;
 
+/** Extract Mongo id from a raw or populated ref (lean populate returns `{ _id, ... }`). */
+function toRefId(value: unknown): string {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object' && value !== null && '_id' in value) {
+        const id = (value as { _id: Types.ObjectId })._id;
+        return id?.toString?.() ?? '';
+    }
+    if (typeof value === 'object' && value !== null && 'toString' in value) {
+        return (value as Types.ObjectId).toString();
+    }
+    return '';
+}
+
 export class TimeEntryService {
     async createTimeEntry(request: CreateTimeEntryRequest): Promise<TimeEntryResponse> {
         const session = await startSession();
@@ -193,13 +207,18 @@ export class TimeEntryService {
                 updateData.overrideReason = request.overrideReason || 'Admin Override';
             }
 
+            const updateOp: { $set: typeof updateData; $unset?: Record<string, 1> } = { $set: updateData };
+            if (existingEntry?.status === TimeEntryStatus.PM_REJECTED) {
+                updateOp.$unset = { rejectedBy: 1, rejectedAt: 1, rejectionComment: 1 };
+            }
+
             const timeEntry = await TimeEntry.findOneAndUpdate(
                 {
                     employeeId: new Types.ObjectId(request.employeeId),
                     projectId: new Types.ObjectId(request.projectId),
                     date: entryDate
                 },
-                { $set: updateData },
+                updateOp,
                 { upsert: true, new: true, session }
             );
 
@@ -952,6 +971,91 @@ export class TimeEntryService {
         return { rejected: entries.length };
     }
 
+    private buildApprovalScopeFilter(
+        pmUserId: string,
+        options?: { includeAll?: boolean; portfolioProjectIds?: string[] }
+    ): Record<string, unknown> | null {
+        if (options?.portfolioProjectIds !== undefined) {
+            if (options.portfolioProjectIds.length === 0) {
+                return null;
+            }
+            return {
+                projectId: {
+                    $in: options.portfolioProjectIds.map((id) => new Types.ObjectId(id)),
+                },
+            };
+        }
+        if (options?.includeAll) {
+            return {};
+        }
+        return { projectManagerUserId: new Types.ObjectId(pmUserId) };
+    }
+
+    private mapApprovalEntry(e: {
+        _id: Types.ObjectId;
+        employeeId: unknown;
+        projectId: unknown;
+        timeCodeId: unknown;
+        date?: Date;
+        hours: number;
+        comments?: string;
+        weekStartDate?: Date;
+        status: string;
+        rejectedBy?: Types.ObjectId;
+        rejectedAt?: Date;
+        rejectionComment?: string;
+    }): Record<string, unknown> {
+        const emp = e.employeeId as { _id?: Types.ObjectId; first_name?: string; last_name?: string; email?: string } | null;
+        const tc = e.timeCodeId as { _id?: Types.ObjectId; code?: string; description?: string; isBillable?: boolean } | null;
+        const proj = e.projectId as { project_name?: string; project_code?: string } | null;
+
+        return {
+            id: e._id.toString(),
+            employeeId: toRefId(e.employeeId),
+            employeeName: emp?.first_name ? `${emp.first_name} ${emp.last_name}` : 'Unknown',
+            employeeEmail: emp?.email || '',
+            projectId: toRefId(e.projectId),
+            projectName: proj?.project_name || 'Unknown',
+            projectCode: proj?.project_code || '',
+            timeCodeId: toRefId(e.timeCodeId),
+            timeCode: tc?.code || '',
+            timeCodeDescription: tc?.description || '',
+            isBillable: tc?.isBillable ?? false,
+            date: e.date ? new Date(e.date).toISOString().split('T')[0] : '',
+            hours: e.hours,
+            comments: e.comments || '',
+            weekStartDate: e.weekStartDate ? new Date(e.weekStartDate).toISOString().split('T')[0] : '',
+            status: e.status,
+            rejectedBy: e.rejectedBy?.toString(),
+            rejectedAt: e.rejectedAt ? new Date(e.rejectedAt).toISOString() : undefined,
+            rejectionComment: e.rejectionComment || undefined,
+        };
+    }
+
+    private async queryApprovalEntries(
+        pmUserId: string,
+        status: TimeEntryStatus,
+        options?: { includeAll?: boolean; portfolioProjectIds?: string[] }
+    ): Promise<Record<string, unknown>[]> {
+        if (!options?.includeAll && options?.portfolioProjectIds === undefined && !Types.ObjectId.isValid(pmUserId)) {
+            throw new Error('Invalid PM user ID');
+        }
+
+        const scopeFilter = this.buildApprovalScopeFilter(pmUserId, options);
+        if (scopeFilter === null) {
+            return [];
+        }
+
+        const entries = await TimeEntry.find({ status, ...scopeFilter })
+            .populate('projectId', 'project_name project_code')
+            .populate('employeeId', 'first_name last_name email')
+            .populate('timeCodeId', 'code description isBillable')
+            .sort({ date: 1 })
+            .lean();
+
+        return entries.map((e) => this.mapApprovalEntry(e as Parameters<TimeEntryService['mapApprovalEntry']>[0]));
+    }
+
     /**
      * Get all SUBMITTED entries for projects managed by a specific PM.
      * Returns rich data with employee name, project name, and time code for the dashboard.
@@ -960,52 +1064,17 @@ export class TimeEntryService {
         pmUserId: string,
         options?: { includeAll?: boolean; portfolioProjectIds?: string[] }
     ): Promise<any[]> {
-        if (!options?.includeAll && !Types.ObjectId.isValid(pmUserId)) {
-            throw new Error('Invalid PM user ID');
-        }
+        return this.queryApprovalEntries(pmUserId, TimeEntryStatus.SUBMITTED, options);
+    }
 
-        const filter: Record<string, unknown> = {
-            status: TimeEntryStatus.SUBMITTED,
-        };
-        if (options?.portfolioProjectIds?.length) {
-            filter.projectId = {
-                $in: options.portfolioProjectIds.map((id) => new Types.ObjectId(id)),
-            };
-        } else if (!options?.includeAll) {
-            filter.projectManagerUserId = new Types.ObjectId(pmUserId);
-        }
-
-        const entries = await TimeEntry.find(filter)
-            .populate('projectId', 'project_name project_code')
-            .populate('employeeId', 'first_name last_name email')
-            .populate('timeCodeId', 'code description isBillable')
-            .sort({ date: 1 })
-            .lean();
-
-        return entries.map((e: any) => {
-            const emp = e.employeeId;
-            const tc = e.timeCodeId;
-            const proj = e.projectId;
-
-            return {
-                id: e._id.toString(),
-                employeeId: emp?._id?.toString() || e.employeeId?.toString(),
-                employeeName: emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown',
-                employeeEmail: emp?.email || '',
-                projectId: e.projectId?.toString(),
-                projectName: proj?.project_name || 'Unknown',
-                projectCode: proj?.project_code || '',
-                timeCodeId: tc?._id?.toString() || e.timeCodeId?.toString(),
-                timeCode: tc?.code || '',
-                timeCodeDescription: tc?.description || '',
-                isBillable: tc?.isBillable ?? false,
-                date: e.date ? new Date(e.date).toISOString().split('T')[0] : '',
-                hours: e.hours,
-                comments: e.comments || '',
-                weekStartDate: e.weekStartDate ? new Date(e.weekStartDate).toISOString().split('T')[0] : '',
-                status: e.status,
-            };
-        });
+    /**
+     * Get PM_REJECTED entries awaiting employee correction (approval rejection audit).
+     */
+    async getRejectedApprovalForPM(
+        pmUserId: string,
+        options?: { includeAll?: boolean; portfolioProjectIds?: string[] }
+    ): Promise<any[]> {
+        return this.queryApprovalEntries(pmUserId, TimeEntryStatus.PM_REJECTED, options);
     }
 
     /**
@@ -1054,7 +1123,7 @@ export class TimeEntryService {
                 employeeId: emp?._id?.toString() || e.employeeId?.toString(),
                 employeeName: emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown',
                 employeeEmail: emp?.email || '',
-                projectId: e.projectId?.toString(),
+                projectId: toRefId(e.projectId) || projectId,
                 projectName: project?.project_name || 'Unknown',
                 projectCode: project?.project_code || '',
                 timeCodeId: tc?._id?.toString() || e.timeCodeId?.toString(),

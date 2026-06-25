@@ -13,6 +13,8 @@ export interface DayEntry {
     hours: number
     comments: string
     status?: string
+    rejectionComment?: string
+    rejectedAt?: string
     isDirty?: boolean
     isEditing?: boolean
 }

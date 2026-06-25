@@ -37,6 +37,7 @@ import { TimesheetWorkspace } from "@/components/time-tracking/TimesheetWorkspac
 import { AISuggestionPanel } from "@/components/time-tracking/AISuggestionPanel"
 import { ApprovalTimeline } from "@/components/time-tracking/ApprovalTimeline"
 import { ValidationBanner } from "@/components/time-tracking/ValidationBanner"
+import { RejectionBanner, type RejectionNotice } from "@/components/time-tracking/RejectionBanner"
 import { QuickTimeEntry } from "@/components/time-tracking/QuickTimeEntry"
 import { ManagerOverview } from "@/components/time-tracking/ManagerOverview"
 import {
@@ -198,7 +199,15 @@ export function TimeEntry() {
 
         try {
             const entries = await api.get<{
-                id: string; employeeId: string; projectId: string; date: string; hours: number; comments?: string; status: string
+                id: string
+                employeeId: string
+                projectId: string
+                date: string
+                hours: number
+                comments?: string
+                status: string
+                rejectionComment?: string
+                rejectedAt?: string
             }[]>(`/time-entries?employeeId=${selectedEmployeeId}&week=${weekStart}`)
 
             const projectIdToCode: Record<string, string> = {}
@@ -215,6 +224,8 @@ export function TimeEntry() {
                             hours: e.hours,
                             comments: e.comments || "",
                             status: e.status,
+                            rejectionComment: e.rejectionComment,
+                            rejectedAt: e.rejectedAt,
                             isDirty: false,
                             isEditing: false,
                         }))
@@ -345,6 +356,23 @@ export function TimeEntry() {
         return getMissingWeekdays(weekDates, byDate)
     }, [weekData, weekDates])
 
+    const rejectionNotices = useMemo((): RejectionNotice[] => {
+        const notices: RejectionNotice[] = []
+        for (const day of weekData) {
+            for (const entry of day.entries) {
+                if (entry.status !== "PM_Rejected" || !entry.projectCode || entry.hours <= 0) continue
+                notices.push({
+                    projectCode: entry.projectCode,
+                    date: day.fullDate,
+                    hours: entry.hours,
+                    rejectionComment: entry.rejectionComment,
+                    rejectedAt: entry.rejectedAt,
+                })
+            }
+        }
+        return notices
+    }, [weekData])
+
     const canSubmitWeek =
         !isTimesheetLocked &&
         !isFutureWeek(selectedWeekStart) &&
@@ -418,6 +446,8 @@ export function TimeEntry() {
                         ...entry,
                         serverEntryId: saved.id,
                         status: saved.status,
+                        rejectionComment: saved.rejectionComment,
+                        rejectedAt: saved.rejectedAt,
                         isDirty: false,
                         isEditing: false,
                     }
@@ -1074,6 +1104,10 @@ export function TimeEntry() {
                 </p>
             )}
 
+            {!isTimesheetLocked && !viewingFutureWeek && rejectionNotices.length > 0 && (
+                <RejectionBanner notices={rejectionNotices} />
+            )}
+
             {!isTimesheetLocked && !viewingFutureWeek && missingWeekdays.length > 0 && (
                 <ValidationBanner missingWeekdays={missingWeekdays} remainingHours={kpis.remainingHours} />
             )}
@@ -1117,7 +1151,7 @@ export function TimeEntry() {
                         />
                     )}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <ApprovalTimeline status={weekTimesheetStatus} />
+                        <ApprovalTimeline status={weekTimesheetStatus} rejectionCount={rejectionNotices.length} />
                         <AISuggestionPanel suggestions={suggestions} onApply={handleApplySuggestion} />
                     </div>
                     {allocationEstimates && allocationEstimates.byProject.length > 0 && (

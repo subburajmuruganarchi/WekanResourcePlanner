@@ -20,9 +20,10 @@ function activeStepIndex(status: TimesheetStatus): number {
 interface ApprovalTimelineProps {
     status: TimesheetStatus;
     compact?: boolean;
+    rejectionCount?: number;
 }
 
-export function ApprovalTimeline({ status, compact }: ApprovalTimelineProps) {
+export function ApprovalTimeline({ status, compact, rejectionCount = 0 }: ApprovalTimelineProps) {
     const active = activeStepIndex(status);
     const rejected = status === 'rejected';
 
@@ -55,7 +56,9 @@ export function ApprovalTimeline({ status, compact }: ApprovalTimelineProps) {
                         : status === 'submitted'
                           ? 'Awaiting manager review'
                           : rejected
-                            ? 'Rejected — update and resubmit'
+                            ? rejectionCount > 0
+                                ? `${rejectionCount} rejected — update and resubmit`
+                                : 'Rejected — update and resubmit'
                             : 'Draft — not yet submitted'}
                 </p>
             </div>
@@ -105,7 +108,9 @@ export function ApprovalTimeline({ status, compact }: ApprovalTimelineProps) {
             </div>
             {rejected && (
                 <p className="text-[11px] text-red-600 mt-3 text-center">
-                    Timesheet was rejected — update entries and resubmit.
+                    {rejectionCount > 0
+                        ? `${rejectionCount} ${rejectionCount === 1 ? 'entry' : 'entries'} rejected — review the feedback below, update, and resubmit.`
+                        : 'Timesheet was rejected — update entries and resubmit.'}
                 </p>
             )}
         </div>

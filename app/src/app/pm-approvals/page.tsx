@@ -28,6 +28,7 @@ interface PendingEntry {
     comments: string
     weekStartDate: string
     rejectionComment?: string
+    rejectedAt?: string
     overriddenAt?: string
     overriddenBy?: string
     overrideReason?: string
@@ -104,7 +105,8 @@ function groupEntries(entries: PendingEntry[]): GroupedByProject[] {
         for (const emp of proj.employees) {
             for (const week of emp.weeks) {
                 const statuses = week.entries.map(e => e.status)
-                if (statuses.some((s) => String(s).toUpperCase().includes('REJECT'))) week.weekStatus = 'PARTIAL_REJECTED'
+                if (statuses.every((s) => String(s).toUpperCase().includes('REJECT'))) week.weekStatus = 'REJECTED'
+                else if (statuses.some((s) => String(s).toUpperCase().includes('REJECT'))) week.weekStatus = 'PARTIAL_REJECTED'
                 else if (statuses.every((s) => String(s).toUpperCase().includes('APPROVED'))) week.weekStatus = 'APPROVED'
                 else if (statuses.some((s) => String(s).toUpperCase() === 'SUBMITTED')) week.weekStatus = 'PENDING_APPROVAL'
                 else week.weekStatus = 'DRAFT'
@@ -133,6 +135,7 @@ function formatDate(dateStr: string): string {
 function weekStatusBadge(status: string) {
     switch (status) {
         case 'APPROVED': return <Badge className="bg-green-100 text-green-700 text-xs">Approved</Badge>
+        case 'REJECTED': return <Badge className="bg-red-100 text-red-700 text-xs">Rejected</Badge>
         case 'PARTIAL_REJECTED': return <Badge className="bg-red-100 text-red-700 text-xs">Partial rejection</Badge>
         case 'PENDING_APPROVAL': return <Badge className="bg-amber-100 text-amber-800 text-xs">Pending approval</Badge>
         default: return <Badge variant="outline" className="text-xs">Draft</Badge>
@@ -152,7 +155,9 @@ function SummaryMetric({ label, value, sub }: { label: string; value: string; su
 /* ---------- Component ---------- */
 export function PmApprovalsPage() {
     const { user } = useAuth()
-    const [entries, setEntries] = useState<PendingEntry[]>([])
+    const [approvalTab, setApprovalTab] = useState<'pending' | 'rejected'>('pending')
+    const [pendingEntries, setPendingEntries] = useState<PendingEntry[]>([])
+    const [rejectedEntries, setRejectedEntries] = useState<PendingEntry[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [actionLoading, setActionLoading] = useState<string | null>(null) // tracks which action is in progress
@@ -173,21 +178,29 @@ export function PmApprovalsPage() {
         setLoading(true)
         setError(null)
         try {
-            const data = await api.get<PendingEntry[]>('/time-entries/pending-approval')
-            setEntries(data)
+            const [pending, rejected] = await Promise.all([
+                api.get<PendingEntry[]>('/time-entries/pending-approval'),
+                api.get<PendingEntry[]>('/time-entries/rejected-approval'),
+            ])
+            setPendingEntries(pending)
+            setRejectedEntries(rejected)
             fetchApprovalAnomalies().then(setApprovalInsight)
-            const projIds = new Set(data.map(e => e.projectId))
-            setExpandedProjects(projIds)
-            setExpandedEmployees(new Set(data.map(e => `${e.projectId}::${e.employeeId}`)))
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load pending approvals')
+            setError(err instanceof Error ? err.message : 'Failed to load approvals')
         } finally {
             setLoading(false)
         }
     }, [user?.id])
 
+    useEffect(() => {
+        const active = approvalTab === 'pending' ? pendingEntries : rejectedEntries
+        setExpandedProjects(new Set(active.map((e) => e.projectId)))
+        setExpandedEmployees(new Set(active.map((e) => `${e.projectId}::${e.employeeId}`)))
+    }, [approvalTab, pendingEntries, rejectedEntries])
+
     useEffect(() => { fetchEntries() }, [fetchEntries])
 
+    const entries = approvalTab === 'pending' ? pendingEntries : rejectedEntries
     const grouped = useMemo(() => groupEntries(entries), [entries])
 
     const summaryStats = useMemo(() => {
@@ -302,16 +315,44 @@ export function PmApprovalsPage() {
                         <h1 className="text-2xl font-semibold text-gray-900">Timesheet Approvals</h1>
                     </div>
                     <p className="text-sm text-gray-600 mt-1 max-w-2xl">
-                        {entries.length === 0
-                            ? isAdminUser
-                                ? 'No submitted timesheets are waiting for approval.'
-                                : 'No timesheets pending your approval.'
-                            : isAdminUser
-                              ? 'Review submitted hours across all projects. As admin you can approve any entry.'
-                              : 'Review and approve submitted hours for projects you manage.'}
+                        {approvalTab === 'pending'
+                            ? entries.length === 0
+                                ? isAdminUser
+                                    ? 'No submitted timesheets are waiting for approval.'
+                                    : 'No timesheets pending your approval.'
+                                : isAdminUser
+                                  ? 'Review submitted hours across all projects. As admin you can approve any entry.'
+                                  : 'Review and approve submitted hours for projects you manage.'
+                            : entries.length === 0
+                              ? 'No rejected entries awaiting employee correction.'
+                              : 'Rejected entries stay here until the employee updates and resubmits.'}
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+                        <button
+                            type="button"
+                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                approvalTab === 'pending'
+                                    ? 'bg-brand-600 text-white'
+                                    : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                            onClick={() => setApprovalTab('pending')}
+                        >
+                            Pending ({pendingEntries.length})
+                        </button>
+                        <button
+                            type="button"
+                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                approvalTab === 'rejected'
+                                    ? 'bg-red-600 text-white'
+                                    : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                            onClick={() => setApprovalTab('rejected')}
+                        >
+                            Rejected ({rejectedEntries.length})
+                        </button>
+                    </div>
                     {isAdminUser && (
                         <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                             <input
@@ -340,10 +381,13 @@ export function PmApprovalsPage() {
 
             {entries.length > 0 && (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <SummaryMetric label="Pending entries" value={String(summaryStats.entryCount)} />
+                    <SummaryMetric
+                        label={approvalTab === 'pending' ? 'Pending entries' : 'Rejected entries'}
+                        value={String(summaryStats.entryCount)}
+                    />
                     <SummaryMetric label="Projects" value={String(summaryStats.projectCount)} />
                     <SummaryMetric label="Employees" value={String(summaryStats.employeeCount)} />
-                    <SummaryMetric label="Total hours" value={`${summaryStats.totalHours}h`} sub="Awaiting approval" />
+                    <SummaryMetric label="Total hours" value={`${summaryStats.totalHours}h`} sub={approvalTab === 'pending' ? 'Awaiting approval' : 'Rejected'} />
                 </div>
             )}
 
@@ -368,8 +412,14 @@ export function PmApprovalsPage() {
             {entries.length === 0 && !error && (
                 <Card className="p-12 text-center">
                     <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-700">All caught up!</h3>
-                    <p className="text-sm text-gray-500 mt-1">No timesheets are pending your approval right now.</p>
+                    <h3 className="text-lg font-medium text-gray-700">
+                        {approvalTab === 'pending' ? 'All caught up!' : 'No rejections on record'}
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {approvalTab === 'pending'
+                            ? 'No timesheets are pending your approval right now.'
+                            : 'Rejected entries will appear here with the reason you provided.'}
+                    </p>
                 </Card>
             )}
 
@@ -398,6 +448,7 @@ export function PmApprovalsPage() {
                         <div className="flex items-center gap-2 shrink-0 sm:ml-auto">
                             <Badge variant="outline" className="text-xs">{project.entryCount} entries</Badge>
                             <Badge className="bg-brand-50 text-brand-700 border-brand-200 text-xs">{project.totalHours.toFixed(1)}h</Badge>
+                            {approvalTab === 'pending' && (
                             <Button
                                 size="sm"
                                 className="bg-green-600 hover:bg-green-700 text-white h-8"
@@ -414,6 +465,7 @@ export function PmApprovalsPage() {
                                 )}
                                 Approve all
                             </Button>
+                            )}
                         </div>
                     </div>
 
@@ -462,6 +514,7 @@ export function PmApprovalsPage() {
                                                     </div>
                                                     <div className="flex items-center gap-2 shrink-0">
                                                         <Badge variant="outline" className="text-xs tabular-nums">{week.totalHours.toFixed(1)}h</Badge>
+                                                        {approvalTab === 'pending' && (
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
@@ -476,6 +529,7 @@ export function PmApprovalsPage() {
                                                             )}
                                                             Approve week
                                                         </Button>
+                                                        )}
                                                     </div>
                                                 </div>
 
@@ -487,6 +541,9 @@ export function PmApprovalsPage() {
                                                                 <th className="px-4 py-2.5 font-medium">Hours</th>
                                                                 <th className="px-4 py-2.5 font-medium">Time code</th>
                                                                 <th className="px-4 py-2.5 font-medium">Comments</th>
+                                                                {approvalTab === 'rejected' && (
+                                                                    <th className="px-4 py-2.5 font-medium">Rejection reason</th>
+                                                                )}
                                                                 <th className="px-4 py-2.5 font-medium text-right w-28">Actions</th>
                                                             </tr>
                                                         </thead>
@@ -507,8 +564,20 @@ export function PmApprovalsPage() {
                                                                     <td className="px-4 py-3 text-gray-600 max-w-[220px]">
                                                                         <span className="line-clamp-2">{entry.comments || '—'}</span>
                                                                     </td>
+                                                                    {approvalTab === 'rejected' && (
+                                                                        <td className="px-4 py-3 text-red-700 max-w-[220px]">
+                                                                            <span className="line-clamp-3 text-xs">
+                                                                                {entry.rejectionComment || '—'}
+                                                                            </span>
+                                                                            {entry.rejectedAt && (
+                                                                                <span className="block text-[10px] text-red-500 mt-1">
+                                                                                    {new Date(entry.rejectedAt).toLocaleDateString()}
+                                                                                </span>
+                                                                            )}
+                                                                        </td>
+                                                                    )}
                                                                     <td className="px-4 py-3 text-right relative">
-                                                                        {(entry.status === 'Submitted' || isAdminMode) && (
+                                                                        {approvalTab === 'pending' && (entry.status === 'Submitted' || isAdminMode) && (
                                                                             <div className="inline-flex items-center justify-end gap-1">
                                                                                 <Button
                                                                                     size="icon"

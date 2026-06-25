@@ -370,16 +370,7 @@ export class TimeEntryController {
             const pmUserId = requireAuthEmployeeId(req, res);
             if (!pmUserId) return;
 
-            const includeAll = req.user?.role === 'Admin';
-            let entries;
-            if (req.user?.role === ROLES.DELIVERY_MANAGER) {
-                const portfolioProjectIds = await getPortfolioProjectIds(pmUserId);
-                entries = await timeEntryService.getPendingApprovalForPM(pmUserId, {
-                    portfolioProjectIds,
-                });
-            } else {
-                entries = await timeEntryService.getPendingApprovalForPM(pmUserId, { includeAll });
-            }
+            const entries = await this.loadApprovalQueueEntries(req, pmUserId, 'pending');
 
             res.json({
                 status: 'success',
@@ -392,6 +383,49 @@ export class TimeEntryController {
             }
             next(error);
         }
+    }
+
+    /**
+     * GET /api/time-entries/rejected-approval
+     * Returns PM_REJECTED entries for the approver's scope (rejection audit / follow-up).
+     */
+    async rejectedApproval(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const pmUserId = requireAuthEmployeeId(req, res);
+            if (!pmUserId) return;
+
+            const entries = await this.loadApprovalQueueEntries(req, pmUserId, 'rejected');
+
+            res.json({
+                status: 'success',
+                data: entries,
+            });
+        } catch (error) {
+            if (error instanceof Error) {
+                res.status(400).json({ status: 'error', message: error.message });
+                return;
+            }
+            next(error);
+        }
+    }
+
+    private async loadApprovalQueueEntries(
+        req: Request,
+        pmUserId: string,
+        queue: 'pending' | 'rejected'
+    ) {
+        const includeAll = req.user?.role === 'Admin';
+        if (req.user?.role === ROLES.DELIVERY_MANAGER) {
+            const portfolioProjectIds = await getPortfolioProjectIds(pmUserId);
+            const options = { portfolioProjectIds };
+            return queue === 'pending'
+                ? timeEntryService.getPendingApprovalForPM(pmUserId, options)
+                : timeEntryService.getRejectedApprovalForPM(pmUserId, options);
+        }
+        const options = { includeAll };
+        return queue === 'pending'
+            ? timeEntryService.getPendingApprovalForPM(pmUserId, options)
+            : timeEntryService.getRejectedApprovalForPM(pmUserId, options);
     }
 
     /**

@@ -41,6 +41,9 @@ router.post('/reject', requireRole(...APPROVAL_ROLES), (req, res, next) =>
 router.get('/pending-approval', requireRole(...APPROVAL_ROLES), (req, res, next) =>
     timeEntryController.pendingApproval(req, res, next)
 );
+router.get('/rejected-approval', requireRole(...APPROVAL_ROLES), (req, res, next) =>
+    timeEntryController.rejectedApproval(req, res, next)
+);
 router.get('/by-project/:projectId', requireRole(...APPROVAL_ROLES), (req, res, next) =>
     timeEntryController.byProject(req, res, next)
 );
