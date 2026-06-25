@@ -76,7 +76,7 @@ function generateTempId() {
 
 /** Entries that must be persisted before weekly submit (skip already-submitted rows). */
 function entryNeedsPersistBeforeSubmit(entry: {
-    isDirty: boolean
+    isDirty?: boolean
     serverEntryId?: string
     status?: string
 }): boolean {
@@ -84,7 +84,7 @@ function entryNeedsPersistBeforeSubmit(entry: {
     if (status === "Submitted" || status === "PM_Approved") return false
     if (status === "PM_Rejected") return true
     if (!entry.serverEntryId) return true
-    return entry.isDirty
+    return entry.isDirty === true
 }
 
 export function TimeEntry() {
