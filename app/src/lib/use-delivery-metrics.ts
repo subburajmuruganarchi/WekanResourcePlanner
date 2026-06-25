@@ -13,7 +13,6 @@ import {
     buildPortfolioHealthRows,
     type PortfolioHealthRow,
 } from '@/lib/portfolio-health-rows';
-import { projectCustomerLabel } from '@/lib/project-customer-label';
 import { isDeliveryManager } from '@/lib/roles';
 import { isOperationalProject } from '@/lib/project-status';
 import type { DeliveryRiskItem } from '@/lib/risk-intelligence';
@@ -26,14 +25,6 @@ export interface DeliveryCommandMetrics {
     resourceGaps: number;
     pendingDecisions: number;
     upcomingReleases: number;
-}
-
-export interface ResourceRecommendation {
-    id: string;
-    developer: string;
-    fromProject: string;
-    toProject: string;
-    impact: string;
 }
 
 export function useDeliveryCommandMetrics() {
@@ -92,16 +83,6 @@ export function useDeliveryCommandMetrics() {
         upcomingReleases: Math.min(portfolioProjects.length, 3),
     };
 
-    const recommendations: ResourceRecommendation[] = risks.slice(0, 3).map((r, i) => ({
-        id: String(i),
-        developer: 'Available bench resource',
-        fromProject: projectCustomerLabel(
-            portfolioProjects[i % Math.max(1, portfolioProjects.length)] ?? { name: 'Bench' }
-        ),
-        toProject: r.name,
-        impact: r.recommendations?.[0] ?? 'Update planner hours for the current week',
-    }));
-
     const portfolioRows: PortfolioHealthRow[] = buildPortfolioHealthRows(
         portfolioProjects,
         risks
@@ -112,7 +93,6 @@ export function useDeliveryCommandMetrics() {
         portfolioProjects,
         portfolioRows,
         risks,
-        recommendations,
         loading: loading || projectsLoading,
         refetch: fetchData,
     };

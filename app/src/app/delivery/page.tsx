@@ -16,7 +16,6 @@ import {
     HealthBadge,
 } from '@/components/workspaces/shared';
 import { useDeliveryCommandMetrics } from '@/lib/use-delivery-metrics';
-import { RaidSuggestionPanel } from '@/components/workspaces/ai/RaidSuggestionPanel';
 import { KPIGridSkeleton } from '@/components/dashboard/KPICard';
 
 export default function DeliveryCommandPage() {
@@ -35,8 +34,8 @@ export default function DeliveryCommandPage() {
                 title="Delivery Command Center"
                 description="Portfolio operational cockpit — risks, capacity, and decisions in one place."
                 action={
-                    <Button className="enterprise-gradient-bg text-white border-0" onClick={() => navigate('/delivery/raid')}>
-                        Open RAID Board
+                    <Button className="enterprise-gradient-bg text-white border-0" onClick={() => navigate('/delivery/recommendations')}>
+                        Suggested Actions
                     </Button>
                 }
             />
@@ -96,15 +95,26 @@ export default function DeliveryCommandPage() {
                 </div>
             </WorkspaceSection>
 
-            <WorkspaceSection title="AI RAID suggestions" description="Planner-detected risks — approve to add to your RAID board (RAID remains independent).">
-                <RaidSuggestionPanel />
+            <WorkspaceSection
+                title="Suggested actions"
+                description="Allocation and planner gaps detected in your portfolio — review recommended next steps."
+                action={
+                    <Button variant="outline" size="sm" onClick={() => navigate('/delivery/recommendations')}>
+                        View all
+                    </Button>
+                }
+            >
+                <p className="text-sm text-slate-600 dashboard-card p-4">
+                    Open <span className="font-medium">Suggested Actions</span> for rule-based recommendations from
+                    project allocations and current-week planner hours.
+                </p>
             </WorkspaceSection>
 
             <WorkspaceSection title="Quick actions">
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={() => navigate('/allocation')}>Resource Planning</Button>
                     <Button variant="outline" onClick={() => navigate('/pm-approvals')}>Approvals</Button>
-                    <Button variant="outline" onClick={() => navigate('/delivery/recommendations')}>AI Recommendations</Button>
+                    <Button variant="outline" onClick={() => navigate('/delivery/recommendations')}>Suggested Actions</Button>
                 </div>
             </WorkspaceSection>
         </PageContainer>
