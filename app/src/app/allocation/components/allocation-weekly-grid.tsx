@@ -56,7 +56,10 @@ function formatPlanHours(n: number): string {
     return formatHours(n);
 }
 
-function cellTooltip(cell: WeeklyAllocationCell | undefined): string {
+function cellTooltip(
+    cell: WeeklyAllocationCell | undefined,
+    cellEditField: 'planned' | 'actual' = 'planned'
+): string {
     if (!cell) return 'No allocation for this week';
     const plan = cell.plannedHours;
     const actual = cell.actualHours;
@@ -202,7 +205,7 @@ export function AllocationWeeklyGrid({
                     }
                     return true;
                 },
-                tooltipValueGetter: (p) => cellTooltip(getCell(p.data)),
+                tooltipValueGetter: (p) => cellTooltip(getCell(p.data), cellEditField),
                 cellClassRules: {
                     'wp-cell-dirty': (p: CellClassParams<AllocationGridRow>) => {
                         if (!p.data?.employeeId) return false;
