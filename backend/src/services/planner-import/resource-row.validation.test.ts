@@ -184,7 +184,7 @@ describe('resource-row.validation', () => {
             expect(mapped.skills).toEqual(['NodeJS', 'NestJS', 'MongoDB', 'AWS']);
         });
 
-        it('maps Status column as Availability fallback', () => {
+        it('ignores Status column when Availability is absent', () => {
             const mapped = googleSheetRowToResourceRow({
                 EID: 'E002',
                 Name: 'Jane Doe',
@@ -192,9 +192,20 @@ describe('resource-row.validation', () => {
                 Role: 'SDE II',
                 Status: 'Not Available',
             });
+            expect(mapped.availability).toBe('');
+            expect(isResourceAvailableFromSheet(mapped.availability)).toBe(true);
+            expect(employeeStatusFromSheetAvailability(mapped.availability)).toBe('Active');
+        });
+
+        it('reads Availability column (including typo header)', () => {
+            const mapped = googleSheetRowToResourceRow({
+                EID: 'E003',
+                Name: 'Bob',
+                Email: 'bob@wekancode.com',
+                Availablility: 'Not Available',
+            });
             expect(mapped.availability).toBe('Not Available');
             expect(isResourceAvailableFromSheet(mapped.availability)).toBe(false);
-            expect(employeeStatusFromSheetAvailability(mapped.availability)).toBe('Inactive');
         });
     });
 
@@ -211,6 +222,12 @@ describe('resource-row.validation', () => {
 
         it('defaults empty Availability to active', () => {
             expect(isResourceAvailableFromSheet('')).toBe(true);
+        });
+
+        it('treats any non-Not-Available value as active', () => {
+            expect(isResourceAvailableFromSheet('On Notice Period')).toBe(true);
+            expect(isResourceAvailableFromSheet('Inactive')).toBe(true);
+            expect(isResourceAvailableFromSheet('Available')).toBe(true);
         });
     });
 

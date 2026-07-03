@@ -76,47 +76,23 @@ export function mapProjectStatus(sheetStatus: string): ProjectStatus {
  * Resource sheet Availability column → roster active flag.
  * Expected values: "Available", "Not Available" (also handles common variants / typos).
  */
+/**
+ * Resource sheet Availability column → roster active flag.
+ * Only "Not Available" (any casing/spacing) is inactive; all other values are active.
+ */
 export function isResourceAvailableFromSheet(availability: string | undefined | null): boolean {
-    const raw = String(availability ?? '').trim();
-    // Default to ACTIVE: only an explicit, recognized inactive value marks a resource inactive.
-    if (!raw) {
+    const normalized = String(availability ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/_/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!normalized) {
         return true;
     }
 
-    const normalized = raw.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
-
-    const inactive = new Set([
-        'not available',
-        'unavailable',
-        'inactive',
-        'terminated',
-        'resigned',
-        'exited',
-        'no',
-        'n',
-        'false',
-        '0',
-    ]);
-
-    if (inactive.has(normalized)) {
-        return false;
-    }
-
-    // Only match whole, unambiguous inactive phrases — never a bare "not" substring,
-    // which previously flagged unrelated values (e.g. "On Notice Period", "Notice").
-    if (
-        normalized.includes('not available') ||
-        normalized.includes('unavailable') ||
-        /\binactive\b/.test(normalized) ||
-        /\bterminated\b/.test(normalized) ||
-        /\bresigned\b/.test(normalized)
-    ) {
-        return false;
-    }
-
-    // Everything else (empty, "Available", "Active", "On Probation", "On Notice Period",
-    // unrecognized labels, resource types, etc.) is treated as ACTIVE.
-    return true;
+    return normalized !== 'not available';
 }
 
 /** Employee roster status label derived from Availability column. */
