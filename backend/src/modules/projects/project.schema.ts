@@ -29,6 +29,19 @@ export const CreateProjectSchema = z
         projected_total_hours: z.number().optional(),
         business_goal: z.string().optional(),
         staffing_strategy: z.nativeEnum(StaffingStrategy).optional(),
+        // Resources assigned via the project dialog "Resources" section.
+        // Persisted as project_allocations by the service so they reflect everywhere.
+        resources: z
+            .array(
+                z.object({
+                    employeeId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Employee ID'),
+                    roleId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Role ID').optional(),
+                    allocationPercent: z.number().min(0).max(100).optional(),
+                    startDate: z.string().optional(),
+                    endDate: z.string().optional(),
+                })
+            )
+            .optional(),
     })
     .superRefine((data, ctx) => {
         if (!data.start_date || !data.end_date) return;

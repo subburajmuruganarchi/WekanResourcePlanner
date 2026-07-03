@@ -78,6 +78,7 @@ export function mapProjectStatus(sheetStatus: string): ProjectStatus {
  */
 export function isResourceAvailableFromSheet(availability: string | undefined | null): boolean {
     const raw = String(availability ?? '').trim();
+    // Default to ACTIVE: only an explicit, recognized inactive value marks a resource inactive.
     if (!raw) {
         return true;
     }
@@ -89,6 +90,8 @@ export function isResourceAvailableFromSheet(availability: string | undefined | 
         'unavailable',
         'inactive',
         'terminated',
+        'resigned',
+        'exited',
         'no',
         'n',
         'false',
@@ -99,35 +102,20 @@ export function isResourceAvailableFromSheet(availability: string | undefined | 
         return false;
     }
 
+    // Only match whole, unambiguous inactive phrases — never a bare "not" substring,
+    // which previously flagged unrelated values (e.g. "On Notice Period", "Notice").
     if (
-        normalized.includes('not avail') ||
-        normalized.includes('unavail') ||
+        normalized.includes('not available') ||
+        normalized.includes('unavailable') ||
         /\binactive\b/.test(normalized) ||
-        /\bterminated\b/.test(normalized)
+        /\bterminated\b/.test(normalized) ||
+        /\bresigned\b/.test(normalized)
     ) {
         return false;
     }
 
-    const active = new Set([
-        'available',
-        'active',
-        'yes',
-        'y',
-        'true',
-        '1',
-        'on probation',
-        'on notice period',
-    ]);
-
-    if (active.has(normalized)) {
-        return true;
-    }
-
-    // Legacy: "Not Available" and similar
-    if (normalized.includes('not')) {
-        return false;
-    }
-
+    // Everything else (empty, "Available", "Active", "On Probation", "On Notice Period",
+    // unrecognized labels, resource types, etc.) is treated as ACTIVE.
     return true;
 }
 

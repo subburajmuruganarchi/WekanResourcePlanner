@@ -306,12 +306,80 @@ export class ProjectService {
         const project = new Project(data);
         await project.save();
 
-        const populated = await Project.findById(project._id)
-            .populate('project_owner_id', 'first_name last_name')
-            .populate('project_manager_id', 'first_name last_name')
-            .lean() as unknown as PopulatedProject;
+        // Assign selected resources as real project allocations so they reflect in the
+        // resource grid, project team, and reporting immediately.
+        await this.syncProjectResources(
+            project._id.toString(),
+            (data as any).resources,
+            project.start_date,
+            project.end_date
+        );
 
-        return this.mapToResponse(populated, [], []);
+        return this.findById(project._id.toString()) as Promise<ProjectResponse>;
+    }
+
+    /**
+     * Upsert the project team from the "Resources" section of the project dialog.
+     * Each resource becomes an active project_allocation (matched on project+employee),
+     * which is what the resource planner / weekly grid and project team read from.
+     * Passing `undefined` leaves existing allocations untouched (partial updates).
+     */
+    private async syncProjectResources(
+        projectId: string,
+        resources: Array<{
+            employeeId?: string;
+            roleId?: string;
+            allocationPercent?: number;
+            startDate?: string | Date;
+            endDate?: string | Date;
+        }> | undefined,
+        projectStart?: Date,
+        projectEnd?: Date
+    ): Promise<void> {
+        if (!Array.isArray(resources)) {
+            return;
+        }
+
+        const valid = resources.filter(
+            (r) => r.employeeId && Types.ObjectId.isValid(r.employeeId) && r.roleId && Types.ObjectId.isValid(r.roleId)
+        );
+
+        const keepEmployeeIds = valid.map((r) => new Types.ObjectId(r.employeeId as string));
+
+        // Soft-remove allocations for employees no longer in the resource list.
+        await ProjectAllocation.updateMany(
+            { project_id: projectId, employee_id: { $nin: keepEmployeeIds }, is_active: true },
+            { $set: { is_active: false } }
+        );
+
+        const fallbackStart = projectStart ?? new Date();
+        const fallbackEnd =
+            projectEnd ??
+            (() => {
+                const end = new Date(fallbackStart);
+                end.setFullYear(end.getFullYear() + 1);
+                return end;
+            })();
+
+        for (const r of valid) {
+            const start = r.startDate ? new Date(r.startDate) : fallbackStart;
+            const end = r.endDate ? new Date(r.endDate) : fallbackEnd;
+            const percent = typeof r.allocationPercent === 'number' && r.allocationPercent > 0 ? r.allocationPercent : 100;
+
+            await ProjectAllocation.updateOne(
+                { project_id: projectId, employee_id: r.employeeId },
+                {
+                    $set: {
+                        role_id: r.roleId,
+                        start_date: start,
+                        end_date: end,
+                        allocation_percent: percent,
+                        is_active: true,
+                    },
+                },
+                { upsert: true }
+            );
+        }
     }
 
     async update(id: string, data: any): Promise<ProjectResponse> {
@@ -374,6 +442,14 @@ export class ProjectService {
                 await ProjectRoleEffort.insertMany(roleInserts);
             }
         }
+
+        // Sync the assigned resources (project team) into project_allocations.
+        await this.syncProjectResources(
+            id,
+            (data as any).resources,
+            project.start_date,
+            project.end_date
+        );
 
         return this.findById(id) as Promise<ProjectResponse>;
     }

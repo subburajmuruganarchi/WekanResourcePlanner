@@ -194,6 +194,15 @@ export interface CreateProjectRequest {
     staffingStrategy?: StaffingStrategy;
     skillRequirements?: SkillRequirement[];
     roleEfforts?: RoleEffort[];
+    resources?: ProjectResourceAssignment[];
+}
+
+export interface ProjectResourceAssignment {
+    employeeId: string;
+    roleId?: string;
+    allocationPercent?: number;
+    startDate?: string;
+    endDate?: string;
 }
 
 export interface CreateEmployeeRequest {

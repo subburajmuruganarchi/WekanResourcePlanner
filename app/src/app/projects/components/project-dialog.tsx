@@ -21,6 +21,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useProjects } from "@/lib/use-projects"
 import { useEmployees } from "@/lib/use-employees"
+import { useRoles } from "@/lib/use-roles"
 import { Loader2, Plus, Trash2, AlertCircle } from "lucide-react"
 import type { CreateProjectRequest, RoleEffort, ProjectStatus, BillingType, Project } from "@/types/api"
 import { PROJECT_STATUS_OPTIONS } from "@/lib/project-status"
@@ -40,6 +41,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
     const [loading, setLoading] = useState(false)
     const { createProject, updateProject } = useProjects()
     const { employees } = useEmployees()
+    const { roles } = useRoles()
 
     const projectManagerOptions = useMemo(
         () =>
@@ -64,6 +66,20 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
 
     useEffect(() => {
         if (project && open) {
+            // Prefill the Resources section from the project's actual team (project_allocations),
+            // falling back to role efforts so previously-added resources reflect on edit.
+            const teamRoleEfforts: RoleEffort[] = (project.teamMembers || []).map((m) => {
+                const emp = (employees || []).find((e) => e.id === m.employeeId)
+                return {
+                    employeeId: m.employeeId,
+                    roleId: emp?.jobRoleId || '',
+                    roleName: m.roleName,
+                    originalHeadcount: 1,
+                    startDate: m.startDate ? new Date(m.startDate).toISOString().split('T')[0] : '',
+                    endDate: m.endDate ? new Date(m.endDate).toISOString().split('T')[0] : '',
+                    hoursPerDay: 8,
+                }
+            })
             setFormData({
                 name: project.name,
                 code: project.code,
@@ -76,7 +92,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                 priority: project.priority,
                 billingType: project.billingType as BillingType,
                 skillRequirements: project.skillRequirements || [],
-                roleEfforts: project.roleEfforts || []
+                roleEfforts: teamRoleEfforts.length > 0 ? teamRoleEfforts : (project.roleEfforts || [])
             })
         } else if (!project && open) {
             // Reset for create mode
@@ -159,10 +175,27 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                 })
                 .filter(Boolean);
 
+            // Build the real resource assignments (project_allocations) from the selected
+            // employees so they reflect in the resource grid and project team.
+            const resources = (formData.roleEfforts || [])
+                .filter((effort) => !!effort.employeeId)
+                .map((effort) => {
+                    const emp = (employees || []).find((e) => e.id === effort.employeeId);
+                    const roleId = effort.roleId || emp?.jobRoleId || '';
+                    return {
+                        employeeId: effort.employeeId as string,
+                        roleId: roleId || undefined,
+                        startDate: effort.startDate || formData.startDate || undefined,
+                        endDate: effort.endDate || formData.endDate || undefined,
+                    };
+                })
+                .filter((r) => !!r.roleId);
+
             const payload = {
                 ...formData,
                 skillRequirements: [],
                 roleEfforts: mappedRoleEfforts,
+                resources,
                 managerIds: [
                     formData.managerId,
                     ...(formData.managerIds ?? []),
@@ -384,15 +417,19 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                                 </SelectContent>
                                             </Select>
                                         </div>
-                                        <div className="col-span-2 space-y-1">
-                                            <Label className="text-xs">Count</Label>
-                                            <Input
-                                                type="number"
-                                                className="h-8"
-                                                min={1}
-                                                value={effort.originalHeadcount}
-                                                onChange={e => updateRoleEffort(index, 'originalHeadcount', parseInt(e.target.value))}
-                                            />
+                                        <div className="col-span-3 space-y-1">
+                                            <Label className="text-xs">Role *</Label>
+                                            <Select
+                                                value={effort.roleId || ''}
+                                                onValueChange={v => updateRoleEffort(index, 'roleId', v)}
+                                            >
+                                                <SelectTrigger className="h-8"><SelectValue placeholder="Select role" /></SelectTrigger>
+                                                <SelectContent>
+                                                    {(roles || []).map(r => (
+                                                        <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
                                         <div className="col-span-2 space-y-1">
                                             <Label className="text-xs">Start Date</Label>
@@ -416,16 +453,6 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                                 onChange={e => updateRoleEffort(index, 'endDate', e.target.value)}
                                             />
                                         </div>
-                                        <div className="col-span-2 space-y-1">
-                                            <Label className="text-xs">Hours/Day</Label>
-                                            <Input
-                                                type="number"
-                                                className="h-8"
-                                                min={1} max={24}
-                                                value={effort.hoursPerDay}
-                                                onChange={e => updateRoleEffort(index, 'hoursPerDay', parseFloat(e.target.value))}
-                                            />
-                                        </div>
                                         <div className="col-span-1 flex justify-end pb-1">
                                             <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => removeRoleEffort(index)}>
                                                 <Trash2 className="w-3 h-3" />
@@ -435,7 +462,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                 ))}
                                 {formData.roleEfforts?.length === 0 && (
                                     <div className="text-center py-8 text-gray-500 text-sm border-2 border-dashed rounded-lg">
-                                        No role efforts defined.
+                                        No resources assigned yet. Use “Add resource” to staff this project.
                                     </div>
                                 )}
                             </div>
