@@ -65,6 +65,7 @@ export interface SkillRequirement {
 
 export interface RoleEffort {
     roleId: string;
+    employeeId?: string;
     roleName?: string;
     originalHeadcount: number;
     remainingHeadcount?: number;
@@ -179,11 +180,11 @@ export interface TimeCode {
 
 export interface CreateProjectRequest {
     name: string;
-    code: string;
+    code?: string;
     ownerId: string;
     managerId: string;
     managerIds?: string[];
-    startDate: string;
+    startDate?: string;
     endDate?: string;
     status: ProjectStatus;
     priority: ProjectPriority;
@@ -191,8 +192,8 @@ export interface CreateProjectRequest {
     deliveryModel?: string;
     businessGoal?: string;
     staffingStrategy?: StaffingStrategy;
-    skillRequirements: SkillRequirement[];
-    roleEfforts: RoleEffort[];
+    skillRequirements?: SkillRequirement[];
+    roleEfforts?: RoleEffort[];
 }
 
 export interface CreateEmployeeRequest {

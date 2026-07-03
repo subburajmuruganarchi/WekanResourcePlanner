@@ -14,7 +14,6 @@ import ReportsPage from "@/app/reports/page"
 import UserControlPage from "@/app/user-control/page"
 import InputsPage from "@/app/inputs/page"
 import SystemHealthPage from "@/app/system-health/page"
-import WeeklyPlannerPage from "@/app/weekly-planner/page"
 import PortfoliosPage from "@/app/portfolios/page"
 import ExecutiveDashboardPage from "@/app/executive/page"
 import RiskRadarPage from "@/app/executive/risk-radar/page"
@@ -139,7 +138,7 @@ function AppRoutes() {
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/allocation" element={<Allocation />} />
-        <Route path="/weekly-planner" element={<WeeklyPlannerPage />} />
+        <Route path="/weekly-planner" element={<Navigate to="/allocation" replace />} />
         <Route path="/time-entry" element={<TimeEntry />} />
         <Route path="/pm-approvals" element={<PmApprovalsPage />} />
         <Route path="/skills" element={<Navigate to="/projects" replace />} />

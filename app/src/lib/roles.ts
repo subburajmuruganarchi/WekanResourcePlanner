@@ -24,14 +24,29 @@ export function isExecutiveReadOnly(role: string | undefined): boolean {
     return normalizeRoleName(role) === ROLES.CEO;
 }
 
-/** Weekly allocation grid edit — legacy: DM only. MVP: PM only (project scope on page). */
-export function canEditAllocations(role: string | undefined): boolean {
+/** Weekly planned hours — PM (scoped) and DM (any). Admin/CEO read-only. */
+export function canEditPlannedAllocations(role: string | undefined): boolean {
     const r = normalizeRoleName(role);
     const { mvpMode } = getMvpFeatures();
     if (mvpMode) {
-        return r === ROLES.PROJECT_MANAGER;
+        return r === ROLES.PROJECT_MANAGER || r === ROLES.DELIVERY_MANAGER;
     }
     return r === ROLES.DELIVERY_MANAGER;
+}
+
+/** Actual hours — PM (scoped) and DM (any). Admin/CEO cannot edit. */
+export function canEditActualAllocations(role: string | undefined): boolean {
+    const r = normalizeRoleName(role);
+    const { mvpMode } = getMvpFeatures();
+    if (mvpMode) {
+        return r === ROLES.PROJECT_MANAGER || r === ROLES.DELIVERY_MANAGER;
+    }
+    return r === ROLES.DELIVERY_MANAGER;
+}
+
+/** @deprecated use canEditPlannedAllocations */
+export function canEditAllocations(role: string | undefined): boolean {
+    return canEditPlannedAllocations(role);
 }
 
 /** MVP: assign employees to projects — PM (scoped) + DM + Admin. */
@@ -60,6 +75,10 @@ export function canManageOrgEntities(role: string | undefined): boolean {
     );
 }
 
+export function isAllocationViewerReadOnly(role: string | undefined): boolean {
+    const r = normalizeRoleName(role);
+    return r === ROLES.ADMIN || r === ROLES.CEO;
+}
 export function canViewResourceAllocation(role: string | undefined): boolean {
     const { mvpMode } = getMvpFeatures();
     if (!mvpMode) return canSeeManagementDashboard(role);

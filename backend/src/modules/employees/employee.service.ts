@@ -212,6 +212,13 @@ export class EmployeeService {
 
     async create(data: Partial<IEmployee>): Promise<EmployeeResponse> {
         // Verify Role existence if provided
+        if (!data.role_id) {
+            const employeeRole = await Role.findOne({ role_name: 'Employee' }).select('_id').lean();
+            if (employeeRole?._id) {
+                data.role_id = employeeRole._id;
+            }
+        }
+
         if (data.role_id) {
             const roleExists = await Role.exists({ _id: data.role_id });
             if (!roleExists) {

@@ -83,9 +83,9 @@ export function Projects() {
     const [selectedEmployee, setSelectedEmployee] = useState<any | undefined>(undefined)
     const [isEmployeeDialogOpen, setIsEmployeeDialogOpen] = useState(false)
     const [employeeSearch, setEmployeeSearch] = useState("")
-    const [employeeStatusFilter, setEmployeeStatusFilter] = useState<EmployeeStatus | "all">("all")
+    const [employeeStatusFilter, setEmployeeStatusFilter] = useState<EmployeeStatus | "all">("Active")
     const [projectSearch, setProjectSearch] = useState("")
-    const [projectStatusFilter, setProjectStatusFilter] = useState<ProjectStatus | "all">("all")
+    const [projectStatusFilter, setProjectStatusFilter] = useState<ProjectStatus | "all">("Active")
     const [projectPriorityFilter, setProjectPriorityFilter] = useState<ProjectPriority | "all">("all")
 
     const filteredEmployees = useMemo(() => {

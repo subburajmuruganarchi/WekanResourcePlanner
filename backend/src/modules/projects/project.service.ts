@@ -21,6 +21,8 @@ import {
 
 export interface ProjectListParams {
     status?: string;
+    /** When true, skip active-only default filter. */
+    allStatuses?: boolean;
     managerId?: string;
     ownerId?: string;
     /** Employee time entry — all active-status projects (ignores is_active soft-delete flag). */
@@ -137,8 +139,12 @@ export class ProjectService {
 
         if (params.forTimeEntry) {
             clauses.push(activeProjectStatusMongoFilter());
+        } else if (params.allStatuses || params.status === 'all') {
+            // no status filter
         } else if (params.status) {
             clauses.push(projectStatusListMongoFilter(normalizeProjectStatus(params.status)));
+        } else {
+            clauses.push(activeProjectStatusMongoFilter());
         }
 
         if (params.managerId || params.ownerId) {
@@ -281,6 +287,21 @@ export class ProjectService {
         }
 
         this.syncProjectManagers(data);
+
+        if (!data.project_code) {
+            const suffix = Date.now().toString(36).toUpperCase();
+            data.project_code = `PRJ-${suffix}`;
+        }
+
+        const now = new Date();
+        if (!data.start_date) {
+            data.start_date = now;
+        }
+        if (!data.end_date) {
+            const end = new Date(now);
+            end.setFullYear(end.getFullYear() + 1);
+            data.end_date = end;
+        }
 
         const project = new Project(data);
         await project.save();

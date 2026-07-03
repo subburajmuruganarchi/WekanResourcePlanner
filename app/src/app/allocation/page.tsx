@@ -5,7 +5,7 @@ import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { useProjects } from '@/lib/use-projects';
 import { useAuth } from '@/lib/auth-context';
-import { canEditAllocations, isExecutiveReadOnly, ROLES, canAssignProjectStaff } from '@/lib/roles';
+import { canEditPlannedAllocations, canEditActualAllocations, canAssignProjectStaff, isAllocationViewerReadOnly, ROLES } from '@/lib/roles';
 import { getMvpFeatures } from '@/lib/mvp-config';
 import { normalizeRoleName } from '@/lib/role-utils';
 import { usePortfolioScope } from '@/lib/use-portfolio-scope';
@@ -24,9 +24,25 @@ import { AllocationGridLegend } from './components/allocation-grid-legend';
 import { AllocationDraftRow } from './components/allocation-draft-row';
 import { buildPlanningWeekRange, filterWeeksFromCurrent } from '@/lib/planning-week-utils';
 import { projectTypeLabel } from '@/lib/project-type-label';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { WeeklyPlannerFilters } from '@/app/weekly-planner/components/weekly-planner-filters';
+import { WeeklyPlannerGrid } from '@/app/weekly-planner/components/weekly-planner-grid';
+import { CapacitySummaryPanel } from '@/app/weekly-planner/components/capacity-summary-panel';
+import { buildCapacitySummariesFromRows } from '@/lib/weekly-grid-pivot';
+import { startOfWeek, addWeeks, format as formatDate } from 'date-fns';
 import type { WeeklyGridFilters } from '@/types/weekly-allocation';
 
 const BENCH_PROJECT_CODE = 'BENCH';
+
+function defaultPlannerFilters(): WeeklyGridFilters {
+    const from = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const to = addWeeks(from, 11);
+    return {
+        weekStartFrom: formatDate(from, 'yyyy-MM-dd'),
+        weekStartTo: formatDate(to, 'yyyy-MM-dd'),
+        utilization: 'all',
+    };
+}
 
 function employeeRoleLabel(emp: {
     jobRole?: string;
@@ -38,17 +54,18 @@ function employeeRoleLabel(emp: {
 
 export function Allocation() {
     const { user } = useAuth();
-    const isReadOnlyExecutive = isExecutiveReadOnly(user?.role);
-    const isAdminReadOnly =
-        normalizeRoleName(user?.role) === ROLES.ADMIN || isReadOnlyExecutive;
-    const canEditGrid = canEditAllocations(user?.role) && !isReadOnlyExecutive;
-    const canAssignStaff = canAssignProjectStaff(user?.role) && !isReadOnlyExecutive;
+    const isViewerReadOnly = isAllocationViewerReadOnly(user?.role);
+    const isAdmin = normalizeRoleName(user?.role) === ROLES.ADMIN;
+    const canEditPlanned = canEditPlannedAllocations(user?.role);
+    const canEditActual = canEditActualAllocations(user?.role);
+    const canAssignStaff = canAssignProjectStaff(user?.role) && !isViewerReadOnly;
     const mvpMode = getMvpFeatures().mvpMode;
     const { editableProjectIds: dmPortfolioIds } = usePortfolioScope(user?.role);
 
     const { projects, loading: projLoading } = useProjects();
     const { employees } = useEmployees();
     const isPM = normalizeRoleName(user?.role) === ROLES.PROJECT_MANAGER;
+    const isDM = normalizeRoleName(user?.role) === ROLES.DELIVERY_MANAGER;
     const managedProjectIds = useMemo(() => {
         if (!user?.id || !isPM) return undefined;
         return new Set(
@@ -63,12 +80,17 @@ export function Allocation() {
     }, [projects, user?.id, isPM]);
 
     const editableProjectIds = useMemo(() => {
+        if (mvpMode && isDM) return undefined;
         if (mvpMode && isPM && managedProjectIds) return managedProjectIds;
         if (!mvpMode && dmPortfolioIds) return dmPortfolioIds;
         return undefined;
-    }, [mvpMode, isPM, managedProjectIds, dmPortfolioIds]);
+    }, [mvpMode, isDM, isPM, managedProjectIds, dmPortfolioIds]);
 
+    const [screenTab, setScreenTab] = useState<'matrix' | 'capacity'>('matrix');
+    const [plannerFilters, setPlannerFilters] = useState<WeeklyGridFilters>(defaultPlannerFilters);
     const [gridEditField, setGridEditField] = useState<'planned' | 'actual'>('planned');
+    const canEditCurrentField =
+        gridEditField === 'actual' ? canEditActual : canEditPlanned;
 
     const [weekWindowStart, setWeekWindowStart] = useState(0);
     const [searchProject, setSearchProject] = useState('');
@@ -80,7 +102,7 @@ export function Allocation() {
     const WEEKS_VISIBLE = 8;
 
     const grid = useWeeklyAllocationGrid({
-        canEdit: canEditGrid,
+        canEdit: canEditCurrentField,
         pageSize: 500,
         fetchAllPages: true,
         allowOverAllocation: true,
@@ -294,17 +316,27 @@ export function Allocation() {
     return (
         <PageContainer className="space-y-4">
             <div>
-                <h1 className="text-2xl font-semibold text-gray-900">Resource Allocation</h1>
+                <h1 className="text-2xl font-semibold text-gray-900">Resource Planning</h1>
                 <p className="text-sm text-gray-600 mt-1">
-                    Allocate resources to projects based on skills, availability, and experience.
-                    {isAdminReadOnly && (
+                    Plan resources and track planned vs actual hours.
+                    {isViewerReadOnly && (
                         <span className="ml-2 text-brand-600 font-medium">
-                            {isReadOnlyExecutive ? 'Executive view — read only' : 'Admin view — read only'}
+                            Read-only view — actuals are entered by Project Managers and Delivery Managers.
                         </span>
                     )}
                 </p>
             </div>
 
+            {isAdmin && (
+                <Tabs value={screenTab} onValueChange={(v) => setScreenTab(v as 'matrix' | 'capacity')}>
+                    <TabsList>
+                        <TabsTrigger value="matrix">Allocation matrix</TabsTrigger>
+                        <TabsTrigger value="capacity">Capacity & utilization</TabsTrigger>
+                    </TabsList>
+                </Tabs>
+            )}
+
+            {(screenTab === 'matrix' || !isAdmin) && (
             <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
@@ -375,8 +407,9 @@ export function Allocation() {
                             </>
                         )}
 
-                        {canEditGrid && mvpMode && (
+                        {(canEditPlanned || canEditActual) && mvpMode && (
                             <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+                                {canEditPlanned && (
                                 <button
                                     type="button"
                                     className={`px-3 py-1.5 ${gridEditField === 'planned' ? 'bg-brand-500 text-white' : 'bg-white text-gray-700'}`}
@@ -384,6 +417,8 @@ export function Allocation() {
                                 >
                                     Planned hours
                                 </button>
+                                )}
+                                {canEditActual && (
                                 <button
                                     type="button"
                                     className={`px-3 py-1.5 ${gridEditField === 'actual' ? 'bg-brand-500 text-white' : 'bg-white text-gray-700'}`}
@@ -391,10 +426,11 @@ export function Allocation() {
                                 >
                                     Actual hours
                                 </button>
+                                )}
                             </div>
                         )}
 
-                        {canEditGrid && (
+                        {canEditCurrentField && (
                             <>
                                 <Button
                                     variant="outline"
@@ -455,7 +491,7 @@ export function Allocation() {
                     onResourceSearchChange={setSearchResource}
                 />
 
-                {canEditGrid && (
+                {canEditCurrentField && (
                     <AllocationDraftRow
                         open={showDraftForm}
                         projects={projectOptions}
@@ -476,7 +512,7 @@ export function Allocation() {
                     weeks={visibleWeeks.length > 0 ? visibleWeeks : planningWeeks}
                     employees={employeeOptions}
                     projects={projectOptions}
-                    canEdit={canEditGrid}
+                    canEdit={canEditCurrentField}
                     editableProjectIds={editableProjectIds}
                     cellEditField={gridEditField}
                     dirtyKeys={grid.dirtyKeys}
@@ -489,6 +525,43 @@ export function Allocation() {
 
                 <AllocationGridLegend />
             </div>
+            )}
+
+            {isAdmin && screenTab === 'capacity' && (
+                <div className="space-y-4">
+                    <WeeklyPlannerFilters
+                        draft={plannerFilters}
+                        onChange={setPlannerFilters}
+                        onApply={() => void grid.fetchGrid(plannerFilters, 1)}
+                        onReset={() => {
+                            const d = defaultPlannerFilters();
+                            setPlannerFilters(d);
+                            void grid.fetchGrid(d, 1);
+                        }}
+                        employees={employees}
+                        projects={projects}
+                        loading={grid.loading}
+                    />
+                    <CapacitySummaryPanel
+                        summaries={
+                            grid.capacitySummary.length > 0
+                                ? grid.capacitySummary
+                                : buildCapacitySummariesFromRows(grid.plannerRows, grid.weeks)
+                        }
+                        employees={employees}
+                        weeks={grid.weeks}
+                        loading={grid.loading}
+                    />
+                    <WeeklyPlannerGrid
+                        rows={grid.plannerRows}
+                        weeks={grid.weeks}
+                        canEdit={false}
+                        dirtyKeys={grid.dirtyKeys}
+                        onPlannedHoursChange={grid.updatePlannedHours}
+                        loading={grid.loading}
+                    />
+                </div>
+            )}
         </PageContainer>
     );
 }

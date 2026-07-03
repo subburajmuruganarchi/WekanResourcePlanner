@@ -21,10 +21,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useProjects } from "@/lib/use-projects"
 import { useEmployees } from "@/lib/use-employees"
-import { useSkills } from "@/lib/use-skills"
-import { useRoles } from "@/lib/use-roles"
 import { Loader2, Plus, Trash2, AlertCircle } from "lucide-react"
-import type { CreateProjectRequest, SkillRequirement, RoleEffort, SkillLevel, ProjectStatus, BillingType, DeliveryModel, Project } from "@/types/api"
+import type { CreateProjectRequest, RoleEffort, ProjectStatus, BillingType, Project } from "@/types/api"
 import { PROJECT_STATUS_OPTIONS } from "@/lib/project-status"
 import { normalizeRoleName } from "@/lib/role-utils"
 
@@ -42,8 +40,6 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
     const [loading, setLoading] = useState(false)
     const { createProject, updateProject } = useProjects()
     const { employees } = useEmployees()
-    const { skills } = useSkills()
-    const { roles } = useRoles()
 
     const projectManagerOptions = useMemo(
         () =>
@@ -79,7 +75,6 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                 endDate: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : '',
                 priority: project.priority,
                 billingType: project.billingType as BillingType,
-                deliveryModel: project.deliveryModel as DeliveryModel,
                 skillRequirements: project.skillRequirements || [],
                 roleEfforts: project.roleEfforts || []
             })
@@ -104,48 +99,17 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
         setFormData(prev => ({ ...prev, [field]: value }))
     }
 
-    const addSkill = () => {
-        setFormData(prev => ({
-            ...prev,
-            skillRequirements: [
-                ...(prev.skillRequirements || []),
-                {
-                    skillId: '',
-                    minSkillLevel: 'Intermediate',
-                    originalHeadcount: 1,
-                    startDate: prev.startDate || '',
-                    endDate: prev.endDate || ''
-                }
-            ]
-        }))
-    }
-
-    const removeSkill = (index: number) => {
-        setFormData(prev => ({
-            ...prev,
-            skillRequirements: prev.skillRequirements?.filter((_, i) => i !== index)
-        }))
-    }
-
-    const updateSkill = (index: number, field: keyof SkillRequirement, value: any) => {
-        setFormData(prev => ({
-            ...prev,
-            skillRequirements: prev.skillRequirements?.map((item, i) =>
-                i === index ? { ...item, [field]: value } : item
-            )
-        }))
-    }
-
     const addRoleEffort = () => {
         setFormData(prev => ({
             ...prev,
             roleEfforts: [
                 ...(prev.roleEfforts || []),
                 {
+                    employeeId: '',
                     roleId: '',
                     originalHeadcount: 1,
-                    startDate: prev.startDate || '',
-                    endDate: prev.endDate || '',
+                    startDate: '',
+                    endDate: '',
                     hoursPerDay: 8
                 }
             ]
@@ -175,33 +139,39 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
 
         try {
             // Basic Frontend Validation
-            if (!formData.name || !formData.code || !formData.ownerId || !formData.managerId || !formData.startDate || !formData.endDate) {
-                throw new Error("Please fill in all required fields in the General tab (including Project Manager).")
+            if (!formData.name || !formData.ownerId || !formData.managerId) {
+                throw new Error("Please fill in project name, owner, and project manager.")
             }
-            if (!formData.skillRequirements || formData.skillRequirements.length === 0) {
-                throw new Error("At least one skill requirement is needed.")
-            }
-            if (formData.skillRequirements.some(s => !s.skillId)) {
-                throw new Error("Please select a skill for all skill requirements.")
+
+            const mappedRoleEfforts = (formData.roleEfforts || [])
+                .map((effort) => {
+                    const emp = (employees || []).find((e) => e.id === effort.employeeId);
+                    const roleId = effort.roleId || emp?.jobRoleId || '';
+                    if (!roleId) return null;
+                    return {
+                        ...effort,
+                        roleId,
+                        originalHeadcount: effort.originalHeadcount || 1,
+                        hoursPerDay: effort.hoursPerDay || 8,
+                        startDate: effort.startDate || formData.startDate || '',
+                        endDate: effort.endDate || formData.endDate || '',
+                    };
+                })
+                .filter(Boolean);
+
+            const payload = {
+                ...formData,
+                skillRequirements: [],
+                roleEfforts: mappedRoleEfforts,
+                managerIds: [
+                    formData.managerId,
+                    ...(formData.managerIds ?? []),
+                ].filter(Boolean) as string[],
             }
 
             if (isEdit && project) {
-                const payload = {
-                    ...formData,
-                    managerIds: [
-                        formData.managerId,
-                        ...(formData.managerIds ?? []),
-                    ].filter(Boolean) as string[],
-                }
                 await updateProject(project.id, payload as CreateProjectRequest)
             } else {
-                const payload = {
-                    ...formData,
-                    managerIds: [
-                        formData.managerId,
-                        ...(formData.managerIds ?? []),
-                    ].filter(Boolean) as string[],
-                }
                 await createProject(payload as CreateProjectRequest)
             }
 
@@ -247,10 +217,9 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                     )}
 
                     <Tabs defaultValue="general" className="mt-6">
-                        <TabsList className="grid w-full grid-cols-3">
+                        <TabsList className="grid w-full grid-cols-2">
                             <TabsTrigger value="general">General Info</TabsTrigger>
-                            <TabsTrigger value="skills">Skill Requirements ({formData.skillRequirements?.length || 0})</TabsTrigger>
-                            <TabsTrigger value="roles">Role Efforts ({formData.roleEfforts?.length || 0})</TabsTrigger>
+                            <TabsTrigger value="roles">Resources ({formData.roleEfforts?.length || 0})</TabsTrigger>
                         </TabsList>
 
                         {/* GENERAL TAB */}
@@ -264,14 +233,12 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                         placeholder="e.g. Apollo Redesign"
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Project Code *</Label>
-                                    <Input
-                                        value={formData.code || ''}
-                                        onChange={e => updateField('code', e.target.value)}
-                                        placeholder="e.g. PRJ-001"
-                                    />
-                                </div>
+                                {isEdit && (
+                                    <div className="space-y-2">
+                                        <Label>Project Code</Label>
+                                        <Input value={formData.code || ''} disabled className="bg-gray-50" />
+                                    </div>
+                                )}
                                 <div className="space-y-2">
                                     <Label>Owner *</Label>
                                     <Select
@@ -351,7 +318,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                     </Select>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Start Date *</Label>
+                                    <Label>Start Date</Label>
                                     <Input
                                         type="date"
                                         value={formData.startDate || ''}
@@ -359,7 +326,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>End Date *</Label>
+                                    <Label>End Date</Label>
                                     <Input
                                         type="date"
                                         value={formData.endDate || ''}
@@ -379,109 +346,18 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Delivery Model</Label>
-                                    <Select
-                                        value={formData.deliveryModel}
-                                        onValueChange={(v: DeliveryModel) => updateField('deliveryModel', v)}
-                                    >
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Fixed">Fixed</SelectItem>
-                                            <SelectItem value="T&M">T&M</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
                             </div>
                         </TabsContent>
 
-                        {/* SKILLS TAB */}
-                        <TabsContent value="skills" className="space-y-4 py-4">
-                            <div className="space-y-1">
-                                <h3 className="text-sm font-medium">Required Skills</h3>
-                                <p className="text-[10px] text-gray-500">Project window: {formData.startDate} to {formData.endDate}</p>
-                            </div>
-                            <Button type="button" variant="outline" size="sm" onClick={addSkill}>
-                                <Plus className="w-4 h-4 mr-2" /> Add Skill
-                            </Button>
-
-                            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                                {formData.skillRequirements?.map((skill, index) => (
-                                    <div key={index} className="grid grid-cols-12 gap-2 items-end border p-3 rounded-lg bg-gray-50">
-                                        <div className="col-span-3 space-y-1">
-                                            <Label className="text-xs">Skill</Label>
-                                            <Select
-                                                value={skill.skillId}
-                                                onValueChange={v => updateSkill(index, 'skillId', v)}
-                                            >
-                                                <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
-                                                <SelectContent>
-                                                    {(skills || []).map(s => (
-                                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="col-span-2 space-y-1">
-                                            <Label className="text-xs">Min Level</Label>
-                                            <Select
-                                                value={skill.minSkillLevel}
-                                                onValueChange={(v: SkillLevel) => updateSkill(index, 'minSkillLevel', v)}
-                                            >
-                                                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="Beginner">Beginner</SelectItem>
-                                                    <SelectItem value="Intermediate">Intermediate</SelectItem>
-                                                    <SelectItem value="Expert">Expert</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="col-span-2 space-y-1">
-                                            <Label className="text-xs">Start Date</Label>
-                                            <Input
-                                                type="date"
-                                                className="h-8 text-[11px] px-2"
-                                                value={skill.startDate}
-                                                min={formData.startDate}
-                                                max={formData.endDate}
-                                                onChange={e => updateSkill(index, 'startDate', e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="col-span-2 space-y-1">
-                                            <Label className="text-xs">End Date</Label>
-                                            <Input
-                                                type="date"
-                                                className="h-8 text-[11px] px-2"
-                                                value={skill.endDate}
-                                                min={skill.startDate || formData.startDate}
-                                                max={formData.endDate}
-                                                onChange={e => updateSkill(index, 'endDate', e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="col-span-1 flex justify-end pb-1">
-                                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => removeSkill(index)}>
-                                                <Trash2 className="w-3 h-3" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ))}
-                                {formData.skillRequirements?.length === 0 && (
-                                    <div className="text-center py-8 text-gray-500 text-sm border-2 border-dashed rounded-lg">
-                                        No skills added. Click "Add Skill" to define requirements.
-                                    </div>
-                                )}
-                            </div>
-                        </TabsContent>
-
-                        {/* ROLES TAB */}
+                        {/* RESOURCES TAB */}
                         <TabsContent value="roles" className="space-y-4 py-4">
                             <div className="flex justify-between items-center">
                                 <div className="space-y-1">
-                                    <h3 className="text-sm font-medium">Role Efforts (Optional)</h3>
-                                    <p className="text-[10px] text-gray-500">Project window: {formData.startDate} to {formData.endDate}</p>
+                                    <h3 className="text-sm font-medium">Assigned resources</h3>
+                                    <p className="text-[10px] text-gray-500">Select employees planned for this project. Dates are optional.</p>
                                 </div>
                                 <Button type="button" variant="outline" size="sm" onClick={addRoleEffort}>
-                                    <Plus className="w-4 h-4 mr-2" /> Add Role
+                                    <Plus className="w-4 h-4 mr-2" /> Add resource
                                 </Button>
                             </div>
 
@@ -489,15 +365,21 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                 {formData.roleEfforts?.map((effort, index) => (
                                     <div key={index} className="grid grid-cols-12 gap-2 items-end border p-3 rounded-lg bg-gray-50">
                                         <div className="col-span-4 space-y-1">
-                                            <Label className="text-xs">Role</Label>
+                                            <Label className="text-xs">Resource *</Label>
                                             <Select
-                                                value={effort.roleId}
-                                                onValueChange={v => updateRoleEffort(index, 'roleId', v)}
+                                                value={effort.employeeId || ''}
+                                                onValueChange={v => {
+                                                    const emp = (employees || []).find(e => e.id === v)
+                                                    updateRoleEffort(index, 'employeeId', v)
+                                                    if (emp?.jobRoleId) {
+                                                        updateRoleEffort(index, 'roleId', emp.jobRoleId)
+                                                    }
+                                                }}
                                             >
-                                                <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
+                                                <SelectTrigger className="h-8"><SelectValue placeholder="Select employee" /></SelectTrigger>
                                                 <SelectContent>
-                                                    {(roles || []).map(r => (
-                                                        <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                                                    {(employees || []).filter(e => e.status === 'Active').map(emp => (
+                                                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
                                                     ))}
                                                 </SelectContent>
                                             </Select>

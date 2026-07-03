@@ -142,19 +142,25 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
         setLoading(true)
         setError(null)
 
-        const data = {
-            ...formData,
-            department: formData.department || undefined,
-            designation: formData.designation || undefined,
-            joiningDate: formData.joiningDate || undefined,
-            skills: selectedSkills.filter(s => s.skillId !== '')
-        }
+        const skillRows = selectedSkills.filter((s) => s.skillId !== '');
 
         try {
+            if (skillRows.length === 0) {
+                throw new Error('At least one skill is required.');
+            }
+
+            const data = {
+                ...formData,
+                department: formData.department || undefined,
+                designation: formData.designation || undefined,
+                joiningDate: formData.joiningDate || undefined,
+                skills: skillRows,
+            };
+
             if (isEdit && employee) {
-                await updateEmployee(employee.id, data as any)
+                await updateEmployee(employee.id, data as any);
             } else {
-                await createEmployee(data as any)
+                await createEmployee(data as any);
             }
 
             setOpen(false)
@@ -218,38 +224,23 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
                             <Label htmlFor="email">Email *</Label>
                             <Input id="email" type="email" value={formData.email} onChange={e => updateField('email', e.target.value)} required />
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="employeeCode">Employee Code *</Label>
-                            <Input id="employeeCode" value={formData.employeeCode} onChange={e => updateField('employeeCode', e.target.value)} placeholder="EMP-001" required />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="status">Status *</Label>
-                            <Select value={formData.status} onValueChange={v => updateField('status', v)}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Active">Active</SelectItem>
-                                    <SelectItem value="Inactive">Inactive</SelectItem>
-                                    <SelectItem value="On Probation">On Probation</SelectItem>
-                                    <SelectItem value="On Notice Period">On Notice Period</SelectItem>
-                                    <SelectItem value="Terminated">Terminated</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="roleId">Type *</Label>
-                            <Select value={formData.roleId} onValueChange={v => updateField('roleId', v)} required>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {(roles || []).map(role => (
-                                        <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                        {isEdit && (
+                            <div className="space-y-2">
+                                <Label htmlFor="status">Status</Label>
+                                <Select value={formData.status} onValueChange={v => updateField('status', v)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Active">Active</SelectItem>
+                                        <SelectItem value="Inactive">Inactive</SelectItem>
+                                        <SelectItem value="On Probation">On Probation</SelectItem>
+                                        <SelectItem value="On Notice Period">On Notice Period</SelectItem>
+                                        <SelectItem value="Terminated">Terminated</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
                         <div className="space-y-2">
                             <Label htmlFor="department">Department</Label>
                             <Select value={formData.department} onValueChange={v => updateField('department', v)}>
@@ -297,10 +288,6 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="maxAllocationPercent">Max Allocation %</Label>
-                            <Input id="maxAllocationPercent" type="number" value={formData.maxAllocationPercent} onChange={e => updateField('maxAllocationPercent', parseInt(e.target.value))} min={1} max={100} />
-                        </div>
-                        <div className="space-y-2">
                             <Label htmlFor="joiningDate">Joining Date</Label>
                             <Input id="joiningDate" type="date" value={formData.joiningDate} onChange={e => updateField('joiningDate', e.target.value)} />
                         </div>
@@ -316,8 +303,8 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
 
                         {selectedSkills.map((entry, index) => (
                             <div key={index} className="grid grid-cols-12 gap-2 items-end border p-3 rounded-md bg-gray-50">
-                                <div className="col-span-4 space-y-1">
-                                    <Label className="text-xs">Skill</Label>
+                                <div className="col-span-8 space-y-1">
+                                    <Label className="text-xs">Skill *</Label>
                                     <Select
                                         value={entry.skillId}
                                         onValueChange={(val) => updateSkill(index, 'skillId', val)}
@@ -335,22 +322,7 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
                                     </Select>
                                 </div>
                                 <div className="col-span-3 space-y-1">
-                                    <Label className="text-xs">Type</Label>
-                                    <Select
-                                        value={entry.skillType}
-                                        onValueChange={(val) => updateSkill(index, 'skillType', val)}
-                                    >
-                                        <SelectTrigger className="h-8">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Primary">Primary</SelectItem>
-                                            <SelectItem value="Secondary">Secondary</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="col-span-3 space-y-1">
-                                    <Label className="text-xs">Level</Label>
+                                    <Label className="text-xs">Level *</Label>
                                     <Select
                                         value={entry.level}
                                         onValueChange={(val: SkillLevel) => updateSkill(index, 'level', val)}

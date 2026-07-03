@@ -17,6 +17,7 @@ import {
 } from '@/components/workspaces/shared';
 import { useDeliveryCommandMetrics } from '@/lib/use-delivery-metrics';
 import { KPIGridSkeleton } from '@/components/dashboard/KPICard';
+import { DeliveryPortfolioCharts } from './components/delivery-portfolio-charts';
 
 export default function DeliveryCommandPage() {
     const navigate = useNavigate();
@@ -54,8 +55,19 @@ export default function DeliveryCommandPage() {
             )}
 
             <WorkspaceSection
+                title="Portfolio trends"
+                description="Health distribution and delivery progress across active projects"
+            >
+                {loading ? (
+                    <p className="text-sm text-slate-500 dashboard-card p-6">Loading charts…</p>
+                ) : (
+                    <DeliveryPortfolioCharts rows={portfolioRows} />
+                )}
+            </WorkspaceSection>
+
+            <WorkspaceSection
                 title="Portfolio at a glance"
-                description="Managed projects — project name is the customer account"
+                description="Active projects — project name is the customer account"
             >
                 <div className="dashboard-card overflow-hidden">
                     {loading ? (
@@ -112,6 +124,7 @@ export default function DeliveryCommandPage() {
 
             <WorkspaceSection title="Quick actions">
                 <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" onClick={() => navigate('/projects')}>Employees & Projects</Button>
                     <Button variant="outline" onClick={() => navigate('/allocation')}>Resource Planning</Button>
                     <Button variant="outline" onClick={() => navigate('/pm-approvals')}>Approvals</Button>
                     <Button variant="outline" onClick={() => navigate('/delivery/recommendations')}>Suggested Actions</Button>

@@ -1,7 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useProjects } from '@/lib/use-projects';
-import { usePortfolioScope } from '@/lib/use-portfolio-scope';
-import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api-client';
 import {
     buildDashboardPeriodRange,
@@ -13,10 +10,9 @@ import {
     buildPortfolioHealthRows,
     type PortfolioHealthRow,
 } from '@/lib/portfolio-health-rows';
-import { isDeliveryManager } from '@/lib/roles';
-import { isOperationalProject } from '@/lib/project-status';
 import type { DeliveryRiskItem } from '@/lib/risk-intelligence';
 import { fetchDeliveryRisks } from '@/lib/risk-intelligence';
+import { useVisibleActiveProjects } from '@/lib/use-visible-active-projects';
 
 export interface DeliveryCommandMetrics {
     managedProjects: number;
@@ -28,19 +24,12 @@ export interface DeliveryCommandMetrics {
 }
 
 export function useDeliveryCommandMetrics() {
-    const { user } = useAuth();
-    const { projectIds } = usePortfolioScope(user?.role);
-    const { projects, loading: projectsLoading } = useProjects();
+    const { projects: portfolioProjects, loading: projectsLoading } = useVisibleActiveProjects();
     const [risks, setRisks] = useState<DeliveryRiskItem[]>([]);
     const [pendingApprovals, setPendingApprovals] = useState(0);
     const [loading, setLoading] = useState(true);
 
-    const portfolioProjects =
-        projectIds.length > 0
-            ? projects.filter((p) => projectIds.includes(p.id))
-            : isDeliveryManager(user?.role)
-              ? []
-              : projects.filter((p) => isOperationalProject(p));
+    const portfolioIds = portfolioProjects.map((p) => p.id);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -51,8 +40,8 @@ export function useDeliveryCommandMetrics() {
                 api.get<{ pendingApprovals: number }>(`/dashboard/stats?${periodQueryString(period)}`),
             ]);
             const scopedRisks =
-                projectIds.length > 0
-                    ? (risksRes ?? []).filter((r) => projectIds.includes(r.projectId))
+                portfolioIds.length > 0
+                    ? (risksRes ?? []).filter((r) => portfolioIds.includes(r.projectId))
                     : (risksRes ?? []);
             setRisks(scopedRisks);
             setPendingApprovals(statsRes?.pendingApprovals ?? 0);
@@ -61,7 +50,7 @@ export function useDeliveryCommandMetrics() {
         } finally {
             setLoading(false);
         }
-    }, [projectIds]);
+    }, [portfolioIds.join(',')]);
 
     useEffect(() => {
         void fetchData();

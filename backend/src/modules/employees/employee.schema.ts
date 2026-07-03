@@ -8,7 +8,7 @@ export const CreateEmployeeSchema = z.object({
     password: z.string().min(6, 'Password must be at least 6 characters').optional(),
     employeeCode: z.string().min(1, 'Employee code is required').toUpperCase().optional(),
     status: z.nativeEnum(EmployeeStatus).default(EmployeeStatus.ACTIVE),
-    roleId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Role ID'),
+    roleId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Role ID').optional(),
     department: z.nativeEnum(EmployeeDepartment).optional(),
     designation: z.nativeEnum(EmployeeRole).optional(),
     skills: z.array(z.object({

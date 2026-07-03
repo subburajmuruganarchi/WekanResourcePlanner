@@ -70,6 +70,10 @@ export class WeeklyAllocationController {
             const parsed = weeklyGridPutBodySchema.parse(req.body);
             const actorId = getAuthEmployeeId(req.user);
 
+            const editField: 'planned' | 'actual' = parsed.updates.some((u) => u.actualHours !== undefined)
+                ? 'actual'
+                : 'planned';
+
             if (!features.mvpMode && req.user?.role === ROLES.DELIVERY_MANAGER && actorId) {
                 const portfolioIds = new Set(await getPortfolioProjectIds(actorId));
                 const outOfScope = parsed.updates.filter((u) => !portfolioIds.has(u.projectId));
@@ -87,7 +91,8 @@ export class WeeklyAllocationController {
                     await assertCanEditWeeklyGridForProjects(
                         req.user?.role,
                         actorId,
-                        parsed.updates.map((u) => u.projectId)
+                        parsed.updates.map((u) => u.projectId),
+                        editField
                     );
                 } catch (scopeError) {
                     res.status(403).json({

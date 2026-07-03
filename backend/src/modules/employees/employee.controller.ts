@@ -14,7 +14,12 @@ export class EmployeeController {
             const params = {
                 skill: req.query.skill as string | undefined,
                 minLevel: req.query.minLevel as string | undefined,
-                isActive: req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined
+                isActive:
+                    req.query.isActive === 'false'
+                        ? false
+                        : req.query.isActive === 'all'
+                          ? undefined
+                          : true,
             };
 
             const user = req.user;

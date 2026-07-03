@@ -48,13 +48,27 @@ export function canViewResourceAllocationGrid(role: string | undefined): boolean
     return true;
 }
 
-/** Weekly planned/actual hours on the allocation grid — PM only (scoped to managed projects). */
-export function canEditWeeklyAllocationGrid(role: string | undefined): boolean {
+/** Planned hours — PM (scoped) and DM (any). Admin/CEO read-only. */
+export function canEditPlannedAllocationGrid(role: string | undefined): boolean {
     const r = normalizeRoleName(role);
     if (!features.mvpMode) {
         return r === ROLES.DELIVERY_MANAGER;
     }
-    return r === ROLES.PROJECT_MANAGER;
+    return r === ROLES.PROJECT_MANAGER || r === ROLES.DELIVERY_MANAGER;
+}
+
+/** Actual hours — PM (scoped) and DM (any). Admin/CEO cannot edit. */
+export function canEditActualAllocationGrid(role: string | undefined): boolean {
+    const r = normalizeRoleName(role);
+    if (!features.mvpMode) {
+        return r === ROLES.DELIVERY_MANAGER;
+    }
+    return r === ROLES.PROJECT_MANAGER || r === ROLES.DELIVERY_MANAGER;
+}
+
+/** @deprecated use canEditPlannedAllocationGrid */
+export function canEditWeeklyAllocationGrid(role: string | undefined): boolean {
+    return canEditPlannedAllocationGrid(role);
 }
 
 /** Assign employees to projects (project_allocations API). PM scoped; DM any project. */
@@ -92,20 +106,39 @@ export async function assertCanAssignToProject(
 export async function assertCanEditWeeklyGridForProjects(
     role: string | undefined,
     actorEmployeeId: string | undefined,
-    projectIds: string[]
+    projectIds: string[],
+    field: 'planned' | 'actual' = 'planned'
 ): Promise<void> {
     if (!features.mvpMode) return;
 
     const r = normalizeRoleName(role);
-    if (r !== ROLES.PROJECT_MANAGER || !actorEmployeeId) {
-        throw new Error('Only Project Managers can edit resource allocations in MVP mode');
+    const allowed =
+        field === 'actual'
+            ? canEditActualAllocationGrid(r)
+            : canEditPlannedAllocationGrid(r);
+
+    if (!allowed) {
+        throw new Error(
+            field === 'actual'
+                ? 'Only Project Managers and Delivery Managers can edit actual hours'
+                : 'You do not have permission to edit planned allocations'
+        );
     }
 
-    const managed = new Set(await getManagedProjectIds(actorEmployeeId));
-    const outOfScope = projectIds.filter((id) => !managed.has(id));
-    if (outOfScope.length > 0) {
-        throw new Error('Cannot edit allocations outside your assigned projects');
+    if (r === ROLES.DELIVERY_MANAGER) {
+        return;
     }
+
+    if (r === ROLES.PROJECT_MANAGER && actorEmployeeId) {
+        const managed = new Set(await getManagedProjectIds(actorEmployeeId));
+        const outOfScope = projectIds.filter((id) => !managed.has(id));
+        if (outOfScope.length > 0) {
+            throw new Error('Cannot edit allocations outside your assigned projects');
+        }
+        return;
+    }
+
+    throw new Error('You do not have permission to edit resource allocations');
 }
 
 export function projectCrudRoles(): SystemRoleName[] {
@@ -133,7 +166,7 @@ export function weeklyGridPutRoles(): SystemRoleName[] {
     if (!features.mvpMode) {
         return [ROLES.DELIVERY_MANAGER];
     }
-    return [ROLES.PROJECT_MANAGER];
+    return [ROLES.PROJECT_MANAGER, ROLES.DELIVERY_MANAGER];
 }
 
 export function weeklyGridGetRoles(): SystemRoleName[] {

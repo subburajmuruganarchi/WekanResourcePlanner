@@ -111,7 +111,6 @@ export const PERSONA_NAV: Record<string, NavGroupDef[]> = {
                 { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: [ROLES.ADMIN] },
                 { label: 'Resource Planning', path: '/allocation', icon: Users, roles: [ROLES.ADMIN] },
                 { label: 'Projects', path: '/projects', icon: FolderKanban, roles: [ROLES.ADMIN] },
-                { label: 'Weekly Planner', path: '/weekly-planner', icon: CalendarRange, roles: [ROLES.ADMIN] },
                 { label: 'Time Tracking', path: '/time-entry', icon: Clock, roles: [ROLES.ADMIN] },
                 { label: 'Approvals', path: '/pm-approvals', icon: ClipboardCheck, roles: [ROLES.ADMIN] },
                 { label: 'Reports', path: '/reports', icon: FileBarChart, roles: [ROLES.ADMIN] },

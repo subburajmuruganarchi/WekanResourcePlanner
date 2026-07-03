@@ -19,7 +19,7 @@ interface UseEmployeesResult {
 }
 
 export function useEmployees(options: UseEmployeesOptions = {}): UseEmployeesResult {
-    const { allocatedToMyProjects = false, activeOnly = false } = options;
+    const { allocatedToMyProjects = false, activeOnly = true } = options;
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
