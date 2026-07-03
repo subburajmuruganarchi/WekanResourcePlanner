@@ -219,6 +219,11 @@ export class EmployeeService {
             }
         }
 
+        if (!data.employee_code) {
+            const suffix = Date.now().toString(36).toUpperCase();
+            data.employee_code = `EMP-${suffix}`;
+        }
+
         // Hash password before saving
         if (data.password) {
             const bcrypt = await import('bcryptjs');
@@ -234,6 +239,24 @@ export class EmployeeService {
             .lean() as unknown as PopulatedEmployee;
 
         return this.mapToResponse(populated, [], 100);
+    }
+
+    async deactivate(id: string): Promise<EmployeeResponse> {
+        if (!Types.ObjectId.isValid(id)) {
+            throw new AppError('Invalid employee ID', 400);
+        }
+
+        const employee = await Employee.findByIdAndUpdate(
+            id,
+            { is_active: false, status: 'Inactive' },
+            { new: true }
+        );
+
+        if (!employee) {
+            throw new AppError('Employee not found', 404);
+        }
+
+        return this.findById(id) as Promise<EmployeeResponse>;
     }
 
     private async loadAvailabilityByEmployee(

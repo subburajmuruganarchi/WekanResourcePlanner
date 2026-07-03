@@ -5,6 +5,10 @@ import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
 import { parseWeekStartParam, startOfUtcWeek } from '../../common/utils/week.util';
 import { ROLES } from '../../common/constants/roles';
 import { getPortfolioProjectIds } from '../../common/utils/delivery-scope.util';
+import { features } from '../../config/features';
+import {
+    assertCanEditWeeklyGridForProjects,
+} from '../../common/utils/mvp-permissions.util';
 import { weeklyAllocationService } from './weekly-allocation.service';
 import {
     parseIdList,
@@ -24,7 +28,7 @@ export class WeeklyAllocationController {
                 parseIdList(parsed.projectIds) ??
                 (parsed.projectId ? [parsed.projectId] : undefined);
 
-            if (req.user?.role === ROLES.DELIVERY_MANAGER) {
+            if (!features.mvpMode && req.user?.role === ROLES.DELIVERY_MANAGER) {
                 const actorId = getAuthEmployeeId(req.user);
                 const portfolioIds = actorId ? await getPortfolioProjectIds(actorId) : [];
                 const allowed = new Set(portfolioIds);
@@ -66,13 +70,29 @@ export class WeeklyAllocationController {
             const parsed = weeklyGridPutBodySchema.parse(req.body);
             const actorId = getAuthEmployeeId(req.user);
 
-            if (req.user?.role === ROLES.DELIVERY_MANAGER && actorId) {
+            if (!features.mvpMode && req.user?.role === ROLES.DELIVERY_MANAGER && actorId) {
                 const portfolioIds = new Set(await getPortfolioProjectIds(actorId));
                 const outOfScope = parsed.updates.filter((u) => !portfolioIds.has(u.projectId));
                 if (outOfScope.length > 0) {
                     res.status(403).json({
                         status: 'error',
                         message: 'Cannot edit allocations outside your delivery portfolio.',
+                    });
+                    return;
+                }
+            }
+
+            if (features.mvpMode) {
+                try {
+                    await assertCanEditWeeklyGridForProjects(
+                        req.user?.role,
+                        actorId,
+                        parsed.updates.map((u) => u.projectId)
+                    );
+                } catch (scopeError) {
+                    res.status(403).json({
+                        status: 'error',
+                        message: scopeError instanceof Error ? scopeError.message : 'Forbidden',
                     });
                     return;
                 }

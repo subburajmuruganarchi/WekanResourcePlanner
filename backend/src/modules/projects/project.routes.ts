@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { projectController } from './project.controller';
 import { requireRole } from '../../common/middleware/role.middleware';
+import { projectCrudRoles, projectUpdateRoles } from '../../common/utils/mvp-permissions.util';
 
 const router = Router();
 
@@ -14,10 +15,12 @@ router.get('/', (req, res, next) => projectController.list(req, res, next));
 router.get('/:id', (req, res, next) => projectController.getById(req, res, next));
 
 // POST /api/projects
-router.post('/', requireRole('Admin'), (req, res, next) => projectController.create(req, res, next));
+router.post('/', requireRole(...projectCrudRoles()), (req, res, next) => projectController.create(req, res, next));
 
 // PUT /api/projects/:id
-router.put('/:id', requireRole('Admin', 'Project Manager'), (req, res, next) => projectController.update(req, res, next));
+router.put('/:id', requireRole(...projectUpdateRoles()), (req, res, next) => projectController.update(req, res, next));
+
+// DELETE /api/projects/:id — soft-delete (is_active=false)
+router.delete('/:id', requireRole(...projectCrudRoles()), (req, res, next) => projectController.remove(req, res, next));
 
 export { router as projectRouter };
-

@@ -65,7 +65,7 @@ function cellTooltip(cell: WeeklyAllocationCell | undefined): string {
     const delta = cell.deltaHours ?? actual - plan;
     const lines = [
         `Planned: ${formatHours(plan)}h`,
-        `Actual (approved time): ${formatHours(actual)}h`,
+        `Actual${cellEditField === 'actual' ? ' (editable)' : ''}: ${formatHours(actual)}h`,
         `Forecast: ${formatHours(forecast)}h`,
         `Variance (plan − actual): ${formatHours(planVar)}h`,
         `Delta (actual − plan): ${delta >= 0 ? '+' : ''}${formatHours(delta)}h`,
@@ -92,8 +92,11 @@ interface AllocationWeeklyGridProps {
     canEdit: boolean;
     /** When set, only these project rows are editable (Delivery Manager portfolio scope). */
     editableProjectIds?: Set<string>;
+    /** Which hour field is editable in week cells. */
+    cellEditField?: 'planned' | 'actual';
     dirtyKeys: Set<string>;
     onPlannedHoursChange: (row: WeeklyPlannerGridRow, weekStart: string, hours: number) => void;
+    onActualHoursChange?: (row: WeeklyPlannerGridRow, weekStart: string, hours: number) => void;
     onEmployeeChange: (row: AllocationGridRow, employeeId: string) => void;
     onProjectChange: (row: AllocationGridRow, projectId: string) => void;
     loading?: boolean;
@@ -106,8 +109,10 @@ export function AllocationWeeklyGrid({
     projects,
     canEdit,
     editableProjectIds,
+    cellEditField = 'planned',
     dirtyKeys,
     onPlannedHoursChange,
+    onActualHoursChange,
     onEmployeeChange,
     onProjectChange,
     loading,
@@ -178,7 +183,11 @@ export function AllocationWeeklyGrid({
                 filter: false,
                 sortable: false,
                 suppressMovable: true,
-                valueGetter: (params) => getCell(params.data)?.plannedHours ?? 0,
+                valueGetter: (params) => {
+                    const cell = getCell(params.data);
+                    if (cellEditField === 'actual') return cell?.actualHours ?? 0;
+                    return cell?.plannedHours ?? 0;
+                },
                 valueFormatter: (p) => formatPlanHours(Number(p.value ?? 0)),
                 valueSetter: (params: ValueSetterParams<AllocationGridRow>) => {
                     if (!isRowEditable(params.data)) return false;
@@ -186,7 +195,11 @@ export function AllocationWeeklyGrid({
                     const num =
                         typeof raw === 'number' ? raw : parseFloat(String(raw ?? '').trim());
                     if (Number.isNaN(num)) return false;
-                    onPlannedHoursChange(params.data, weekStart, num);
+                    if (cellEditField === 'actual' && onActualHoursChange) {
+                        onActualHoursChange(params.data, weekStart, num);
+                    } else {
+                        onPlannedHoursChange(params.data, weekStart, num);
+                    }
                     return true;
                 },
                 tooltipValueGetter: (p) => cellTooltip(getCell(p.data)),
@@ -217,8 +230,10 @@ export function AllocationWeeklyGrid({
     }, [
         weeks,
         canEdit,
+        cellEditField,
         dirtyKeys,
         onPlannedHoursChange,
+        onActualHoursChange,
         isOverAllocated,
         utilizationPercent,
         employeeWeekTotals,

@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { allocationService, CreateAllocationRequest, UpdateAllocationRequest } from './allocation.service';
+import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
+import { assertCanAssignToProject } from '../../common/utils/mvp-permissions.util';
 
 export class AllocationController {
     async create(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -17,6 +19,20 @@ export class AllocationController {
                 overrideReason: req.body.overrideReason,
                 authorizedById: req.body.authorizedById,
             };
+
+            try {
+                await assertCanAssignToProject(
+                    req.user?.role,
+                    getAuthEmployeeId(req.user),
+                    request.projectId
+                );
+            } catch (scopeError) {
+                res.status(403).json({
+                    status: 'error',
+                    message: scopeError instanceof Error ? scopeError.message : 'Forbidden',
+                });
+                return;
+            }
 
             const allocation = await allocationService.createAllocation(request);
 
@@ -50,6 +66,23 @@ export class AllocationController {
                 overrideReason: req.body.overrideReason,
                 authorizedById: req.body.authorizedById,
             };
+
+            const existing = await allocationService.getAllocationProjectId(request.allocationId);
+            if (existing) {
+                try {
+                    await assertCanAssignToProject(
+                        req.user?.role,
+                        getAuthEmployeeId(req.user),
+                        existing
+                    );
+                } catch (scopeError) {
+                    res.status(403).json({
+                        status: 'error',
+                        message: scopeError instanceof Error ? scopeError.message : 'Forbidden',
+                    });
+                    return;
+                }
+            }
 
             const allocation = await allocationService.updateAllocation(request);
 

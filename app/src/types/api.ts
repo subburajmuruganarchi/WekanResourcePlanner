@@ -129,6 +129,7 @@ export interface Project {
     owner: string;
     ownerId?: string;
     managerId: string;
+    managerIds?: string[];
     managerName: string;
     startDate: string;
     endDate?: string;
@@ -181,6 +182,7 @@ export interface CreateProjectRequest {
     code: string;
     ownerId: string;
     managerId: string;
+    managerIds?: string[];
     startDate: string;
     endDate?: string;
     status: ProjectStatus;

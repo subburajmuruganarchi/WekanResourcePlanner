@@ -9,6 +9,8 @@ export interface IProject extends Document {
     project_code: string;
     project_owner_id: Types.ObjectId;
     project_manager_id: Types.ObjectId;
+    /** Additional PMs assigned to this project (MVP multi-PM support). */
+    project_manager_ids?: Types.ObjectId[];
     status: ProjectStatus;
     priority: ProjectPriority;
     start_date: Date;
@@ -34,6 +36,7 @@ const ProjectSchema = new Schema<IProject>({
     project_code: { type: String, required: true, unique: true, trim: true, uppercase: true, index: true },
     project_owner_id: { type: Schema.Types.ObjectId, ref: 'Employee', index: true },
     project_manager_id: { type: Schema.Types.ObjectId, ref: 'Employee', required: true, index: true },
+    project_manager_ids: [{ type: Schema.Types.ObjectId, ref: 'Employee', index: true }],
     status: { type: String, enum: Object.values(ProjectStatus), default: ProjectStatus.ACTIVE, index: true },
     priority: { type: String, enum: Object.values(ProjectPriority), required: true },
     start_date: { type: Date, required: true },

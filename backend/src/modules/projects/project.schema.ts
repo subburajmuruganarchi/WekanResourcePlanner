@@ -7,6 +7,9 @@ export const CreateProjectSchema = z.object({
     project_code: z.string().min(1, 'Project code is required').toUpperCase(),
     project_owner_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Owner ID').optional(),
     project_manager_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Project Manager ID'),
+    project_manager_ids: z
+        .array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Project Manager ID'))
+        .optional(),
     status: z.nativeEnum(ProjectStatus).optional().default(ProjectStatus.ACTIVE),
     priority: z.nativeEnum(ProjectPriority),
     start_date: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid Date Format')),

@@ -1,7 +1,8 @@
-import { ROLES, isExecutiveReadOnly, isEmployeeAccessRole } from '@/lib/roles';
+import { ROLES, isExecutiveReadOnly, isEmployeeAccessRole, canViewResourceAllocation } from '@/lib/roles';
 import { ROUTE_ACCESS } from '@/lib/navigation-config';
 import type { SystemRoleName } from '@/lib/roles';
 import { normalizeRoleName } from '@/lib/role-utils';
+import { getMvpFeatures, isNavPathEnabled } from '@/lib/mvp-config';
 
 const PROJECT_DETAIL_PATH = /^\/projects\/[^/]+$/;
 
@@ -33,12 +34,15 @@ function resolveRouteKey(path: string): string {
 
 export function canAccessRoute(role: string | undefined, path: string): boolean {
     if (!role) return false;
+    if (!isNavPathEnabled(path, getMvpFeatures())) return false;
+
     const r = normalizeRoleName(role);
     if (r === ROLES.ADMIN) return true;
     if (isExecutiveReadOnly(r) && path === '/time-entry') return false;
 
-    // Employees may open assigned project detail (read-only) from My Workspace, not the projects list.
+    // Employees: allocation view in MVP; project list restricted to management roles.
     if (isEmployeeAccessRole(r)) {
+        if (path === '/allocation' && canViewResourceAllocation(r)) return true;
         if (PROJECT_DETAIL_PATH.test(path)) return true;
         if (path === '/projects' || path.startsWith('/projects/')) return false;
     }

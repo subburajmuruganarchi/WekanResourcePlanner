@@ -5,7 +5,8 @@ import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { useProjects } from '@/lib/use-projects';
 import { useAuth } from '@/lib/auth-context';
-import { canEditAllocations, isExecutiveReadOnly, ROLES } from '@/lib/roles';
+import { canEditAllocations, isExecutiveReadOnly, ROLES, canAssignProjectStaff } from '@/lib/roles';
+import { getMvpFeatures } from '@/lib/mvp-config';
 import { normalizeRoleName } from '@/lib/role-utils';
 import { usePortfolioScope } from '@/lib/use-portfolio-scope';
 import { useEmployees } from '@/lib/use-employees';
@@ -41,15 +42,33 @@ export function Allocation() {
     const isAdminReadOnly =
         normalizeRoleName(user?.role) === ROLES.ADMIN || isReadOnlyExecutive;
     const canEditGrid = canEditAllocations(user?.role) && !isReadOnlyExecutive;
-    const { editableProjectIds } = usePortfolioScope(user?.role);
+    const canAssignStaff = canAssignProjectStaff(user?.role) && !isReadOnlyExecutive;
+    const mvpMode = getMvpFeatures().mvpMode;
+    const { editableProjectIds: dmPortfolioIds } = usePortfolioScope(user?.role);
 
     const { projects, loading: projLoading } = useProjects();
     const { employees } = useEmployees();
     const isPM = normalizeRoleName(user?.role) === ROLES.PROJECT_MANAGER;
-    const managedProjectIds = useMemo(
-        () => new Set(projects.map((p) => p.id)),
-        [projects]
-    );
+    const managedProjectIds = useMemo(() => {
+        if (!user?.id || !isPM) return undefined;
+        return new Set(
+            projects
+                .filter(
+                    (p) =>
+                        p.managerId === user.id ||
+                        (p.managerIds?.includes(user.id) ?? false)
+                )
+                .map((p) => p.id)
+        );
+    }, [projects, user?.id, isPM]);
+
+    const editableProjectIds = useMemo(() => {
+        if (mvpMode && isPM && managedProjectIds) return managedProjectIds;
+        if (!mvpMode && dmPortfolioIds) return dmPortfolioIds;
+        return undefined;
+    }, [mvpMode, isPM, managedProjectIds, dmPortfolioIds]);
+
+    const [gridEditField, setGridEditField] = useState<'planned' | 'actual'>('planned');
 
     const [weekWindowStart, setWeekWindowStart] = useState(0);
     const [searchProject, setSearchProject] = useState('');
@@ -142,7 +161,7 @@ export function Allocation() {
                     row.projectCode !== BENCH_PROJECT_CODE &&
                     row.projectName !== 'Available / Bench' &&
                     !row.rowKey.startsWith('draft:') &&
-                    (!isPM || managedProjectIds.has(row.projectId))
+                    (!isPM || mvpMode || managedProjectIds?.has(row.projectId))
             )
             .map((row) => ({
                 ...row,
@@ -172,7 +191,7 @@ export function Allocation() {
                     sensitivity: 'base',
                 });
             });
-    }, [grid.plannerRows, employeeRoleMap, projectTypeById, isPM, managedProjectIds]);
+    }, [grid.plannerRows, employeeRoleMap, projectTypeById, isPM, managedProjectIds, mvpMode]);
 
     const filteredRows = useMemo(() => {
         return displayRows.filter((row) =>
@@ -289,7 +308,7 @@ export function Allocation() {
             <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
-                        {canEditGrid && (
+                        {canAssignStaff && (
                             <Button
                                 type="button"
                                 variant="outline"
@@ -354,6 +373,25 @@ export function Allocation() {
                                     <ChevronRight className="w-4 h-4" />
                                 </Button>
                             </>
+                        )}
+
+                        {canEditGrid && mvpMode && (
+                            <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+                                <button
+                                    type="button"
+                                    className={`px-3 py-1.5 ${gridEditField === 'planned' ? 'bg-brand-500 text-white' : 'bg-white text-gray-700'}`}
+                                    onClick={() => setGridEditField('planned')}
+                                >
+                                    Planned hours
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`px-3 py-1.5 ${gridEditField === 'actual' ? 'bg-brand-500 text-white' : 'bg-white text-gray-700'}`}
+                                    onClick={() => setGridEditField('actual')}
+                                >
+                                    Actual hours
+                                </button>
+                            </div>
                         )}
 
                         {canEditGrid && (
@@ -440,8 +478,10 @@ export function Allocation() {
                     projects={projectOptions}
                     canEdit={canEditGrid}
                     editableProjectIds={editableProjectIds}
+                    cellEditField={gridEditField}
                     dirtyKeys={grid.dirtyKeys}
                     onPlannedHoursChange={grid.updatePlannedHours}
+                    onActualHoursChange={grid.updateActualHours}
                     onEmployeeChange={handleEmployeeChange}
                     onProjectChange={handleProjectChange}
                     loading={grid.loading || projLoading}

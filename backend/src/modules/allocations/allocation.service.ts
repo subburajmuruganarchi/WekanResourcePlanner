@@ -160,6 +160,14 @@ function mapStoredSkillIds(allocation: IProjectAllocation): string[] {
 }
 
 export class AllocationService {
+    async getAllocationProjectId(allocationId: string): Promise<string | null> {
+        if (!Types.ObjectId.isValid(allocationId)) {
+            return null;
+        }
+        const row = await ProjectAllocation.findById(allocationId).select('project_id').lean();
+        return row?.project_id?.toString() ?? null;
+    }
+
     async createAllocation(request: CreateAllocationRequest): Promise<AllocationResponse> {
         const session = await startSession();
         session.startTransaction();

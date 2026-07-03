@@ -31,6 +31,7 @@ import PmCommunicationPage from "@/app/pm-workspace/communication/page"
 import EmployeeWorkspacePage from "@/app/workspace/page"
 
 import { AuthProvider, useAuth } from "@/lib/auth-context"
+import { loadMvpFeatures } from "@/lib/mvp-config"
 import { getHomeRoute } from "@/lib/home-route"
 import { RoleRoute } from "@/components/shared/role-route"
 import { GoogleOAuthProvider } from "@react-oauth/google"
@@ -159,6 +160,10 @@ function AppRoutes() {
 }
 
 function App() {
+  React.useEffect(() => {
+    void loadMvpFeatures();
+  }, []);
+
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <AuthProvider>

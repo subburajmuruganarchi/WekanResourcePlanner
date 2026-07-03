@@ -203,6 +203,54 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
         [options.canEdit]
     );
 
+    const updateActualHours = useCallback(
+        (row: WeeklyPlannerGridRow, weekStart: string, actualHours: number) => {
+            if (!options.canEdit) return;
+
+            const clamped = Math.max(0, Math.min(168, Math.round(actualHours * 100) / 100));
+            const key = cellKey(row.employeeId, row.projectId, weekStart);
+
+            setPlannerRows((prev) =>
+                prev.map((r) => {
+                    if (r.rowKey !== row.rowKey) return r;
+                    const existing = r.weekCells[weekStart];
+                    const planned = existing?.plannedHours ?? 0;
+                    return {
+                        ...r,
+                        weekCells: {
+                            ...r.weekCells,
+                            [weekStart]: {
+                                id: existing?.id,
+                                allocationId: existing?.allocationId,
+                                employeeId: r.employeeId,
+                                projectId: r.projectId,
+                                weekStart,
+                                plannedHours: planned,
+                                actualHours: clamped,
+                                forecastHours: existing?.forecastHours ?? planned,
+                                source: existing?.source ?? 'Planned',
+                                status: existing?.status ?? 'Draft',
+                                isLegacy: existing?.isLegacy,
+                            },
+                        },
+                    };
+                })
+            );
+
+            dirtyRef.current.set(key, {
+                employeeId: row.employeeId,
+                projectId: row.projectId,
+                weekStart,
+                actualHours: clamped,
+                allocationId: row.weekCells[weekStart]?.allocationId,
+                source: 'Planned',
+                status: 'Draft',
+            });
+            syncDirtyCount();
+        },
+        [options.canEdit]
+    );
+
     const discardChanges = useCallback(() => {
         if (rollbackSnapshotRef.current) {
             setPlannerRows(clonePlannerRows(rollbackSnapshotRef.current));
@@ -420,6 +468,7 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
         cacheVersion,
         fetchGrid,
         updatePlannedHours,
+        updateActualHours,
         saveBulk,
         discardChanges,
         refetch,

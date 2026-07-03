@@ -73,6 +73,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                 code: project.code,
                 ownerId: project.ownerId || '',
                 managerId: project.managerId || '',
+                managerIds: project.managerIds?.filter((id) => id !== project.managerId) ?? [],
                 status: project.status as ProjectStatus,
                 startDate: project.startDate ? new Date(project.startDate).toISOString().split('T')[0] : '',
                 endDate: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : '',
@@ -185,9 +186,23 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
             }
 
             if (isEdit && project) {
-                await updateProject(project.id, formData as CreateProjectRequest)
+                const payload = {
+                    ...formData,
+                    managerIds: [
+                        formData.managerId,
+                        ...(formData.managerIds ?? []),
+                    ].filter(Boolean) as string[],
+                }
+                await updateProject(project.id, payload as CreateProjectRequest)
             } else {
-                await createProject(formData as CreateProjectRequest)
+                const payload = {
+                    ...formData,
+                    managerIds: [
+                        formData.managerId,
+                        ...(formData.managerIds ?? []),
+                    ].filter(Boolean) as string[],
+                }
+                await createProject(payload as CreateProjectRequest)
             }
 
             setOpen(false)
@@ -290,6 +305,34 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                             )}
                                         </SelectContent>
                                     </Select>
+                                </div>
+                                <div className="space-y-2 md:col-span-2">
+                                    <Label>Additional Project Managers</Label>
+                                    <div className="flex flex-wrap gap-3 border rounded-md p-3 max-h-32 overflow-y-auto">
+                                        {projectManagerOptions
+                                            .filter((emp) => emp.id !== formData.managerId)
+                                            .map((emp) => {
+                                                const checked = (formData.managerIds ?? []).includes(emp.id)
+                                                return (
+                                                    <label key={emp.id} className="flex items-center gap-2 text-sm">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={checked}
+                                                            onChange={(e) => {
+                                                                const next = new Set(formData.managerIds ?? [])
+                                                                if (e.target.checked) next.add(emp.id)
+                                                                else next.delete(emp.id)
+                                                                updateField('managerIds', [...next])
+                                                            }}
+                                                        />
+                                                        {emp.name}
+                                                    </label>
+                                                )
+                                            })}
+                                        {projectManagerOptions.filter((emp) => emp.id !== formData.managerId).length === 0 && (
+                                            <span className="text-xs text-gray-500">Select a primary PM first, or add employees with the Project Manager role.</span>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Status</Label>

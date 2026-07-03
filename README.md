@@ -110,6 +110,7 @@ Admins can also upload planner files via **Inputs** in the sidebar (`/inputs`).
 
 ## Documentation
 
+- **[R360 Role-Based KT Guide](./docs/R360_KNOWLEDGE_TRANSFER.md)** — executive KT for Employee, PM, DM, CEO (business outcomes, data flow, AI, demo script)
 - **[Role Feature Guide (PM / DM / CEO)](./docs/ROLE_FEATURE_GUIDE.md)** — persona workspaces, module features, and screenshots
 
 ## Environment variables

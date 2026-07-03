@@ -6,6 +6,7 @@ import { ROLES } from '../../common/constants/roles';
 import { normalizeRoleName, isEmployeeAccessRole } from '../../common/utils/role-normalize.util';
 import { resolveEmployeeAssignedProjectIds } from '../../common/utils/employee-project-scope.util';
 import { isProjectInDeliveryManagerPortfolio, getPortfolioProjectIds } from '../../common/utils/delivery-scope.util';
+import { shouldViewAllProjects } from '../../common/utils/mvp-permissions.util';
 
 export class ProjectController {
     /**
@@ -18,6 +19,7 @@ export class ProjectController {
         if (mapped.code !== undefined) { mapped.project_code = mapped.code; delete mapped.code; }
         if (mapped.ownerId !== undefined) { mapped.project_owner_id = mapped.ownerId; delete mapped.ownerId; }
         if (mapped.managerId !== undefined) { mapped.project_manager_id = mapped.managerId; delete mapped.managerId; }
+        if (mapped.managerIds !== undefined) { mapped.project_manager_ids = mapped.managerIds; delete mapped.managerIds; }
         if (mapped.startDate !== undefined) { mapped.start_date = mapped.startDate; delete mapped.startDate; }
         if (mapped.endDate !== undefined) { mapped.end_date = mapped.endDate; delete mapped.endDate; }
         if (mapped.billingType !== undefined) { mapped.billing_type = mapped.billingType; delete mapped.billingType; }
@@ -35,8 +37,8 @@ export class ProjectController {
                 status: req.query.status as string | undefined,
             };
 
-            // RBAC: If PM, only show projects they own/manage
-            if (user && role === ROLES.PROJECT_MANAGER) {
+            // RBAC: If PM, only show projects they own/manage (legacy). MVP: all projects visible.
+            if (user && role === ROLES.PROJECT_MANAGER && !shouldViewAllProjects(role)) {
                 const employeeId = getAuthEmployeeId(user);
                 if (employeeId) {
                     params.managerId = employeeId;
@@ -44,8 +46,8 @@ export class ProjectController {
                 }
             }
 
-            // RBAC: DM sees only delivery-portfolio projects
-            if (user && role === ROLES.DELIVERY_MANAGER) {
+            // RBAC: DM sees only delivery-portfolio projects (legacy). MVP: all projects visible.
+            if (user && role === ROLES.DELIVERY_MANAGER && !shouldViewAllProjects(role)) {
                 const employeeId = getAuthEmployeeId(user);
                 params.projectIds = employeeId ? await getPortfolioProjectIds(employeeId) : [];
             }
@@ -98,7 +100,7 @@ export class ProjectController {
                 }
             }
 
-            if (user && role === ROLES.DELIVERY_MANAGER) {
+            if (user && role === ROLES.DELIVERY_MANAGER && !shouldViewAllProjects(role)) {
                 const employeeId = getAuthEmployeeId(user);
                 if (!employeeId || !(await isProjectInDeliveryManagerPortfolio(employeeId, id))) {
                     res.status(403).json({
@@ -150,6 +152,19 @@ export class ProjectController {
             const mappedBody = this.mapRequestBody(req.body);
             const project = await projectService.update(id, mappedBody);
 
+            res.json({
+                status: 'success',
+                data: project,
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async remove(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { id } = req.params;
+            const project = await projectService.deactivate(id);
             res.json({
                 status: 'success',
                 data: project,

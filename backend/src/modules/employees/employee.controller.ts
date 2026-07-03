@@ -181,6 +181,19 @@ export class EmployeeController {
             next(error);
         }
     }
+
+    async remove(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { id } = req.params;
+            const employee = await employeeService.deactivate(id);
+            res.json({
+                status: 'success',
+                data: employee,
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 export const employeeController = new EmployeeController();

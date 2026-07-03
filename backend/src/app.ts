@@ -28,6 +28,7 @@ import { utilizationRouter } from './modules/utilization/utilization.routes';
 import { plannerImportRouter } from './modules/planner-import/planner-import.routes';
 import { googleSheetSyncRouter } from './modules/google-sheet-sync/google-sheet-sync.routes';
 import { deliveryPortfolioRouter } from './modules/delivery-portfolios/delivery-portfolio.routes';
+import { configRouter } from './modules/config/config.routes';
 
 import './modules/skills/skill.model';
 import './modules/weekly-allocations/weekly-allocation-entry.model';
@@ -137,6 +138,7 @@ const reportsLimiter = createRateLimiter({
     max: 15,
 });
 
+app.use('/api/config', configRouter);
 app.use('/api/employees', employeeRouter);
 app.use('/api/projects', projectRouter);
 app.use('/api/allocations', allocationRouter);

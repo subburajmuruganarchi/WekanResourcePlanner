@@ -1,5 +1,6 @@
 /** Frontend role constants and helpers — mirror backend/src/common/constants/roles.ts */
 import { normalizeRoleName } from './role-utils';
+import { getMvpFeatures } from './mvp-config';
 
 export const ROLES = {
     ADMIN: 'Admin',
@@ -23,10 +24,46 @@ export function isExecutiveReadOnly(role: string | undefined): boolean {
     return normalizeRoleName(role) === ROLES.CEO;
 }
 
-/** Weekly allocation grid edit — Delivery Manager only (Admin is read-only). */
+/** Weekly allocation grid edit — legacy: DM only. MVP: PM only (project scope on page). */
 export function canEditAllocations(role: string | undefined): boolean {
     const r = normalizeRoleName(role);
+    const { mvpMode } = getMvpFeatures();
+    if (mvpMode) {
+        return r === ROLES.PROJECT_MANAGER;
+    }
     return r === ROLES.DELIVERY_MANAGER;
+}
+
+/** MVP: assign employees to projects — PM (scoped) + DM + Admin. */
+export function canAssignProjectStaff(role: string | undefined): boolean {
+    const r = normalizeRoleName(role);
+    const { mvpMode } = getMvpFeatures();
+    if (!mvpMode) {
+        return r === ROLES.DELIVERY_MANAGER || r === ROLES.PROJECT_MANAGER;
+    }
+    return (
+        r === ROLES.PROJECT_MANAGER ||
+        r === ROLES.DELIVERY_MANAGER ||
+        r === ROLES.ADMIN
+    );
+}
+
+/** Org-wide project and employee CRUD in MVP (DM, CEO, Admin). */
+export function canManageOrgEntities(role: string | undefined): boolean {
+    const r = normalizeRoleName(role);
+    const { mvpMode } = getMvpFeatures();
+    if (!mvpMode) return r === ROLES.ADMIN;
+    return (
+        r === ROLES.ADMIN ||
+        r === ROLES.CEO ||
+        r === ROLES.DELIVERY_MANAGER
+    );
+}
+
+export function canViewResourceAllocation(role: string | undefined): boolean {
+    const { mvpMode } = getMvpFeatures();
+    if (!mvpMode) return canSeeManagementDashboard(role);
+    return true;
 }
 
 export function canSeeManagementDashboard(role: string | undefined): boolean {

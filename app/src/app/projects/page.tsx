@@ -7,6 +7,8 @@ import { FilterBar } from "@/components/shared/filter-bar"
 import { Loader2, AlertCircle } from "lucide-react"
 import { useEmployees } from "@/lib/use-employees"
 import { useProjects } from "@/lib/use-projects"
+import { useAuth } from "@/lib/auth-context"
+import { canManageOrgEntities } from "@/lib/roles"
 import { EmployeeDialog } from "./components/employee-dialog"
 import { ProjectDialog } from "./components/project-dialog"
 import { EmployeeListCards } from "./components/employee-list-cards"
@@ -70,6 +72,8 @@ function matchesProjectSearch(project: Project, query: string): boolean {
 
 export function Projects() {
     const navigate = useNavigate()
+    const { user } = useAuth()
+    const canManage = canManageOrgEntities(user?.role)
     const [activeTab, setActiveTab] = useState("employee")
     const { employees, loading: empLoading, error: empError } = useEmployees()
     const { projects, loading: projLoading, error: projError } = useProjects()
@@ -130,11 +134,11 @@ export function Projects() {
                     <h1 className="text-2xl font-semibold text-gray-900">Employees and Projects</h1>
                     <p className="text-sm text-gray-600 mt-1">View all employee&apos;s personal information, manage projects and allocation.</p>
                 </div>
-                {activeTab === "employee" ? (
+                {canManage && (activeTab === "employee" ? (
                     <Button onClick={handleCreateEmployee} className="bg-brand-500 hover:bg-brand-600">Add Employee</Button>
                 ) : (
                     <Button onClick={handleCreateProject} className="bg-brand-500 hover:bg-brand-600">Add Project</Button>
-                )}
+                ))}
             </div>
 
             <ProjectDialog

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { ROLES, type SystemRoleName } from './roles';
 import { normalizeRoleName } from './role-utils';
+import { getMvpFeatures, isNavPathEnabled } from './mvp-config';
 
 export type NavItemDef = {
     label: string;
@@ -44,6 +45,8 @@ export const PERSONA_NAV: Record<string, NavGroupDef[]> = {
             title: 'Executive Command',
             items: [
                 { label: 'Executive Dashboard', path: '/executive', icon: LayoutDashboard, roles: [ROLES.CEO] },
+                { label: 'Portfolio Projects', path: '/projects', icon: FolderKanban, roles: [ROLES.CEO] },
+                { label: 'Resource Allocation', path: '/allocation', icon: Users, roles: [ROLES.CEO] },
                 { label: 'Risk Radar', path: '/executive/risk-radar', icon: Radar, roles: [ROLES.CEO] },
                 { label: 'OKR Alignment', path: '/okrs', icon: Target, roles: [ROLES.CEO] },
                 { label: 'Reports', path: '/reports', icon: FileBarChart, roles: [ROLES.CEO] },
@@ -55,8 +58,8 @@ export const PERSONA_NAV: Record<string, NavGroupDef[]> = {
             title: 'Delivery Command',
             items: [
                 { label: 'Command Center', path: '/delivery', icon: LayoutDashboard, roles: [ROLES.DELIVERY_MANAGER] },
-                { label: 'Portfolio Projects', path: '/projects', icon: FolderKanban, roles: [ROLES.DELIVERY_MANAGER] },
-                { label: 'Resource Planning', path: '/allocation', icon: Users, roles: [ROLES.DELIVERY_MANAGER] },
+                { label: 'Employees & Projects', path: '/projects', icon: FolderKanban, roles: [ROLES.DELIVERY_MANAGER] },
+                { label: 'Resource Allocation', path: '/allocation', icon: Users, roles: [ROLES.DELIVERY_MANAGER] },
                 { label: 'Capacity Forecast', path: '/delivery/capacity', icon: TrendingUp, roles: [ROLES.DELIVERY_MANAGER] },
                 { label: 'Approvals', path: '/pm-approvals', icon: ClipboardCheck, roles: [ROLES.DELIVERY_MANAGER] },
                 { label: 'Reports', path: '/reports', icon: FileBarChart, roles: [ROLES.DELIVERY_MANAGER] },
@@ -69,6 +72,7 @@ export const PERSONA_NAV: Record<string, NavGroupDef[]> = {
             title: 'Project Workspace',
             items: [
                 { label: 'Project Dashboard', path: '/pm', icon: LayoutDashboard, roles: [ROLES.PROJECT_MANAGER] },
+                { label: 'All Projects', path: '/projects', icon: FolderKanban, roles: [ROLES.PROJECT_MANAGER] },
                 { label: 'Timeline', path: '/pm/timeline', icon: GanttChart, roles: [ROLES.PROJECT_MANAGER] },
                 { label: 'Team', path: '/pm/team', icon: Users, roles: [ROLES.PROJECT_MANAGER] },
                 { label: 'Resource Allocation', path: '/allocation', icon: CalendarRange, roles: [ROLES.PROJECT_MANAGER] },
@@ -83,6 +87,7 @@ export const PERSONA_NAV: Record<string, NavGroupDef[]> = {
             title: 'My Workspace',
             items: [
                 { label: 'My Workspace', path: '/workspace', icon: Home, roles: [ROLES.EMPLOYEE, ROLES.USER] },
+                { label: 'Resource Allocation', path: '/allocation', icon: CalendarRange, roles: [ROLES.EMPLOYEE, ROLES.USER] },
                 { label: 'Time Tracking', path: '/time-entry', icon: Clock, roles: [ROLES.EMPLOYEE, ROLES.USER] },
                 { label: 'My OKRs', path: '/okrs', icon: Target, roles: '*' },
             ],
@@ -93,6 +98,7 @@ export const PERSONA_NAV: Record<string, NavGroupDef[]> = {
             title: 'My Workspace',
             items: [
                 { label: 'My Workspace', path: '/workspace', icon: Home, roles: [ROLES.EMPLOYEE, ROLES.USER] },
+                { label: 'Resource Allocation', path: '/allocation', icon: CalendarRange, roles: [ROLES.EMPLOYEE, ROLES.USER] },
                 { label: 'Time Tracking', path: '/time-entry', icon: Clock, roles: [ROLES.EMPLOYEE, ROLES.USER] },
                 { label: 'My OKRs', path: '/okrs', icon: Target, roles: '*' },
             ],
@@ -142,7 +148,7 @@ export const ROUTE_ACCESS: Record<string, SystemRoleName[] | '*'> = {
     '/pm/communication': [ROLES.PROJECT_MANAGER],
     '/dashboard': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
     '/projects': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
-    '/allocation': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
+    '/allocation': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER, ROLES.EMPLOYEE, ROLES.USER],
     '/weekly-planner': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.CEO, ROLES.DELIVERY_MANAGER],
     '/time-entry': [ROLES.EMPLOYEE, ROLES.USER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.DELIVERY_MANAGER],
     '/pm-approvals': [ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.DELIVERY_MANAGER],
@@ -158,15 +164,25 @@ export const ROUTE_ACCESS: Record<string, SystemRoleName[] | '*'> = {
 export function getNavGroupsForRole(role: string | undefined): NavGroupDef[] {
     if (!role) return [];
     const canonical = normalizeRoleName(role);
-    if (canonical === ROLES.ADMIN) return PERSONA_NAV[ROLES.ADMIN] ?? [];
-    if (canonical === ROLES.USER) {
-        return PERSONA_NAV[ROLES.USER] ?? PERSONA_NAV[ROLES.EMPLOYEE] ?? [];
-    }
-    return PERSONA_NAV[canonical] ?? PERSONA_NAV[ROLES.EMPLOYEE] ?? [];
+    const flags = getMvpFeatures();
+    const base =
+        canonical === ROLES.ADMIN
+            ? (PERSONA_NAV[ROLES.ADMIN] ?? [])
+            : canonical === ROLES.USER
+              ? (PERSONA_NAV[ROLES.USER] ?? PERSONA_NAV[ROLES.EMPLOYEE] ?? [])
+              : (PERSONA_NAV[canonical] ?? PERSONA_NAV[ROLES.EMPLOYEE] ?? []);
+
+    return base
+        .map((group) => ({
+            ...group,
+            items: group.items.filter((item) => isNavPathEnabled(item.path, flags)),
+        }))
+        .filter((group) => group.items.length > 0);
 }
 
 export function canAccessNavPath(role: string | undefined, path: string): boolean {
     if (!role) return false;
+    if (!isNavPathEnabled(path)) return false;
     const canonical = normalizeRoleName(role);
     if (canonical === ROLES.ADMIN) return true;
     if (ROUTE_ACCESS[path]) {

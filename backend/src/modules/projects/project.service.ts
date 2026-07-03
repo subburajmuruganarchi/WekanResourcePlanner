@@ -47,6 +47,8 @@ export interface ProjectResponse {
     ownerId?: string;
     managerId: string;
     managerName: string;
+    managerIds?: string[];
+    managerNames?: string[];
     startDate: string;
     endDate: string;
     status: string;
@@ -88,6 +90,7 @@ interface PopulatedProject {
     project_name: string;
     project_owner_id: { _id: Types.ObjectId; first_name: string; last_name: string } | Types.ObjectId;
     project_manager_id: { _id: Types.ObjectId; first_name: string; last_name: string } | Types.ObjectId;
+    project_manager_ids?: Types.ObjectId[];
     start_date: Date;
     end_date: Date;
     status: string;
@@ -277,6 +280,8 @@ export class ProjectService {
             throw new AppError('Start date cannot be after end date', 400);
         }
 
+        this.syncProjectManagers(data);
+
         const project = new Project(data);
         await project.save();
 
@@ -299,6 +304,7 @@ export class ProjectService {
         }
 
         const oldProject = await Project.findById(id).lean();
+        this.syncProjectManagers(data);
         const project = await Project.findByIdAndUpdate(id, data, { new: true, runValidators: true });
 
         if (!project) {
@@ -351,6 +357,35 @@ export class ProjectService {
         return this.findById(id) as Promise<ProjectResponse>;
     }
 
+    async deactivate(id: string): Promise<ProjectResponse> {
+        if (!Types.ObjectId.isValid(id)) {
+            throw new AppError('Invalid project ID', 400);
+        }
+
+        const project = await Project.findByIdAndUpdate(
+            id,
+            { is_active: false, status: 'Inactive' },
+            { new: true }
+        );
+
+        if (!project) {
+            throw new AppError('Project not found', 404);
+        }
+
+        return this.findById(id) as Promise<ProjectResponse>;
+    }
+
+    /** Keep primary PM and full PM list in sync for multi-PM MVP support. */
+    private syncProjectManagers(data: Partial<IProject>): void {
+        const primary = data.project_manager_id?.toString();
+        const extra = (data.project_manager_ids ?? []).map((id) => id.toString());
+        const all = [...new Set([primary, ...extra].filter(Boolean) as string[])];
+        if (all.length === 0) return;
+
+        data.project_manager_id = new Types.ObjectId(all[0]);
+        data.project_manager_ids = all.map((id) => new Types.ObjectId(id));
+    }
+
     private mapToResponse(
         proj: PopulatedProject,
         skillReqs: PopulatedSkillRequirement[],
@@ -374,6 +409,11 @@ export class ProjectService {
             managerName = `${manager.first_name} ${manager.last_name}`;
             managerId = manager._id?.toString();
         }
+
+        const managerIds = (proj.project_manager_ids ?? []).map((id: Types.ObjectId) =>
+            id?.toString()
+        ).filter(Boolean) as string[];
+        const uniqueManagerIds = [...new Set([managerId, ...managerIds].filter(Boolean))];
 
         const formatDate = (date: Date | string | undefined): string => {
             if (!date) return '';
@@ -479,6 +519,7 @@ export class ProjectService {
             ownerId,
             managerId,
             managerName,
+            managerIds: uniqueManagerIds.length > 0 ? uniqueManagerIds : undefined,
             startDate: formatDate(proj.start_date),
             endDate: formatDate(proj.end_date),
             status: normalizeProjectStatus(proj.status),

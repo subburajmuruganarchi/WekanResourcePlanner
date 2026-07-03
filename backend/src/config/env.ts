@@ -93,6 +93,22 @@ const envSchema = z.object({
         .optional()
         .default('true')
         .transform((v) => v === 'true' || v === '1'),
+    /** MVP restructuring — tighter RBAC, hide time entry, PM manual actuals. */
+    FEATURE_MVP_MODE: z
+        .enum(['true', 'false', '1', '0'])
+        .optional()
+        .default('true')
+        .transform((v) => v === 'true' || v === '1'),
+    /** Employee timesheet entry (disabled by default when MVP mode is on). */
+    FEATURE_TIME_ENTRY_ENABLED: z
+        .enum(['true', 'false', '1', '0'])
+        .optional()
+        .transform((v) => v === 'true' || v === '1'),
+    /** PM timesheet approval workflow. */
+    FEATURE_TIMESHEET_APPROVAL_ENABLED: z
+        .enum(['true', 'false', '1', '0'])
+        .optional()
+        .transform((v) => v === 'true' || v === '1'),
 });
 
 const parsedEnv = envSchema.safeParse({
