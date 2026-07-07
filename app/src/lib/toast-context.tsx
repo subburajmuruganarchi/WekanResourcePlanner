@@ -57,38 +57,41 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     return (
         <ToastContext.Provider value={value}>
             {children}
-            <div
-                className="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full pointer-events-none"
-                aria-live="polite"
-                aria-label="Notifications"
-            >
-                {toasts.map((t) => (
-                    <div
-                        key={t.id}
-                        role="status"
-                        className={cn(
-                            'pointer-events-auto flex gap-3 p-4 rounded-xl border shadow-lg animate-in slide-in-from-top-2 duration-200',
-                            variantStyles[t.variant ?? 'default']
-                        )}
-                    >
-                        <div className="shrink-0 mt-0.5">{variantIcons[t.variant ?? 'default']}</div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-card-foreground">{t.title}</p>
-                            {t.description && (
-                                <p className="text-xs text-muted-foreground mt-1">{t.description}</p>
+            {toasts.length > 0 && (
+                <div
+                    role="region"
+                    aria-label="Notifications"
+                    className="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full pointer-events-none"
+                >
+                    {toasts.map((t) => (
+                        <div
+                            key={t.id}
+                            role="status"
+                            aria-live="polite"
+                            className={cn(
+                                'pointer-events-auto flex gap-3 p-4 rounded-xl border shadow-lg animate-in slide-in-from-top-2 duration-200',
+                                variantStyles[t.variant ?? 'default']
                             )}
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => dismiss(t.id)}
-                            className="shrink-0 p-1 rounded hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            aria-label="Dismiss"
                         >
-                            <X className="w-3.5 h-3.5 text-muted-foreground" />
-                        </button>
-                    </div>
-                ))}
-            </div>
+                            <div className="shrink-0 mt-0.5">{variantIcons[t.variant ?? 'default']}</div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-card-foreground">{t.title}</p>
+                                {t.description && (
+                                    <p className="text-xs text-muted-foreground mt-1">{t.description}</p>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => dismiss(t.id)}
+                                className="shrink-0 p-1 rounded hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                aria-label="Dismiss"
+                            >
+                                <X className="w-3.5 h-3.5 text-muted-foreground" />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
         </ToastContext.Provider>
     );
 }
