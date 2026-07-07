@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "vite preview --host --port ${PORT:-4173}",
-    "a11y": "npm run build && start-server-and-test \"vite preview --port 4173 --strictPort\" http://127.0.0.1:4173/login \"axe http://127.0.0.1:4173/login --exit\""
+    "a11y": "npm run build && bash scripts/a11y-ci.sh"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
