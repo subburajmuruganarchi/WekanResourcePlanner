@@ -2,10 +2,11 @@ import mongoose from 'mongoose';
 import { TimeEntry } from '../time-entries/time-entry.model';
 import { TimeCode } from '../time-entries/time-code.model';
 import { Project } from '../projects/project.model';
-import { ProjectAllocation } from '../allocations/allocation.model';
+import { ProjectAllocation, AllocationOverrideLog } from '../allocations/allocation.model';
 import { Employee } from '../employees/employee.model';
 import { Role } from '../roles/role.model';
 import { Notification } from '../notifications/notification.model';
+import { SyncRun } from '../google-sheet-sync/sync-run.model';
 import { TimeEntryStatus } from '../../common/types/enums';
 import { operationalProjectMongoFilter } from '../../common/utils/project-status.util';
 
@@ -149,4 +150,86 @@ export async function runSystemVerify(): Promise<VerifyResult> {
         return { status: 'WARN', issues };
     }
     return { status: 'PASS', issues: [] };
+}
+
+export type AuditEventSeverity = 'info' | 'warning' | 'critical';
+
+export interface AuditEvent {
+    id: string;
+    type: 'allocation_override' | 'sync_run';
+    timestamp: string;
+    title: string;
+    detail: string;
+    severity: AuditEventSeverity;
+    actor?: string;
+    meta?: Record<string, string | number | null>;
+}
+
+export async function buildAuditCenter(limit = 50): Promise<AuditEvent[]> {
+    const cap = Math.min(Math.max(limit, 1), 100);
+
+    const [overrideLogs, syncRuns] = await Promise.all([
+        AllocationOverrideLog.find()
+            .sort({ created_at: -1 })
+            .limit(cap)
+            .populate('employee_id', 'name')
+            .populate('project_id', 'name code')
+            .populate('authorized_by', 'email name')
+            .lean(),
+        SyncRun.find()
+            .sort({ startedAt: -1 })
+            .limit(cap)
+            .lean(),
+    ]);
+
+    const events: AuditEvent[] = [];
+
+    for (const log of overrideLogs) {
+        const employee = log.employee_id as { name?: string } | null;
+        const project = log.project_id as { name?: string; code?: string } | null;
+        const author = log.authorized_by as { email?: string; name?: string } | null;
+        const ts = (log as { created_at?: Date }).created_at ?? new Date();
+
+        events.push({
+            id: String((log as { _id: unknown })._id),
+            type: 'allocation_override',
+            timestamp: ts instanceof Date ? ts.toISOString() : new Date(ts).toISOString(),
+            title: 'Allocation override authorized',
+            detail: `${employee?.name ?? 'Employee'} → ${project?.name ?? project?.code ?? 'Project'} at ${log.requested_percentage}%`,
+            severity: log.requested_percentage > 100 ? 'critical' : 'warning',
+            actor: author?.name ?? author?.email,
+            meta: {
+                reason: log.reason,
+                requestedPercentage: log.requested_percentage,
+                projectCode: project?.code ?? null,
+            },
+        });
+    }
+
+    for (const run of syncRuns) {
+        const severity: AuditEventSeverity =
+            run.status === 'FAILED' ? 'critical' : run.status === 'RUNNING' ? 'info' : 'warning';
+        const ended = run.completedAt ?? run.startedAt;
+
+        events.push({
+            id: String(run._id),
+            type: 'sync_run',
+            timestamp: (ended instanceof Date ? ended : new Date(ended)).toISOString(),
+            title: `Sheet sync · ${run.sheet}`,
+            detail:
+                run.status === 'SUCCESS'
+                    ? `Processed ${run.rowsProcessed} rows (${run.rowsSkipped} skipped)`
+                    : run.errorMessage ?? run.errorMessages?.[0] ?? `Status: ${run.status}`,
+            severity: run.status === 'SUCCESS' ? 'info' : severity,
+            meta: {
+                status: run.status,
+                rowsProcessed: run.rowsProcessed,
+                rowsSkipped: run.rowsSkipped,
+                syncBatchId: run.syncBatchId ?? null,
+            },
+        });
+    }
+
+    events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return events.slice(0, cap);
 }

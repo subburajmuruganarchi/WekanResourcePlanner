@@ -1,0 +1,40 @@
+/**
+ * Dark theme overrides — activated via data-theme="dark" on <html>
+ */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-background: #0c0f14;
+  --color-foreground: #f4f4f5;
+  --color-card: #141820;
+  --color-card-foreground: #f4f4f5;
+  --color-muted: #1e2430;
+  --color-muted-foreground: #94a3b8;
+  --color-border: #2a3344;
+  --color-ring: #f37555;
+
+  --color-surface: #0c0f14;
+  --color-ink: #f4f4f5;
+  --color-ink-muted: #94a3b8;
+  --color-border-subtle: #2a3344;
+
+  --color-success-bg: rgb(5 150 105 / 0.15);
+  --color-success-border: rgb(5 150 105 / 0.35);
+  --color-warning-bg: rgb(217 119 6 / 0.15);
+  --color-warning-border: rgb(217 119 6 / 0.35);
+  --color-critical-bg: rgb(220 38 38 / 0.15);
+  --color-critical-border: rgb(220 38 38 / 0.35);
+  --color-info-bg: rgb(37 99 235 / 0.15);
+  --color-info-border: rgb(37 99 235 / 0.35);
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.2), 0 4px 12px rgb(0 0 0 / 0.25);
+  --shadow-card-hover: 0 4px 6px rgb(0 0 0 / 0.25), 0 12px 28px rgb(0 0 0 / 0.3);
+}
+
+[data-theme="dark"] .sidebar-nav-scroll {
+  scrollbar-color: #3d4a5c transparent;
+}
+
+[data-theme="dark"] .sidebar-nav-scroll::-webkit-scrollbar-thumb {
+  background-color: #3d4a5c;
+}

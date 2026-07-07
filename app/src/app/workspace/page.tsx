@@ -1,15 +1,22 @@
 import { useNavigate } from 'react-router-dom';
-import { Clock, Target, FolderKanban, Bell, CheckCircle2, ArrowRight, Loader2 } from 'lucide-react';
+import { Clock, Target, FolderKanban, Bell, CheckCircle2, ArrowRight, Calendar, ClipboardList, Gauge } from 'lucide-react';
 import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
-import { WorkspacePageHeader, WorkspaceSection } from '@/components/workspaces/shared';
+import { PageHeader, Section, MetricCard, MetricGrid, EmptyState } from '@/components/patterns';
+import { CopilotSuggestedActions } from '@/components/workspaces/ai/CopilotSuggestedActions';
 import { useAuth } from '@/lib/auth-context';
 import { useProjects, PROJECTS_CHANGED_EVENT } from '@/lib/use-projects';
 import { useOkrs } from '@/lib/use-okrs';
+import { useNotifications } from '@/lib/use-notifications';
+import { useUtilizationVariance } from '@/lib/use-utilization';
 import { api } from '@/lib/api';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { getCurrentWeekStart } from '@/lib/time-entry-week';
 import { isActiveProject } from '@/lib/project-status';
+import {
+    buildDashboardPeriodRange,
+    getCurrentMonthValue,
+} from '@/lib/dashboard-period';
 
 function getCurrentQuarter(): string {
     const now = new Date();
@@ -22,8 +29,35 @@ export default function EmployeeWorkspacePage() {
     const navigate = useNavigate();
     const { projects, loading: projectsLoading, refetch: refetchProjects } = useProjects();
     const { okrs, overallScore, loading: okrLoading } = useOkrs(user?.id, getCurrentQuarter());
+    const { notifications, unreadCount } = useNotifications();
+    const { data: utilizationData, loading: utilLoading, fetchVariance } = useUtilizationVariance();
     const [timesheetStatus, setTimesheetStatus] = useState<'Draft' | 'Submitted' | 'Approved' | 'Unknown'>('Unknown');
     const [weekHours, setWeekHours] = useState(0);
+    const [plannedHours, setPlannedHours] = useState(0);
+    const [targetHours] = useState(40);
+
+    const myUtilization = useMemo(() => {
+        const summary = utilizationData?.summary;
+        if (!summary || summary.totalPlannedHours <= 0) return null;
+        return Math.min(100, Math.round((summary.totalActualHours / summary.totalPlannedHours) * 100));
+    }, [utilizationData]);
+
+    const pendingActions = useMemo(() => {
+        const items: { label: string; action: () => void }[] = [];
+        if (timesheetStatus === 'Draft') {
+            items.push({ label: 'Submit weekly timesheet', action: () => navigate('/time-entry') });
+        }
+        if (timesheetStatus === 'Submitted') {
+            items.push({ label: 'Timesheet awaiting approval', action: () => navigate('/time-entry') });
+        }
+        if (unreadCount > 0) {
+            items.push({ label: `${unreadCount} unread notification(s)`, action: () => {} });
+        }
+        if (okrs.length > 0 && overallScore < 50) {
+            items.push({ label: 'Update OKR progress', action: () => navigate('/okrs') });
+        }
+        return items;
+    }, [timesheetStatus, unreadCount, okrs.length, overallScore, navigate]);
 
     const myProjects = [...projects].sort((a, b) => {
         const aRank = isActiveProject(a) ? 0 : 1;
@@ -51,11 +85,25 @@ export default function EmployeeWorkspacePage() {
                 else setTimesheetStatus('Draft');
             })
             .catch(() => setTimesheetStatus('Unknown'));
-    }, [user?.id]);
+
+        api.get(`/time-entries/estimates?employeeId=${user.id}&week=${week}`)
+            .then((res: unknown) => {
+                const est = (res as { data?: { data?: { totalEstimated?: number } } })?.data?.data;
+                setPlannedHours(est?.totalEstimated ?? 0);
+            })
+            .catch(() => setPlannedHours(0));
+
+        const period = buildDashboardPeriodRange('week', week, getCurrentMonthValue());
+        void fetchVariance({
+            weekStartFrom: period.weekStartFrom,
+            weekStartTo: period.weekStartTo,
+            employeeId: user.id,
+        });
+    }, [user?.id, fetchVariance]);
 
     return (
         <PageContainer className="space-y-8">
-            <WorkspacePageHeader
+            <PageHeader
                 eyebrow="My Workspace"
                 title={`Good day, ${user?.name?.split(' ')[0] ?? 'there'}`}
                 description="Your daily command center — work, time, goals, and actions in one place."
@@ -67,41 +115,62 @@ export default function EmployeeWorkspacePage() {
                 }
             />
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="dashboard-card p-5 lg:col-span-2">
-                    <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-brand-600" />
-                        Today&apos;s Work
-                    </h3>
-                    <p className="text-sm text-slate-600 mt-3 leading-relaxed">
-                        Focus on active project deliverables and close open timesheet entries for this week.
-                    </p>
-                    <Button variant="outline" size="sm" className="mt-4" onClick={() => navigate('/time-entry')}>
-                        Log time today
-                    </Button>
-                </div>
+            <CopilotSuggestedActions />
 
-                <div className="dashboard-card p-5">
-                    <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-brand-600" />
-                        Timesheet Status
-                    </h3>
-                    <p className="text-2xl font-bold text-slate-900 mt-3">{timesheetStatus}</p>
-                    <p className="text-xs text-slate-500 mt-1">{weekHours}h logged this week</p>
-                </div>
-            </div>
+            <MetricGrid columns={{ sm: 2, xl: 4 }}>
+                <MetricCard
+                    label="Timesheet Status"
+                    value={timesheetStatus}
+                    hint={`${weekHours}h of ${targetHours}h logged this week`}
+                    icon={Clock}
+                    accent="brand"
+                    onClick={() => navigate('/time-entry')}
+                />
+                <MetricCard
+                    label="Week Progress"
+                    value={`${Math.min(100, Math.round((weekHours / targetHours) * 100))}%`}
+                    hint={weekHours >= targetHours ? 'Weekly target met' : `${targetHours - weekHours}h remaining`}
+                    icon={Calendar}
+                    accent="sky"
+                />
+                <MetricCard
+                    label="Planned This Week"
+                    value={plannedHours > 0 ? `${Math.round(plannedHours)}h` : '—'}
+                    hint={plannedHours > 0 ? 'From your allocation plan' : 'No allocation plan yet'}
+                    icon={Gauge}
+                    accent="violet"
+                />
+                <MetricCard
+                    label="My Utilization"
+                    value={utilLoading ? '—' : myUtilization != null ? `${myUtilization}%` : '—'}
+                    hint={utilLoading ? 'Loading…' : 'Actual vs planned hours this week'}
+                    icon={Gauge}
+                    accent="emerald"
+                />
+                <MetricCard
+                    label="My OKRs"
+                    value={okrLoading ? '—' : `${overallScore}%`}
+                    hint={okrLoading ? 'Loading…' : `${okrs.length} objective(s) this quarter`}
+                    icon={Target}
+                    accent="emerald"
+                    onClick={() => navigate('/okrs')}
+                />
+            </MetricGrid>
 
-            <WorkspaceSection title="My Projects">
+            <Section title="My Projects">
                 {projectsLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-slate-500 p-4">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Loading your projects…
-                    </div>
+                    <p className="text-sm text-muted-foreground p-4" role="status">Loading your projects…</p>
                 ) : myProjects.length === 0 ? (
-                    <p className="text-sm text-slate-500 p-4">
-                        You are not allocated to any active projects yet. Log time on a project or ask your PM to add
-                        you to the roster.
-                    </p>
+                    <EmptyState
+                        icon={FolderKanban}
+                        title="No projects assigned"
+                        description="You are not allocated to any active projects yet. Ask your PM to add you to the roster."
+                        action={
+                            <Button variant="outline" onClick={() => navigate('/time-entry')}>
+                                Open Time Tracking
+                            </Button>
+                        }
+                    />
                 ) : (
                     <div className="grid gap-3 sm:grid-cols-2">
                         {myProjects.map((p) => (
@@ -109,55 +178,72 @@ export default function EmployeeWorkspacePage() {
                                 key={p.id}
                                 type="button"
                                 onClick={() => navigate(`/projects/${p.id}`)}
-                                className="dashboard-card p-4 flex items-center gap-3 text-left w-full hover:border-brand-200 hover:shadow-sm transition-colors cursor-pointer"
+                                className="dashboard-card p-4 flex items-center gap-3 text-left w-full hover:border-brand-200 hover:shadow-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
                                 <FolderKanban className="w-5 h-5 text-brand-600 shrink-0" />
                                 <div className="min-w-0">
-                                    <p className="font-medium text-slate-900 truncate">{p.name}</p>
-                                    <p className="text-xs text-slate-500">{p.code}</p>
+                                    <p className="font-medium text-card-foreground truncate">{p.name}</p>
+                                    <p className="text-xs text-muted-foreground">{p.code}</p>
                                 </div>
-                                <ArrowRight className="w-4 h-4 text-slate-400 ml-auto shrink-0" />
+                                <ArrowRight className="w-4 h-4 text-muted-foreground ml-auto shrink-0" />
                             </button>
                         ))}
                     </div>
                 )}
-            </WorkspaceSection>
+            </Section>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="dashboard-card p-5">
-                    <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Target className="w-4 h-4 text-brand-600" />
-                        My OKRs
+                    <h3 className="text-sm font-semibold flex items-center gap-2 text-card-foreground">
+                        <ClipboardList className="w-4 h-4 text-brand-600" />
+                        Pending Actions
                     </h3>
-                    {!okrLoading && (
-                        <>
-                            <p className="text-2xl font-bold text-brand-600 mt-2">{overallScore}%</p>
-                            <p className="text-xs text-slate-500">{okrs.length} objective(s) this quarter</p>
-                        </>
+                    {pendingActions.length === 0 ? (
+                        <p className="text-sm text-muted-foreground mt-3 flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-success" />
+                            You&apos;re all caught up
+                        </p>
+                    ) : (
+                        <ul className="mt-3 space-y-2">
+                            {pendingActions.map((item) => (
+                                <li key={item.label}>
+                                    <button
+                                        type="button"
+                                        onClick={item.action}
+                                        className="text-sm text-brand-600 hover:underline text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                                    >
+                                        {item.label}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
                     )}
-                    <Button variant="link" className="px-0 mt-2" onClick={() => navigate('/okrs')}>
-                        View OKRs
-                    </Button>
                 </div>
 
                 <div className="dashboard-card p-5">
-                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <h3 className="text-sm font-semibold flex items-center gap-2 text-card-foreground">
                         <Bell className="w-4 h-4 text-brand-600" />
-                        Pending Actions
+                        Recent Notifications
                     </h3>
-                    <ul className="mt-3 space-y-2 text-sm text-slate-600">
-                        {timesheetStatus === 'Draft' && <li>Submit weekly timesheet</li>}
-                        <li>Review project announcements</li>
-                        <li>Update OKR progress if due</li>
-                    </ul>
+                    {notifications.length === 0 ? (
+                        <p className="text-sm text-muted-foreground mt-3">No recent notifications</p>
+                    ) : (
+                        <ul className="mt-3 space-y-2">
+                            {notifications.slice(0, 3).map((n) => (
+                                <li key={n.id} className="text-sm text-muted-foreground">
+                                    <span className={n.read ? '' : 'font-medium text-card-foreground'}>{n.title}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                 </div>
             </div>
 
-            <WorkspaceSection title="Announcements">
-                <div className="dashboard-card p-4 text-sm text-slate-600">
+            <Section title="Announcements">
+                <div className="dashboard-card p-4 text-sm text-muted-foreground">
                     Company-wide delivery review is scheduled for Friday. Ensure timesheets are submitted by EOD Thursday.
                 </div>
-            </WorkspaceSection>
+            </Section>
         </PageContainer>
     );
 }

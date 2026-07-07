@@ -16,10 +16,13 @@ import { DashboardPeriodFilters } from './components/dashboard-period-filters';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { AdminOpsStrip } from '@/components/dashboard/AdminOpsStrip';
 import {
     canSeeManagementDashboard,
     isExecutiveReadOnly,
+    ROLES,
 } from '@/lib/roles';
+import { normalizeRoleName } from '@/lib/role-utils';
 import { useDashboardInsight } from '@/lib/use-ai-insights';
 import { useNavigate } from 'react-router-dom';
 import type { HeatmapCell, HeatmapMeta } from '@/components/dashboard/allocation-heatmap';
@@ -58,12 +61,6 @@ interface DashboardStatsPayload {
     approvedHours: number;
     planDeliveryPercent: number;
     pendingApprovals: number;
-}
-
-function sparkFrom(base: number, variance = 8): number[] {
-    return Array.from({ length: 8 }, (_, i) =>
-        Math.max(0, Math.min(100, base + Math.sin(i * 0.9) * variance + (i % 3) * 2))
-    );
 }
 
 function healthFromRisk(score: number, level?: string): ProjectHealth {
@@ -106,6 +103,7 @@ export default function Dashboard() {
 
     const periodQuery = useMemo(() => periodQueryString(periodRange), [periodRange]);
     const isCeoView = isExecutiveReadOnly(user?.role);
+    const isAdminView = normalizeRoleName(user?.role) === ROLES.ADMIN;
     const canSeeInsights = canSeeManagementDashboard(user?.role);
 
     useEffect(() => {
@@ -310,6 +308,8 @@ export default function Dashboard() {
                 </div>
             </header>
 
+            {isAdminView && <AdminOpsStrip />}
+
             {canSeeInsights && (
                 <DashboardPeriodFilters
                     mode={periodMode}
@@ -333,8 +333,7 @@ export default function Dashboard() {
                         explanation="Projects with Active status only"
                         icon={FolderKanban}
                         accent="indigo"
-                        trend={{ value: '+12% this month', direction: 'up' }}
-                        sparklineData={sparkFrom(stats.activeProjects, 5)}
+                        trend={{ value: `${stats.activeProjects} active`, direction: 'neutral' }}
                     />
                     <KPICard
                         label="Team capacity"
@@ -342,8 +341,7 @@ export default function Dashboard() {
                         explanation="Active engineers on roster"
                         icon={Users}
                         accent="sky"
-                        trend={{ value: 'Headcount stable', direction: 'neutral' }}
-                        sparklineData={sparkFrom(stats.totalEmployees, 3)}
+                        trend={{ value: 'Headcount', direction: 'neutral' }}
                     />
                     <KPICard
                         label="Planned utilization"
@@ -352,7 +350,6 @@ export default function Dashboard() {
                         icon={Target}
                         accent="violet"
                         trend={{ value: plannedUtil >= 75 ? 'On target' : 'Below target', direction: plannedUtil >= 75 ? 'up' : 'down' }}
-                        sparklineData={sparkFrom(plannedUtil)}
                     />
                     <KPICard
                         label="Actual utilization"
@@ -364,7 +361,6 @@ export default function Dashboard() {
                             value: actualUtil >= plannedUtil ? 'Above plan' : `${plannedUtil - actualUtil}% gap`,
                             direction: actualUtil >= plannedUtil ? 'up' : 'down',
                         }}
-                        sparklineData={sparkFrom(actualUtil)}
                     />
                     <KPICard
                         label="Bench capacity"
@@ -373,7 +369,6 @@ export default function Dashboard() {
                         icon={UserMinus}
                         accent="slate"
                         trend={{ value: benchCount > 5 ? 'Review staffing' : 'Healthy bench', direction: benchCount > 5 ? 'down' : 'neutral' }}
-                        sparklineData={sparkFrom(benchCount, 4)}
                     />
                     <KPICard
                         label="Pending approvals"
@@ -382,7 +377,6 @@ export default function Dashboard() {
                         icon={ClipboardList}
                         accent="amber"
                         trend={{ value: stats.pendingApprovals > 0 ? 'Action needed' : 'Clear queue', direction: stats.pendingApprovals > 0 ? 'down' : 'up' }}
-                        sparklineData={sparkFrom(stats.pendingApprovals, 6)}
                     />
                 </div>
             )}

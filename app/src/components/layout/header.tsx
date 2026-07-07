@@ -1,41 +1,32 @@
-import { Bell, CheckCircle2, AlertCircle, Info, Check, LogOut, HelpCircle, Search } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Bell, CheckCircle2, AlertCircle, Info, Check, HelpCircle, Search, Menu, Moon, Sun } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { useMemo } from 'react';
 import { useNotifications } from '@/lib/use-notifications';
 import { useAuth } from '@/lib/auth-context';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { GlobalSearch } from './global-search';
-import { CommandPalette, type CommandItem } from './command-palette';
+import { CommandPalette } from './command-palette';
 import { ROUTE_TITLES } from '@/lib/navigation-config';
 import { AICopilotPanel } from '@/components/workspaces/ai/AICopilotPanel';
+import { useTheme } from '@/lib/theme-context';
+import { Breadcrumbs } from '@/components/patterns/breadcrumbs';
+import { ProfileMenu } from './profile-menu';
+import { getCommandItemsForRole } from '@/lib/command-items';
 
-const commandItems: CommandItem[] = [
-    { id: 'dash', label: 'Dashboard', group: 'Workspace', path: '/dashboard' },
-    { id: 'alloc', label: 'Resource Allocation', group: 'Workspace', path: '/allocation' },
-    { id: 'proj', label: 'Projects', group: 'Workspace', path: '/projects' },
-    { id: 'plan', label: 'Weekly Planner', group: 'Workspace', path: '/weekly-planner' },
-    { id: 'time', label: 'Time Entry', group: 'Operations', path: '/time-entry' },
-    { id: 'appr', label: 'PM Approvals', group: 'Operations', path: '/pm-approvals' },
-    { id: 'rep', label: 'Reports', group: 'Operations', path: '/reports' },
-    { id: 'ins', label: 'Insights Center', group: 'Intelligence', path: '/insights' },
-];
-
-export function Header() {
+export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
-    const { user, logout } = useAuth();
-    const navigate = useNavigate();
+    const { user } = useAuth();
+    const { resolvedTheme, toggleTheme } = useTheme();
     const location = useLocation();
+
+    const commandItems = useMemo(() => getCommandItemsForRole(user?.role), [user?.role]);
 
     const meta = ROUTE_TITLES[location.pathname] ??
         ROUTE_TITLES[location.pathname.split('/').slice(0, 2).join('/')] ?? {
         title: 'R360',
         breadcrumb: ['Workspace'],
-    };
-
-    const handleSignOut = () => {
-        logout();
-        navigate('/login', { replace: true });
     };
 
     const getIcon = (type: string, read: boolean) => {
@@ -55,19 +46,22 @@ export function Header() {
     return (
         <>
             <CommandPalette items={commandItems} />
-            <header className="h-16 border-b border-slate-200 bg-white/80 backdrop-blur-md px-4 lg:px-6 flex items-center justify-between gap-4 sticky top-0 z-10 shrink-0">
-                <div className="min-w-0 flex-1">
-                    <nav className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-0.5" aria-label="Breadcrumb">
-                        {meta.breadcrumb.map((crumb, i) => (
-                            <span key={crumb} className="flex items-center gap-1.5">
-                                {i > 0 && <span>/</span>}
-                                <span className={i === meta.breadcrumb.length - 1 ? 'text-brand-600 font-medium' : ''}>
-                                    {crumb}
-                                </span>
-                            </span>
-                        ))}
-                    </nav>
-                    <h1 className="text-base font-semibold text-slate-900 truncate">{meta.title}</h1>
+            <header className="h-16 border-b border-border bg-card/80 backdrop-blur-md px-4 lg:px-6 flex items-center justify-between gap-4 sticky top-0 z-10 shrink-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                    {onMenuClick && (
+                        <button
+                            type="button"
+                            onClick={onMenuClick}
+                            className="lg:hidden p-2 -ml-1 rounded-lg text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label="Open navigation menu"
+                        >
+                            <Menu className="w-5 h-5" />
+                        </button>
+                    )}
+                    <div className="min-w-0">
+                    <Breadcrumbs crumbs={meta.breadcrumb} className="mb-0.5" />
+                    <h1 className="text-base font-semibold text-card-foreground truncate">{meta.title}</h1>
+                    </div>
                 </div>
 
                 <div className="hidden lg:block w-full max-w-sm">
@@ -77,7 +71,7 @@ export function Header() {
                 <div className="flex items-center gap-2 shrink-0">
                     <button
                         type="button"
-                        className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-500 hover:bg-white transition-colors"
+                        className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-muted text-xs text-muted-foreground hover:bg-card transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         onClick={() => {
                             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
                         }}
@@ -87,7 +81,16 @@ export function Header() {
                         <kbd className="hidden md:inline text-[10px] bg-white px-1 rounded border border-slate-200">⌘K</kbd>
                     </button>
 
-                    <Button variant="ghost" size="sm" className="hidden md:flex text-slate-500" aria-label="Help">
+                    <button
+                        type="button"
+                        onClick={toggleTheme}
+                        className="p-2 text-muted-foreground hover:text-card-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    >
+                        {resolvedTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                    </button>
+
+                    <Button variant="ghost" size="sm" className="hidden md:flex text-muted-foreground" aria-label="Help">
                         <HelpCircle className="w-4 h-4" />
                     </Button>
 
@@ -97,7 +100,7 @@ export function Header() {
                         <PopoverTrigger asChild>
                             <button
                                 type="button"
-                                className="relative p-2 text-slate-500 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors"
+                                className="relative p-2 text-muted-foreground hover:text-card-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 aria-label="Notifications"
                             >
                                 <Bell className="w-5 h-5" />
@@ -109,7 +112,7 @@ export function Header() {
                             </button>
                         </PopoverTrigger>
                         <PopoverContent className="w-80 p-0 mr-4" align="end">
-                            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/80">
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/80">
                                 <h3 className="font-semibold text-sm">Notifications</h3>
                                 {unreadCount > 0 && (
                                     <Button
@@ -125,22 +128,30 @@ export function Header() {
                             </div>
                             <div className="max-h-[400px] overflow-y-auto">
                                 {notifications.length === 0 ? (
-                                    <div className="p-6 text-center text-slate-500 text-sm">No notifications</div>
+                                    <div className="p-6 text-center text-muted-foreground text-sm">No notifications</div>
                                 ) : (
-                                    <div className="divide-y divide-slate-100">
+                                    <div className="divide-y divide-border">
                                         {notifications.map((notif: { id: string; read: boolean; type: string; title: string; message: string; createdAt: string }) => (
                                             <div
                                                 key={notif.id}
-                                                className={`p-4 flex gap-3 transition-colors cursor-pointer ${notif.read ? 'bg-white' : 'bg-brand-50/40'}`}
+                                                role="button"
+                                                tabIndex={0}
+                                                className={`p-4 flex gap-3 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${notif.read ? 'bg-card' : 'bg-brand-50/40'}`}
                                                 onClick={() => !notif.read && markAsRead(notif.id)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        if (!notif.read) markAsRead(notif.id);
+                                                    }
+                                                }}
                                             >
                                                 <div className="shrink-0 mt-0.5">{getIcon(notif.type, notif.read)}</div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className={`text-sm ${notif.read ? 'text-slate-600 font-medium' : 'text-slate-900 font-semibold'}`}>
+                                                    <p className={`text-sm ${notif.read ? 'text-muted-foreground font-medium' : 'text-card-foreground font-semibold'}`}>
                                                         {notif.title}
                                                     </p>
-                                                    <p className="text-xs mt-1 text-slate-500 leading-snug">{notif.message}</p>
-                                                    <p className="text-[10px] text-slate-400 mt-2 uppercase tracking-wider">
+                                                    <p className="text-xs mt-1 text-muted-foreground leading-snug">{notif.message}</p>
+                                                    <p className="text-[10px] text-muted-foreground mt-2 uppercase tracking-wider">
                                                         {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
                                                     </p>
                                                 </div>
@@ -152,17 +163,9 @@ export function Header() {
                         </PopoverContent>
                     </Popover>
 
-                    <div className="h-8 w-px bg-slate-200 hidden sm:block" aria-hidden />
+                    <div className="h-8 w-px bg-border hidden sm:block" aria-hidden />
 
-                    <button
-                        type="button"
-                        onClick={handleSignOut}
-                        aria-label="Sign out"
-                        title={user?.name ? `Sign out (${user.name})` : 'Sign out'}
-                        className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                        <LogOut className="w-4 h-4" />
-                    </button>
+                    <ProfileMenu />
                 </div>
             </header>
         </>

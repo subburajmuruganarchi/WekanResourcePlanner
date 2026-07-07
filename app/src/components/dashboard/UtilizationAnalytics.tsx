@@ -17,6 +17,7 @@ import {
 import { Download, TrendingDown, TrendingUp, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DashboardCard, DashboardSectionHeader } from './DashboardCard';
+import { AccessibleChart } from '@/components/patterns';
 import type { UtilizationTrendPoint } from '@/lib/utilization-trend';
 
 export type { UtilizationTrendPoint };
@@ -146,6 +147,27 @@ export function UtilizationAnalytics({
         [trendData, mode]
     );
 
+    const trendTableData = useMemo(
+        () =>
+            trendData.map((p) => ({
+                week: p.weekLabel,
+                planned: mode === 'percent' ? `${p.plannedUtilization}%` : `${p.plannedHours}h`,
+                logged: mode === 'percent' ? `${p.actualUtilization}%` : `${p.actualHours}h`,
+                gap: `${p.utilizationGap > 0 ? '+' : ''}${p.utilizationGap}${mode === 'percent' ? ' pts' : 'h'}`,
+            })),
+        [trendData, mode]
+    );
+
+    const distributionTableData = useMemo(
+        () =>
+            distribution.map((d) => ({
+                category: d.name,
+                count: d.value,
+                share: totalDist > 0 ? `${Math.round((d.value / totalDist) * 100)}%` : '—',
+            })),
+        [distribution, totalDist]
+    );
+
     if (loading) {
         return (
             <DashboardCard>
@@ -261,6 +283,22 @@ export function UtilizationAnalytics({
                             </p>
                         </div>
                     ) : (
+                        <AccessibleChart
+                            title="Utilization trend"
+                            description={
+                                mode === 'percent'
+                                    ? 'Average % of a 40h week — planner vs timesheets'
+                                    : 'Total team hours — planned vs logged'
+                            }
+                            data={trendTableData}
+                            columns={[
+                                { key: 'week', header: 'Week' },
+                                { key: 'planned', header: 'Planned' },
+                                { key: 'logged', header: 'Logged' },
+                                { key: 'gap', header: 'Gap' },
+                            ]}
+                            className="border-0 shadow-none p-0"
+                        >
                         <div className="h-72">
                             <ResponsiveContainer width="100%" height="100%">
                                 <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -347,12 +385,22 @@ export function UtilizationAnalytics({
                                 </ComposedChart>
                             </ResponsiveContainer>
                         </div>
+                        </AccessibleChart>
                     )}
                 </DashboardCard>
 
                 <DashboardCard padding="md">
-                    <h3 className="text-sm font-semibold text-slate-900 mb-2">Allocation distribution</h3>
-                    <p className="text-xs text-slate-500 mb-4">Workforce allocation mix this period</p>
+                    <AccessibleChart
+                        title="Allocation distribution"
+                        description="Workforce allocation mix this period"
+                        data={distributionTableData}
+                        columns={[
+                            { key: 'category', header: 'Category' },
+                            { key: 'count', header: 'Count' },
+                            { key: 'share', header: 'Share' },
+                        ]}
+                        className="border-0 shadow-none p-0"
+                    >
                     <div className="h-52">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
@@ -385,6 +433,7 @@ export function UtilizationAnalytics({
                             {totalDist} resources categorized
                         </p>
                     )}
+                    </AccessibleChart>
                 </DashboardCard>
             </div>
         </section>

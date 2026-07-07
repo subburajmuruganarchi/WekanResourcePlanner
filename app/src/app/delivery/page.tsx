@@ -6,31 +6,38 @@ import {
     Users,
     ClipboardList,
     Rocket,
+    Sparkles,
+    ArrowRight,
 } from 'lucide-react';
 import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import {
-    WorkspaceMetricCard,
-    WorkspacePageHeader,
-    WorkspaceSection,
-    HealthBadge,
-} from '@/components/workspaces/shared';
+    PageHeader,
+    Section,
+    MetricCard,
+    MetricGrid,
+    EnterpriseDataTable,
+    portfolioTableColumns,
+    StatusBadge,
+    EmptyState,
+} from '@/components/patterns';
+import { CopilotSuggestedActions } from '@/components/workspaces/ai/CopilotSuggestedActions';
 import { useDeliveryCommandMetrics } from '@/lib/use-delivery-metrics';
-import { KPIGridSkeleton } from '@/components/dashboard/KPICard';
+import { useDeliveryRecommendations } from '@/lib/use-delivery-recommendations';
+import { MetricGridSkeleton } from '@/components/patterns/skeleton';
 import { DeliveryPortfolioCharts } from './components/delivery-portfolio-charts';
 
 export default function DeliveryCommandPage() {
     const navigate = useNavigate();
     const { metrics, portfolioRows, loading } = useDeliveryCommandMetrics();
+    const { items: recommendations, loading: recLoading } = useDeliveryRecommendations();
 
-    const sortedPortfolio = [...portfolioRows].sort((a, b) => {
-        const order = { Red: 0, Amber: 1, Green: 2 };
-        return order[a.health] - order[b.health] || b.confidence - a.confidence;
-    });
+    const topRecommendations = recommendations.slice(0, 3);
+    const portfolioColumns = portfolioTableColumns({ includeOwner: true });
 
     return (
         <PageContainer className="space-y-8">
-            <WorkspacePageHeader
+            <PageHeader
                 eyebrow="Delivery Command"
                 title="Delivery Command Center"
                 description="Portfolio operational cockpit — risks, capacity, and decisions in one place."
@@ -41,95 +48,115 @@ export default function DeliveryCommandPage() {
                 }
             />
 
+            <CopilotSuggestedActions />
+
             {loading ? (
-                <KPIGridSkeleton />
+                <MetricGridSkeleton count={6} />
             ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                    <WorkspaceMetricCard label="Managed Projects" value={String(metrics.managedProjects)} icon={FolderKanban} />
-                    <WorkspaceMetricCard label="Projects At Risk" value={String(metrics.atRisk)} accent="amber" icon={AlertTriangle} />
-                    <WorkspaceMetricCard label="Blocked Projects" value={String(metrics.blocked)} accent="rose" icon={Ban} />
-                    <WorkspaceMetricCard label="Planner Gaps" value={String(metrics.resourceGaps)} icon={Users} />
-                    <WorkspaceMetricCard label="Pending Timesheet Approvals" value={String(metrics.pendingDecisions)} accent="sky" icon={ClipboardList} />
-                    <WorkspaceMetricCard label="Active Releases (est.)" value={String(metrics.upcomingReleases)} accent="emerald" icon={Rocket} />
-                </div>
+                <MetricGrid columns={{ sm: 2, xl: 3 }}>
+                    <MetricCard label="Managed Projects" value={String(metrics.managedProjects)} icon={FolderKanban} onClick={() => navigate('/projects')} />
+                    <MetricCard label="Projects At Risk" value={String(metrics.atRisk)} accent="amber" icon={AlertTriangle} />
+                    <MetricCard label="Blocked Projects" value={String(metrics.blocked)} accent="rose" icon={Ban} />
+                    <MetricCard label="Planner Gaps" value={String(metrics.resourceGaps)} icon={Users} onClick={() => navigate('/allocation')} />
+                    <MetricCard
+                        label="Pending Approvals"
+                        value={String(metrics.pendingDecisions)}
+                        accent="sky"
+                        icon={ClipboardList}
+                        onClick={() => navigate('/pm-approvals')}
+                    />
+                    <MetricCard label="Active Releases (est.)" value={String(metrics.upcomingReleases)} accent="emerald" icon={Rocket} />
+                </MetricGrid>
             )}
 
-            <WorkspaceSection
+            <Section
                 title="Portfolio trends"
                 description="Health distribution and delivery progress across active projects"
             >
                 {loading ? (
-                    <p className="text-sm text-slate-500 dashboard-card p-6">Loading charts…</p>
+                    <div className="dashboard-card p-6 enterprise-skeleton h-48" role="status" />
                 ) : (
                     <DeliveryPortfolioCharts rows={portfolioRows} />
                 )}
-            </WorkspaceSection>
+            </Section>
 
-            <WorkspaceSection
+            <Section
                 title="Portfolio at a glance"
-                description="Active projects — project name is the customer account"
+                description="Active projects — sortable, searchable, exportable"
             >
-                <div className="dashboard-card overflow-hidden">
-                    {loading ? (
-                        <p className="p-6 text-sm text-slate-500">Loading portfolio…</p>
-                    ) : sortedPortfolio.length === 0 ? (
-                        <p className="p-6 text-sm text-slate-500">No active projects in your portfolio.</p>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="text-left text-xs uppercase tracking-wide text-slate-400 border-b bg-slate-50/80">
-                                        <th className="px-4 py-3">Project</th>
-                                        <th className="px-4 py-3">Health</th>
-                                        <th className="px-4 py-3">Progress</th>
-                                        <th className="px-4 py-3">Confidence</th>
-                                        <th className="px-4 py-3">Owner</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {sortedPortfolio.slice(0, 8).map((row) => (
-                                        <tr key={row.projectId} className="border-b border-slate-50">
-                                            <td className="px-4 py-3 font-medium text-slate-800">
-                                                {row.projectName}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <HealthBadge health={row.health} />
-                                            </td>
-                                            <td className="px-4 py-3">{row.progress}%</td>
-                                            <td className="px-4 py-3 font-medium">{row.confidence}%</td>
-                                            <td className="px-4 py-3 text-slate-500">{row.owner}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                <EnterpriseDataTable
+                    columns={portfolioColumns}
+                    rows={portfolioRows}
+                    rowKey={(r) => r.projectId}
+                    loading={loading}
+                    exportFilename="delivery-portfolio"
+                    storageKey="r360-delivery-portfolio-cols"
+                    onRowClick={(row) => navigate(`/projects/${row.projectId}`)}
+                    emptyTitle="No active projects"
+                    emptyDescription="No active projects in your portfolio."
+                    mobileCardRender={(row) => (
+                        <div>
+                            <p className="font-medium text-card-foreground">{row.projectName}</p>
+                            <div className="flex items-center gap-2 mt-2">
+                                <StatusBadge variant={row.health === 'Green' ? 'success' : row.health === 'Amber' ? 'warning' : 'critical'}>
+                                    {row.health}
+                                </StatusBadge>
+                                <span className="text-xs text-muted-foreground">{row.progress}% progress · {row.confidence}% confidence</span>
+                            </div>
                         </div>
                     )}
-                </div>
-            </WorkspaceSection>
+                />
+            </Section>
 
-            <WorkspaceSection
+            <Section
                 title="Suggested actions"
-                description="Allocation and planner gaps detected in your portfolio — review recommended next steps."
+                description="Top recommendations from allocation and planner signals"
                 action={
                     <Button variant="outline" size="sm" onClick={() => navigate('/delivery/recommendations')}>
                         View all
                     </Button>
                 }
             >
-                <p className="text-sm text-slate-600 dashboard-card p-4">
-                    Open <span className="font-medium">Suggested Actions</span> for rule-based recommendations from
-                    project allocations and current-week planner hours.
-                </p>
-            </WorkspaceSection>
+                {recLoading ? (
+                    <div className="dashboard-card p-6 enterprise-skeleton h-32" role="status" />
+                ) : topRecommendations.length === 0 ? (
+                    <EmptyState
+                        icon={Sparkles}
+                        title="No actions needed"
+                        description="No delivery risks or planner gaps detected in your portfolio."
+                    />
+                ) : (
+                    <div className="grid gap-3 md:grid-cols-3">
+                        {topRecommendations.map((item) => (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => navigate(`/projects/${item.projectId}`)}
+                                className="dashboard-card p-4 text-left hover:border-brand-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                                <div className="flex items-start justify-between gap-2">
+                                    <StatusBadge variant={item.severity === 'HIGH' ? 'critical' : item.severity === 'MEDIUM' ? 'warning' : 'neutral'}>
+                                        {item.priority}
+                                    </StatusBadge>
+                                    <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                                </div>
+                                <p className="font-semibold text-card-foreground mt-2 text-sm">{item.title}</p>
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.recommendedAction}</p>
+                                <p className="text-[10px] text-muted-foreground mt-2">{item.projectName}</p>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </Section>
 
-            <WorkspaceSection title="Quick actions">
+            <Section title="Quick actions">
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={() => navigate('/projects')}>Employees & Projects</Button>
                     <Button variant="outline" onClick={() => navigate('/allocation')}>Resource Planning</Button>
-                    <Button variant="outline" onClick={() => navigate('/pm-approvals')}>Approvals</Button>
-                    <Button variant="outline" onClick={() => navigate('/delivery/recommendations')}>Suggested Actions</Button>
+                    <Button variant="outline" onClick={() => navigate('/approvals')}>Approvals</Button>
+                    <Button variant="outline" onClick={() => navigate('/delivery/capacity')}>Capacity Forecast</Button>
                 </div>
-            </WorkspaceSection>
+            </Section>
         </PageContainer>
     );
 }

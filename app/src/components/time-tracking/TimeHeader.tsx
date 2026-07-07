@@ -2,6 +2,7 @@ import { Save, Send, Copy, Download, Loader2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMemo, useState } from 'react';
+import { AutosaveIndicator, deriveAutosaveState } from '@/components/patterns/form-field';
 import {
     Select,
     SelectContent,
@@ -32,6 +33,8 @@ interface TimeHeaderProps {
     loading: boolean;
     canSubmit: boolean;
     dirtyCount: number;
+    savingEntry?: boolean;
+    justSaved?: boolean;
     onSaveDraft: () => void;
     onSubmit: () => void;
     onCopyPreviousWeek: () => void;
@@ -51,6 +54,8 @@ export function TimeHeader({
     loading,
     canSubmit,
     dirtyCount,
+    savingEntry,
+    justSaved,
     onSaveDraft,
     onSubmit,
     onCopyPreviousWeek,
@@ -137,6 +142,14 @@ export function TimeHeader({
                                 Manager view
                             </span>
                         )}
+                        <AutosaveIndicator
+                            state={deriveAutosaveState({
+                                saving: loading || savingEntry,
+                                dirtyCount,
+                                justSaved,
+                            })}
+                            unsavedCount={dirtyCount}
+                        />
                     </div>
                 </div>
 

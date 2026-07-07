@@ -10,6 +10,7 @@ import {
     YAxis,
 } from 'recharts';
 import type { PortfolioHealthRow } from '@/lib/portfolio-health-rows';
+import { AccessibleChart } from '@/components/patterns/accessible-chart';
 
 const HEALTH_COLORS: Record<string, string> = {
     Green: '#22c55e',
@@ -33,6 +34,7 @@ export function DeliveryPortfolioCharts({ rows }: { rows: PortfolioHealthRow[] }
                 .slice(0, 8)
                 .map((r) => ({
                     name: r.projectName.length > 18 ? `${r.projectName.slice(0, 16)}…` : r.projectName,
+                    fullName: r.projectName,
                     progress: r.progress,
                     confidence: r.confidence,
                 })),
@@ -41,18 +43,25 @@ export function DeliveryPortfolioCharts({ rows }: { rows: PortfolioHealthRow[] }
 
     if (rows.length === 0) {
         return (
-            <p className="text-sm text-slate-500 dashboard-card p-6">No active projects to chart yet.</p>
+            <p className="text-sm text-muted-foreground dashboard-card p-6">No active projects to chart yet.</p>
         );
     }
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div className="dashboard-card p-4">
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">Portfolio health mix</h3>
+            <AccessibleChart
+                title="Portfolio health mix"
+                description="Count of projects by health status"
+                data={healthData}
+                columns={[
+                    { key: 'name', header: 'Health' },
+                    { key: 'value', header: 'Projects' },
+                ]}
+            >
                 <div className="h-56">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={healthData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
                             <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                             <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                             <Tooltip />
@@ -64,14 +73,26 @@ export function DeliveryPortfolioCharts({ rows }: { rows: PortfolioHealthRow[] }
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
-            </div>
+            </AccessibleChart>
 
-            <div className="dashboard-card p-4">
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">Progress vs confidence (top projects)</h3>
+            <AccessibleChart
+                title="Progress vs confidence"
+                description="Top projects by progress"
+                data={progressData.map((r) => ({
+                    project: r.fullName,
+                    progress: `${r.progress}%`,
+                    confidence: `${r.confidence}%`,
+                }))}
+                columns={[
+                    { key: 'project', header: 'Project' },
+                    { key: 'progress', header: 'Progress' },
+                    { key: 'confidence', header: 'Confidence' },
+                ]}
+            >
                 <div className="h-56">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={progressData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
                             <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={48} />
                             <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
                             <Tooltip />
@@ -80,7 +101,7 @@ export function DeliveryPortfolioCharts({ rows }: { rows: PortfolioHealthRow[] }
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
-            </div>
+            </AccessibleChart>
         </div>
     );
 }

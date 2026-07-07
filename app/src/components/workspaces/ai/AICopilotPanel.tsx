@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Sparkles, Send, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { ROLES, type SystemRoleName } from '@/lib/roles';
 import { fetchTimeEntrySuggestions, useDashboardInsight } from '@/lib/use-ai-insights';
 import { buildDashboardPeriodRange, getCurrentMonthValue, getCurrentWeekStart } from '@/lib/dashboard-period';
 import { getRoleDisplayLabel, normalizeRoleName } from '@/lib/role-utils';
+import { getCopilotPageContext } from '@/lib/copilot-context';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -63,14 +65,36 @@ function promptsForRole(role: string | undefined): CopilotPrompt[] {
     return PROMPTS[canonical] ?? PROMPTS[ROLES.EMPLOYEE];
 }
 
+function mergePrompts(rolePrompts: CopilotPrompt[], pagePrompts: { label: string; query: string }[]): CopilotPrompt[] {
+    const seen = new Set<string>();
+    const merged: CopilotPrompt[] = [];
+
+    for (const p of pagePrompts) {
+        if (seen.has(p.label)) continue;
+        seen.add(p.label);
+        merged.push({ label: p.label, query: p.query, kind: 'management' });
+    }
+    for (const p of rolePrompts) {
+        if (seen.has(p.label)) continue;
+        seen.add(p.label);
+        merged.push(p);
+    }
+    return merged.slice(0, 6);
+}
+
 export function AICopilotPanel() {
+    const { pathname } = useLocation();
+    const pageContext = useMemo(() => getCopilotPageContext(pathname), [pathname]);
     const { user } = useAuth();
     const accessRole = normalizeRoleName(user?.role) as SystemRoleName;
     const roleLabel = getRoleDisplayLabel(user?.role, {
         jobRole: user?.jobRole,
         position: user?.position,
     });
-    const prompts = useMemo(() => promptsForRole(user?.role), [user?.role]);
+    const prompts = useMemo(
+        () => mergePrompts(promptsForRole(user?.role), pageContext.prompts),
+        [user?.role, pageContext.prompts]
+    );
     const { fetchInsight } = useDashboardInsight();
     const [open, setOpen] = useState(false);
     const [activePrompt, setActivePrompt] = useState<string | null>(null);
@@ -78,7 +102,7 @@ export function AICopilotPanel() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const runPrompt = async (prompt: CopilotPrompt) => {
+    const runPrompt = useCallback(async (prompt: CopilotPrompt) => {
         setActivePrompt(prompt.label);
         setResponse(null);
         setError(null);
@@ -130,7 +154,23 @@ export function AICopilotPanel() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [accessRole, fetchInsight, user?.id]);
+
+    useEffect(() => {
+        const onPrompt = (e: Event) => {
+            const detail = (e as CustomEvent<{ label: string; query: string }>).detail;
+            if (!detail?.label) return;
+            setOpen(true);
+            const match = prompts.find((p) => p.label === detail.label) ?? {
+                label: detail.label,
+                query: detail.query,
+                kind: 'management' as const,
+            };
+            void runPrompt(match);
+        };
+        window.addEventListener('r360:copilot-prompt', onPrompt);
+        return () => window.removeEventListener('r360:copilot-prompt', onPrompt);
+    }, [prompts, runPrompt]);
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -148,7 +188,10 @@ export function AICopilotPanel() {
                 <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
                     <div className="min-w-0">
                         <p className="text-sm font-semibold text-slate-900">R360 AI Copilot</p>
-                        <p className="text-xs text-slate-500">{roleLabel} · role-aware assistant</p>
+                        <p className="text-xs text-slate-500 truncate">
+                            {pageContext.title} · {roleLabel}
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{pageContext.summary}</p>
                     </div>
                 </div>
 

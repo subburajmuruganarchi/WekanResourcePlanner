@@ -107,6 +107,7 @@ export function TimeEntry() {
     const [timeCodeError, setTimeCodeError] = useState<string | null>(null)
     const [savingEntryId, setSavingEntryId] = useState<string | null>(null)
     const [rowSaveMessage, setRowSaveMessage] = useState<string | null>(null)
+    const [justSaved, setJustSaved] = useState(false)
     const [entryDialog, setEntryDialog] = useState<{ dayIndex: number; tempId: string } | null>(null)
     const [dialogProjectLocked, setDialogProjectLocked] = useState(false)
     const [dialogDateMode, setDialogDateMode] = useState<DatePickMode>("single")
@@ -276,7 +277,11 @@ export function TimeEntry() {
 
     useEffect(() => {
         if (!rowSaveMessage) return
-        const timer = setTimeout(() => setRowSaveMessage(null), 3000)
+        setJustSaved(true)
+        const timer = setTimeout(() => {
+            setRowSaveMessage(null)
+            setJustSaved(false)
+        }, 3000)
         return () => clearTimeout(timer)
     }, [rowSaveMessage])
 
@@ -1031,6 +1036,8 @@ export function TimeEntry() {
                 loading={loading}
                 canSubmit={canSubmitWeek}
                 dirtyCount={dirtyEntryCount}
+                savingEntry={!!savingEntryId}
+                justSaved={justSaved}
                 onSaveDraft={() => void handleSaveDraft()}
                 onSubmit={() => void handleSubmit()}
                 onCopyPreviousWeek={() => void handleCopyPreviousWeek()}

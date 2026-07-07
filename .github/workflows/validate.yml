@@ -44,3 +44,6 @@ jobs:
       - name: Lint (non-blocking)
         run: npm run lint
         continue-on-error: true
+      - uses: browser-actions/setup-chrome@v1
+      - name: Accessibility (login page)
+        run: npx start-server-and-test "vite preview --port 4173 --strictPort" http://127.0.0.1:4173/login "npx axe http://127.0.0.1:4173/login --exit"

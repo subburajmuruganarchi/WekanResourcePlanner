@@ -20,4 +20,8 @@ router.get('/verify', verifyLimiter, (req, res, next) =>
     systemController.verify(req, res, next)
 );
 
+router.get('/audit-center', (req, res, next) =>
+    systemController.auditCenter(req, res, next)
+);
+
 export { router as systemRouter };

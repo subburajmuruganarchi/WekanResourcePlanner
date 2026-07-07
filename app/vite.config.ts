@@ -13,5 +13,24 @@ export default defineConfig({
   },
   server: {
     host: true,
-  }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          charts: ['recharts'],
+          grid: ['ag-grid-community', 'ag-grid-react'],
+          radix: [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-label',
+            '@radix-ui/react-popover',
+            '@radix-ui/react-select',
+            '@radix-ui/react-slot',
+            '@radix-ui/react-tabs',
+          ],
+        },
+      },
+    },
+  },
 })

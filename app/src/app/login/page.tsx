@@ -1,11 +1,11 @@
-"use client"
-
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/lib/auth-context"
 import { getHomeRoute } from "@/lib/home-route"
 import { BrandLogo } from "@/components/brand/brand-logo"
 import { GoogleLogin } from "@react-oauth/google"
+import { FormField } from "@/components/patterns"
+import { Input } from "@/components/ui/input"
 
 export function LoginPage() {
     const { login, googleLogin, isLoading } = useAuth()
@@ -62,39 +62,37 @@ export function LoginPage() {
                 {/* Login Form */}
                 <div className="bg-white/5 backdrop-blur-sm border border-white/10 p-8 rounded-2xl shadow-2xl">
                     {error && (
-                        <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                        <div role="alert" aria-live="polite" className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                             {error}
                         </div>
                     )}
                     
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Email Address
-                            </label>
-                            <input
+                    <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+                        <FormField label="Email Address" htmlFor="login-email" required className="[&_label]:text-gray-300">
+                            <Input
+                                id="login-email"
                                 type="email"
                                 required
+                                autoComplete="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
+                                className="h-11 bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus-visible:ring-brand-500"
                                 placeholder="name@company.com"
                             />
-                        </div>
+                        </FormField>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Password
-                            </label>
-                            <input
+                        <FormField label="Password" htmlFor="login-password" required className="[&_label]:text-gray-300">
+                            <Input
+                                id="login-password"
                                 type="password"
                                 required
+                                autoComplete="current-password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
+                                className="h-11 bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus-visible:ring-brand-500"
                                 placeholder="••••••••"
                             />
-                        </div>
+                        </FormField>
 
                         <button
                             type="submit"

@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Link, Navigate } from "react-router-dom"
 import { PageContainer } from "@/components/layout/page-container"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -6,8 +7,14 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, Edit, Trash2, Plus } from "lucide-react"
 import { useSkills, type Skill } from "@/lib/use-skills"
 import { SkillDialog } from "./skill-dialog"
+import { PageHeader } from "@/components/patterns"
+import { useAuth } from "@/lib/auth-context"
+import { ROLES } from "@/lib/roles"
+import { normalizeRoleName } from "@/lib/role-utils"
 
 export default function SkillsPage() {
+    const { user } = useAuth()
+    const isAdmin = normalizeRoleName(user?.role) === ROLES.ADMIN
     const { skills, loading, deleteSkill } = useSkills()
     const [selectedSkill, setSelectedSkill] = useState<Skill | undefined>(undefined)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -33,17 +40,27 @@ export default function SkillsPage() {
         }
     }
 
+    if (!isAdmin) {
+        return <Navigate to="/skills-matrix" replace />
+    }
+
     return (
         <PageContainer>
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h1 className="text-2xl font-semibold text-gray-900">Skill Master</h1>
-                    <p className="text-sm text-gray-600 mt-1">Manage the global list of skills available for employees and project requirements.</p>
-                </div>
-                <Button onClick={handleCreateSkill} className="bg-brand-500 hover:bg-brand-600">
-                    <Plus className="w-4 h-4 mr-2" /> Add Skill
-                </Button>
-            </div>
+            <PageHeader
+                eyebrow="Admin"
+                title="Skill Master"
+                description="Manage the global list of skills available for employees and project requirements."
+                action={
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" asChild>
+                            <Link to="/skills-matrix">Skills Matrix</Link>
+                        </Button>
+                        <Button onClick={handleCreateSkill} className="bg-brand-500 hover:bg-brand-600">
+                            <Plus className="w-4 h-4 mr-2" /> Add Skill
+                        </Button>
+                    </div>
+                }
+            />
 
             <SkillDialog
                 skill={selectedSkill}

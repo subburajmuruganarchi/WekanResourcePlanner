@@ -29,6 +29,7 @@ import { plannerImportRouter } from './modules/planner-import/planner-import.rou
 import { googleSheetSyncRouter } from './modules/google-sheet-sync/google-sheet-sync.routes';
 import { deliveryPortfolioRouter } from './modules/delivery-portfolios/delivery-portfolio.routes';
 import { configRouter } from './modules/config/config.routes';
+import { resourceRequestRouter } from './modules/resource-requests/resource-request.routes';
 
 import './modules/skills/skill.model';
 import './modules/weekly-allocations/weekly-allocation-entry.model';
@@ -158,6 +159,7 @@ app.use('/api/system', systemRouter);
 app.use('/api/planner-import', plannerImportRouter);
 app.use('/api/google-sheet-sync', googleSheetSyncRouter);
 app.use('/api/delivery-portfolios', deliveryPortfolioRouter);
+app.use('/api/resource-requests', resourceRequestRouter);
 
 app.use(errorHandler);
 

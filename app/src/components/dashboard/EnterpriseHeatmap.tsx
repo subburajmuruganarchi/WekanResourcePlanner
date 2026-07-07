@@ -90,58 +90,64 @@ export function EnterpriseHeatmap({
                 </p>
             )}
 
-            <div className="overflow-auto max-h-[480px] rounded-xl border border-slate-200 bg-white">
+            <div className="overflow-auto max-h-[480px] rounded-xl border border-border bg-card">
                 <div style={cellScale}>
-                    <table className="text-xs border-collapse min-w-max">
-                        <thead className="sticky top-0 z-10 bg-slate-50">
-                            <tr>
-                                <th className="sticky left-0 z-20 bg-slate-50 text-left p-3 border-b border-r border-slate-200 min-w-[180px] font-semibold text-slate-600">
-                                    Employee
+                <table className="text-xs border-collapse min-w-max" role="grid" aria-label="Resource allocation heatmap">
+                    <caption className="sr-only">
+                        Employee by project allocation intensity. Values show percentage of capacity allocated.
+                    </caption>
+                    <thead className="sticky top-0 z-10 bg-muted">
+                        <tr>
+                            <th scope="col" className="sticky left-0 z-20 bg-muted text-left p-3 border-b border-r border-border min-w-[180px] font-semibold text-muted-foreground">
+                                Employee
+                            </th>
+                            {projects.map((p) => (
+                                <th
+                                    key={p.id}
+                                    scope="col"
+                                    className="p-3 border-b border-border text-left font-semibold text-muted-foreground min-w-[108px] max-w-[140px]"
+                                    title={p.name}
+                                >
+                                    <span className="block truncate">{p.name}</span>
+                                    {p.code && (
+                                        <span className="block text-[10px] font-normal text-muted-foreground font-mono truncate">
+                                            {p.code}
+                                        </span>
+                                    )}
                                 </th>
-                                {projects.map((p) => (
-                                    <th
-                                        key={p.id}
-                                        className="p-3 border-b border-slate-200 text-left font-semibold text-slate-600 min-w-[108px] max-w-[140px]"
-                                        title={p.name}
-                                    >
-                                        <span className="block truncate">{p.name}</span>
-                                        {p.code && (
-                                            <span className="block text-[10px] font-normal text-slate-400 font-mono truncate">
-                                                {p.code}
-                                            </span>
-                                        )}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {employees.map((emp) => (
-                                <tr key={emp.id} className="border-b border-slate-50">
-                                    <td className="sticky left-0 z-10 bg-white p-3 border-r border-slate-100 font-medium text-slate-800 min-w-[180px]">
-                                        <span className="block">{emp.name}</span>
-                                        <span className="text-[10px] text-slate-400 tabular-nums">Peak {emp.totalPercent}%</span>
-                                    </td>
-                                    {projects.map((p) => {
-                                        const pct = cellMap.get(`${emp.id}:${p.id}`) ?? 0;
-                                        return (
-                                            <td key={p.id} className="p-1.5">
-                                                <div
-                                                    className={`h-9 min-w-[52px] rounded-lg flex items-center justify-center text-[10px] font-semibold tabular-nums transition-transform hover:scale-105 ${cellColor(pct)}`}
-                                                    title={`${emp.name} · ${p.name}: ${pct}%`}
-                                                >
-                                                    {cellLabel(pct)}
-                                                </div>
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
                             ))}
-                        </tbody>
-                    </table>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {employees.map((emp) => (
+                            <tr key={emp.id} className="border-b border-border/50">
+                                <th scope="row" className="sticky left-0 z-10 bg-card p-3 border-r border-border font-medium text-card-foreground min-w-[180px] text-left">
+                                    <span className="block">{emp.name}</span>
+                                    <span className="text-[10px] text-muted-foreground tabular-nums">Peak {emp.totalPercent}%</span>
+                                </th>
+                                {projects.map((p) => {
+                                    const pct = cellMap.get(`${emp.id}:${p.id}`) ?? 0;
+                                    const label = `${emp.name} allocated ${pct}% to ${p.name}`;
+                                    return (
+                                        <td key={p.id} className="p-1.5" role="gridcell">
+                                            <div
+                                                className={`h-9 min-w-[52px] rounded-lg flex items-center justify-center text-[10px] font-semibold tabular-nums transition-transform hover:scale-105 ${cellColor(pct)}`}
+                                                title={label}
+                                                aria-label={label}
+                                            >
+                                                {cellLabel(pct)}
+                                            </div>
+                                        </td>
+                                    );
+                                })}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
                 </div>
             </div>
 
-            <div className="flex flex-wrap gap-4 text-[10px] text-slate-500">
+            <div className="flex flex-wrap gap-4 text-[10px] text-muted-foreground" role="list" aria-label="Allocation intensity legend">
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-sky-100" /> 1–50% Low</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-brand-200" /> 51–85% Optimal</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-200" /> 86–100% High</span>
