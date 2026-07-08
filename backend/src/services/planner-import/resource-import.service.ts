@@ -18,6 +18,7 @@ import {
 } from './planner-import.utils';
 import { ImportWriteOptions, mongooseSessionOpts, failOrSkipRow, IMPORT_BULK_CHUNK_SIZE } from './types/import-write.options';
 import { structuredLogger } from '../../common/logger';
+import { employeeSyncCohortId } from './sync-cohort.util';
 import {
     normalizeResourceEmail,
     validateResourceRow,
@@ -193,7 +194,8 @@ async function importResourceRowsBulk(
             is_active: p.isAvailable,
             max_allocation_percent: 100,
         };
-        if (ctx.syncId) setFields.last_sync_id = ctx.syncId;
+        const syncCohortId = employeeSyncCohortId(ctx);
+        if (syncCohortId) setFields.last_sync_id = syncCohortId;
 
         return {
             updateOne: {
@@ -297,8 +299,9 @@ async function importResourceRowsBulk(
         totalDurationMs: Date.now() - bulkStartedAt,
     });
 
-    if (ctx.syncId && !writeOpts?.deferStaleCleanup) {
-        await deactivateStaleEmployees(ctx.syncId, writeOpts);
+    const syncCohortId = employeeSyncCohortId(ctx);
+    if (syncCohortId && !writeOpts?.deferStaleCleanup) {
+        await deactivateStaleEmployees(syncCohortId, writeOpts);
     }
 
     return {
@@ -357,7 +360,8 @@ async function importResourceRowsSequential(
                 is_active: isAvailable,
                 max_allocation_percent: 100,
             };
-            if (ctx.syncId) setFields.last_sync_id = ctx.syncId;
+            const syncCohortId = employeeSyncCohortId(ctx);
+        if (syncCohortId) setFields.last_sync_id = syncCohortId;
 
             const emp = await Employee.findOneAndUpdate(
                 { email: row.email },
@@ -419,8 +423,9 @@ async function importResourceRowsSequential(
         }
     }
 
-    if (ctx.syncId && !writeOpts?.deferStaleCleanup) {
-        await deactivateStaleEmployees(ctx.syncId, writeOpts);
+    const syncCohortId = employeeSyncCohortId(ctx);
+    if (syncCohortId && !writeOpts?.deferStaleCleanup) {
+        await deactivateStaleEmployees(syncCohortId, writeOpts);
     }
 
     return {

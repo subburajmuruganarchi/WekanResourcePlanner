@@ -10,13 +10,16 @@ export async function runPostTransactionCleanup(params: {
     sheet: ImportSheetKind;
     syncId?: string;
     syncBatchId?: string;
+    sheetSyncSessionId?: string;
     resourceOnly?: boolean;
+    deferResourceStaleCleanup?: boolean;
 }): Promise<void> {
     const writeOpts: ImportWriteOptions = {};
+    const syncCohortId = params.sheetSyncSessionId ?? params.syncBatchId ?? params.syncId;
 
     if (params.sheet === 'Resource' || params.sheet === 'multi') {
-        if (params.syncId) {
-            await deactivateStaleEmployees(params.syncId, writeOpts);
+        if (syncCohortId && !params.deferResourceStaleCleanup) {
+            await deactivateStaleEmployees(syncCohortId, writeOpts);
         }
     }
 

@@ -28,6 +28,7 @@ import { FULL_SYNC_LOCK, syncLockService } from './sync-lock.service';
 import { SyncInProgressError } from './sync-errors';
 import { validateSheetResult, assertFullSyncSummary } from './sheet-sync.validation';
 import { acquireSyncRun, syncResponseFromRun } from './sync-run-idempotency';
+import { resolveSheetChunkMeta } from '../../services/planner-import/sync-cohort.util';
 import {
     persistSyncRunFailure,
     persistSyncRunSuccess,
@@ -202,15 +203,23 @@ export const sheetSyncService = {
 
         await assertWebhookAllowed(syncBatchId);
 
+        const chunkMeta = resolveSheetChunkMeta(body);
+        const sheetSyncSessionId = body.sheetSyncSessionId?.trim() || undefined;
+        /** Row-chunk uploads share one session id; idempotency key must stay per-chunk. */
+        const syncRunBatchId = chunkMeta.isMultiChunk ? undefined : syncBatchId;
+
         structuredLogger.info('START SHEET IMPORT', {
             requestId,
             syncBatchId,
+            sheetSyncSessionId,
+            batchIndex: chunkMeta.batchIndex,
+            totalBatches: chunkMeta.totalBatches,
             sheet: webhookSheet,
             importSheet,
             rowsReceived: received,
         });
 
-        if (syncBatchId) {
+        if (syncBatchId && chunkMeta.batchIndex === 0) {
             await markBatchSheetRunning(syncBatchId, importSheet, requestId);
         }
 
@@ -218,7 +227,7 @@ export const sheetSyncService = {
 
         const syncId = uuidv4();
         const { run: syncRun, mode: acquireMode } = await acquireSyncRun({
-            syncBatchId,
+            syncBatchId: syncRunBatchId,
             sheet: webhookSheet,
             received,
             syncId,
@@ -279,6 +288,8 @@ export const sheetSyncService = {
                     resourceOnly: true,
                     syncId,
                     syncBatchId,
+                    sheetSyncSessionId,
+                    deferResourceStaleCleanup: !chunkMeta.isFinalChunk,
                     atomic: true,
                 });
 
@@ -349,7 +360,7 @@ export const sheetSyncService = {
                 skippedRows: response.skippedRows,
             });
 
-            if (syncBatchId) {
+            if (syncBatchId && chunkMeta.isFinalChunk) {
                 await markBatchSheetCompleted(
                     syncBatchId,
                     importSheet,

@@ -156,6 +156,8 @@ export async function runPlannerSheetImport(params: {
     resourceOnly?: boolean;
     syncId?: string;
     syncBatchId?: string;
+    sheetSyncSessionId?: string;
+    deferResourceStaleCleanup?: boolean;
     existingContext?: ImportContext;
     /** Google Sheet webhook: all writes commit or roll back together. */
     atomic?: boolean;
@@ -179,6 +181,9 @@ export async function runPlannerSheetImport(params: {
         params.existingContext ?? (await bootstrapImportContext(params.syncId, preTxnWriteOpts));
     if (params.syncBatchId) {
         preCtx.syncBatchId = params.syncBatchId;
+    }
+    if (params.sheetSyncSessionId) {
+        preCtx.sheetSyncSessionId = params.sheetSyncSessionId;
     }
     if (params.r360AccessRows?.length) {
         applyR360AccessRows(preCtx, params.r360AccessRows);
@@ -242,7 +247,9 @@ export async function runPlannerSheetImport(params: {
             sheet,
             syncId: params.syncId,
             syncBatchId: params.syncBatchId,
+            sheetSyncSessionId: params.sheetSyncSessionId,
             resourceOnly: params.resourceOnly,
+            deferResourceStaleCleanup: params.deferResourceStaleCleanup,
         });
 
         await runPostImportStatusRepair(params);
@@ -285,6 +292,7 @@ async function executePlannerSheetImport(params: {
     resourceOnly?: boolean;
     syncId?: string;
     syncBatchId?: string;
+    sheetSyncSessionId?: string;
     existingContext?: ImportContext;
     atomic?: boolean;
     session?: ClientSession;
@@ -302,6 +310,9 @@ async function executePlannerSheetImport(params: {
         params.existingContext ?? (await bootstrapImportContext(params.syncId, writeOpts));
     if (params.syncBatchId) {
         ctx.syncBatchId = params.syncBatchId;
+    }
+    if (params.sheetSyncSessionId) {
+        ctx.sheetSyncSessionId = params.sheetSyncSessionId;
     }
 
     if (params.r360AccessRows?.length) {

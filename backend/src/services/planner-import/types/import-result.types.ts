@@ -48,6 +48,12 @@ export interface GoogleSheetWebhookBody {
     /** Shared across all sheets in a full sync (header or body). */
     syncBatchId?: string;
     batchId?: string;
+    /** Shared across row chunks of one sheet upload (Apps Script batches >50 rows). */
+    sheetSyncSessionId?: string;
+    /** Zero-based chunk index when a sheet is split into multiple webhook posts. */
+    batchIndex?: number;
+    /** Total webhook posts for this sheet upload. */
+    totalBatches?: number;
     /** When true, allows re-processing a FAILED batched sheet import. */
     retry?: boolean;
 }

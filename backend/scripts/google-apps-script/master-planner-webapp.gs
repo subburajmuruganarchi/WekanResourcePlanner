@@ -2106,7 +2106,9 @@ var allocation = {
   Logger.log("First Payload:");
   Logger.log(JSON.stringify(rows[0]));
 
-  return postSheetRowsToWebhook(tabName, rows, url, key);
+  var sheetSyncSessionId = Utilities.getUuid();
+
+  return postSheetRowsToWebhook(tabName, rows, url, key, null, sheetSyncSessionId);
 }
 
 /** Max rows per webhook POST — keeps payload under server limits. */
@@ -2116,7 +2118,7 @@ function isWebhookSuccess(response) {
   return response && (response.status === 'SUCCESS' || response.syncCompleted === true);
 }
 
-function postSheetRowsToWebhook(tabName, rows, url, key, syncBatchId) {
+function postSheetRowsToWebhook(tabName, rows, url, key, syncBatchId, sheetSyncSessionId) {
   url = url || PropertiesService.getScriptProperties().getProperty('R360_SYNC_URL');
   key = key || PropertiesService.getScriptProperties().getProperty('R360_SYNC_KEY');
 
@@ -2124,19 +2126,32 @@ function postSheetRowsToWebhook(tabName, rows, url, key, syncBatchId) {
     throw new Error('R360_SYNC_URL and R360_SYNC_KEY must be set in Script Properties');
   }
 
+  sheetSyncSessionId = sheetSyncSessionId || Utilities.getUuid();
+  var totalBatches = Math.max(1, Math.ceil(rows.length / SHEET_SYNC_BATCH_SIZE));
+
   if (rows.length <= SHEET_SYNC_BATCH_SIZE) {
-    return sendSheetWebhookBatch(tabName, rows, url, key, syncBatchId);
+    return sendSheetWebhookBatch(tabName, rows, url, key, syncBatchId, sheetSyncSessionId, 0, totalBatches);
   }
 
   var lastResponse;
-  var batchCount = Math.ceil(rows.length / SHEET_SYNC_BATCH_SIZE);
+  var batchCount = totalBatches;
 
   for (var offset = 0; offset < rows.length; offset += SHEET_SYNC_BATCH_SIZE) {
     var batch = rows.slice(offset, offset + SHEET_SYNC_BATCH_SIZE);
     var batchNum = Math.floor(offset / SHEET_SYNC_BATCH_SIZE) + 1;
+    var batchIndex = batchNum - 1;
     Logger.log('Sending batch ' + batchNum + ' of ' + batchCount + ' (' + batch.length + ' rows)');
 
-    lastResponse = sendSheetWebhookBatch(tabName, batch, url, key, syncBatchId);
+    lastResponse = sendSheetWebhookBatch(
+      tabName,
+      batch,
+      url,
+      key,
+      syncBatchId,
+      sheetSyncSessionId,
+      batchIndex,
+      totalBatches
+    );
 
     if (!isWebhookSuccess(lastResponse)) {
       throw new Error(
@@ -2148,7 +2163,7 @@ function postSheetRowsToWebhook(tabName, rows, url, key, syncBatchId) {
   return lastResponse;
 }
 
-function sendSheetWebhookBatch(tabName, rows, url, key, syncBatchId) {
+function sendSheetWebhookBatch(tabName, rows, url, key, syncBatchId, sheetSyncSessionId, batchIndex, totalBatches) {
   try {
     var headers = {
       'X-R360-SYNC-KEY': key
@@ -2166,7 +2181,10 @@ function sendSheetWebhookBatch(tabName, rows, url, key, syncBatchId) {
         payload: JSON.stringify({
           sheet: tabName,
           rows: rows,
-          syncBatchId: syncBatchId || undefined
+          syncBatchId: syncBatchId || undefined,
+          sheetSyncSessionId: sheetSyncSessionId,
+          batchIndex: typeof batchIndex === 'number' ? batchIndex : 0,
+          totalBatches: typeof totalBatches === 'number' ? totalBatches : 1
         }),
         muteHttpExceptions: true
       }

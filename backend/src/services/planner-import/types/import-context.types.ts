@@ -9,6 +9,8 @@ export const ACCESS_ROLES = {
 export interface ImportContext {
     syncId?: string;
     syncBatchId?: string;
+    /** Stable id stamped on employees during multi-chunk Resource sync. */
+    sheetSyncSessionId?: string;
     jobRoleIds: Map<string, Types.ObjectId>;
     employeeByEmail: Map<string, Types.ObjectId>;
     employeeByCode: Map<string, Types.ObjectId>;
