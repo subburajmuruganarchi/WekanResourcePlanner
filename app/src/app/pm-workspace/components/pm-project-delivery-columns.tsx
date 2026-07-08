@@ -19,6 +19,19 @@ function formatDelta(value: number): string {
     return `${rounded}h`;
 }
 
+function riskSortOrder(level?: PmProjectHoursRow['riskLevel']): number {
+    switch (level) {
+        case 'HIGH':
+            return 0;
+        case 'MEDIUM':
+            return 1;
+        case 'LOW':
+            return 2;
+        default:
+            return 3;
+    }
+}
+
 export function pmProjectDeliveryColumns(): DataTableColumn<PmProjectHoursRow>[] {
     return [
         {
@@ -90,7 +103,7 @@ export function pmProjectDeliveryColumns(): DataTableColumn<PmProjectHoursRow>[]
                 ) : (
                     <span className="text-muted-foreground text-xs">—</span>
                 ),
-            sortValue: (row) => ({ HIGH: 0, MEDIUM: 1, LOW: 2 }[row.riskLevel ?? ''] ?? 3),
+            sortValue: (row) => riskSortOrder(row.riskLevel),
             exportValue: (row) => row.riskLevel ?? '—',
             hideOnMobile: true,
         },
