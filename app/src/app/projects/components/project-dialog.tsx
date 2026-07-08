@@ -21,6 +21,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useProjects } from "@/lib/use-projects"
 import { useEmployees } from "@/lib/use-employees"
+import { isActiveRosterMember } from "@/lib/employee-status"
 import { useRoles } from "@/lib/use-roles"
 import { Loader2, Plus, Trash2, AlertCircle } from "lucide-react"
 import type { CreateProjectRequest, RoleEffort, ProjectStatus, BillingType, Project } from "@/types/api"
@@ -411,7 +412,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                             >
                                                 <SelectTrigger className="h-8"><SelectValue placeholder="Select employee" /></SelectTrigger>
                                                 <SelectContent>
-                                                    {(employees || []).filter(e => e.status === 'Active').map(emp => (
+                                                    {(employees || []).filter((e) => isActiveRosterMember(e)).map(emp => (
                                                         <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
                                                     ))}
                                                 </SelectContent>

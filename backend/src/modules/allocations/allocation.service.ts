@@ -7,6 +7,7 @@ import { ProjectRoleEffort } from '../projects/project-role-effort.model';
 import { Types, startSession } from 'mongoose';
 import { SkillLevel } from '../../common/types/enums';
 import { computeAvailabilityInPeriod } from './allocation-availability.util';
+import { activeEmployeeMongoFilter } from '../../common/utils/employee-status.util';
 
 const EMPLOYEE_SKILL_DISPLAY_LEVEL = SkillLevel.EXPERT;
 
@@ -475,7 +476,7 @@ export class AllocationService {
 
     async rankEmployees(request: RankingRequest): Promise<RankedEmployee[]> {
         // Get all active employees
-        const employees = await Employee.find({ is_active: { $ne: false } })
+        const employees = await Employee.find(activeEmployeeMongoFilter())
             .populate('role_id', 'role_name')
             .populate('job_role_id', 'role_name')
             .lean() as unknown as PopulatedEmployee[];

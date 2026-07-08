@@ -110,6 +110,7 @@ export interface Employee {
     maxAllocationPercent: number;
     profileImage?: string;
     joinDate?: string;
+    is_active?: boolean;
     projectAssignments?: EmployeeProjectAssignment[];
 }
 

@@ -1,4 +1,4 @@
-/** Mongo filter: active roster members (Availability = Available on Resource sheet). */
+/** Mongo filter: active roster members (Resource sheet Availability ≠ "Not Available"). */
 export function activeEmployeeMongoFilter(): Record<string, unknown> {
     return {
         is_active: { $ne: false },

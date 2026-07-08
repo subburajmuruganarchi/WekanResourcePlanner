@@ -50,7 +50,13 @@ export function googleSheetRowToResourceRow(row: Record<string, unknown>): Resou
             'Availability',
             'availability',
             'Availablility',
-            'availablility'
+            'availablility',
+            'Avalability',
+            'avalability',
+            'Status',
+            'status',
+            'Active',
+            'active'
         ),
         email: str(row, 'Email', 'email', 'eMail', 'EMail').trim().toLowerCase(),
         location: str(row, 'Location', 'location'),

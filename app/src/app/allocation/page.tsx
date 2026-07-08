@@ -10,6 +10,7 @@ import { getMvpFeatures } from '@/lib/mvp-config';
 import { normalizeRoleName } from '@/lib/role-utils';
 import { usePortfolioScope } from '@/lib/use-portfolio-scope';
 import { useEmployees } from '@/lib/use-employees';
+import { isActiveRosterMember } from '@/lib/employee-status';
 import { useWeeklyAllocationGrid } from '@/lib/use-weekly-allocation-grid';
 import { rowKey } from '@/lib/weekly-grid-pivot';
 import { matchesPlannerGridSearch } from '@/lib/planner-grid-search';
@@ -127,7 +128,7 @@ export function Allocation() {
 
     const employeeOptions = useMemo((): EmployeeOption[] => {
         return employees
-            .filter((e) => e.status === 'Active')
+            .filter((e) => isActiveRosterMember(e))
             .map((e) => ({
                 id: e.id,
                 name: e.name,

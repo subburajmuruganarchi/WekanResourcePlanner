@@ -184,7 +184,7 @@ describe('resource-row.validation', () => {
             expect(mapped.skills).toEqual(['NodeJS', 'NestJS', 'MongoDB', 'AWS']);
         });
 
-        it('ignores Status column when Availability is absent', () => {
+        it('reads Status column when Availability is absent', () => {
             const mapped = googleSheetRowToResourceRow({
                 EID: 'E002',
                 Name: 'Jane Doe',
@@ -192,9 +192,20 @@ describe('resource-row.validation', () => {
                 Role: 'SDE II',
                 Status: 'Not Available',
             });
-            expect(mapped.availability).toBe('');
+            expect(mapped.availability).toBe('Not Available');
+            expect(isResourceAvailableFromSheet(mapped.availability)).toBe(false);
+            expect(employeeStatusFromSheetAvailability(mapped.availability)).toBe('Inactive');
+        });
+
+        it('reads Avalability typo header', () => {
+            const mapped = googleSheetRowToResourceRow({
+                EID: 'E004',
+                Name: 'Pat',
+                Email: 'pat@wekancode.com',
+                Avalability: 'On Notice Period',
+            });
+            expect(mapped.availability).toBe('On Notice Period');
             expect(isResourceAvailableFromSheet(mapped.availability)).toBe(true);
-            expect(employeeStatusFromSheetAvailability(mapped.availability)).toBe('Active');
         });
 
         it('reads Availability column (including typo header)', () => {

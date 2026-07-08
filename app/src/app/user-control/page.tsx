@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Shield, Search, Check, X, Loader2 } from "lucide-react"
 import { PageContainer } from "@/components/layout/page-container"
 import { api } from "@/lib/api"
+import { isActiveRosterMember } from "@/lib/employee-status"
 import { UserControlCards, type UserEntry, type SystemRole } from "./components/user-control-cards"
 
 const SYSTEM_ROLE_NAMES = ["Employee", "Project Manager", "Delivery Manager", "CEO", "Admin"]
@@ -40,7 +41,7 @@ export default function UserControlPage() {
                 position: e.position,
                 role: e.role,
                 roleId: e.roleId ?? e.role_id,
-                isActive: typeof e.is_active === 'boolean' ? e.is_active : e.status === 'Active',
+                isActive: isActiveRosterMember({ is_active: e.is_active, status: e.status }),
                 status: e.status ?? 'Active',
             }))
 
@@ -104,7 +105,7 @@ export default function UserControlPage() {
 
     const adminCount = users.filter(u => u.role === "Admin").length
     const pmCount = users.filter(u => u.role === "Project Manager").length
-    const activeCount = users.filter(u => u.isActive !== false && u.status === 'Active').length
+    const activeCount = users.filter((u) => isActiveRosterMember(u)).length
 
     return (
         <PageContainer className="space-y-6">
