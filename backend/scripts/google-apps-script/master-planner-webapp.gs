@@ -1964,7 +1964,13 @@ for (var p = 1; p < pdata.length; p++) {
 
       obj.EID = obj.ID;
       obj.Email = obj.Email || obj.eMail;
-      obj.Skills = obj["Skill (from HR)"];
+      // Skills column may be labeled "Skills" or "Skill (from HR)" — never wipe populated values.
+      obj.Skills =
+        obj.Skills ||
+        obj["Skill (from HR)"] ||
+        obj.Skill ||
+        obj.skills ||
+        "";
       obj.Availability =
         obj.Availability ||
         obj.Availablility ||
@@ -2292,7 +2298,9 @@ switch (value.toLowerCase().trim()) {
         return "Email";
 
       case "skill (from hr)":
-        return "Skill (from HR)";
+      case "skills":
+      case "skill":
+        return "Skills";
 
       case "availability":
       case "availablility":

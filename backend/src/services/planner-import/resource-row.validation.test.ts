@@ -164,6 +164,35 @@ describe('resource-row.validation', () => {
     });
 
     describe('Apps Script column mapping', () => {
+        it('maps Skills column when Skill (from HR) is absent', () => {
+            const mapped = googleSheetRowToResourceRow({
+                EID: 'E001',
+                Name: 'Babu Reddy',
+                Role: 'Architect',
+                Email: 'babur@wekancode.com',
+                Skills: 'NodeJS, NestJS, MongoDB, AWS',
+            });
+            expect(mapped.skills).toEqual(['NodeJS', 'NestJS', 'MongoDB', 'AWS']);
+        });
+
+        it('prefers populated Skills over empty Skill (from HR) alias', () => {
+            const mapped = googleSheetRowToResourceRow({
+                EID: 'E010',
+                Name: 'Ashwini Shekhawat',
+                Email: 'ashwini@wekancode.com',
+                Skills: 'ReactJS, NodeJS, MongoDB, NestJS, AWS, MERN',
+                'Skill (from HR)': '',
+            });
+            expect(mapped.skills).toEqual([
+                'ReactJS',
+                'NodeJS',
+                'MongoDB',
+                'NestJS',
+                'AWS',
+                'MERN',
+            ]);
+        });
+
         it('maps Role, Type, Availablility, Skill (from HR) from webhook payload', () => {
             const mapped = googleSheetRowToResourceRow({
                 ID: 'E001',

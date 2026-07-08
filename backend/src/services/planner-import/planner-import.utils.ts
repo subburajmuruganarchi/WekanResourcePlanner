@@ -302,6 +302,17 @@ export async function upsertSkill(
 ): Promise<Types.ObjectId | undefined> {
     const trimmed = name.trim().slice(0, 120);
     if (!trimmed) return undefined;
+
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let existingQuery = Skill.findOne({
+        name: { $regex: new RegExp(`^${escaped}$`, 'i') },
+    }).select('_id');
+    if (writeOpts?.session) {
+        existingQuery = existingQuery.session(writeOpts.session);
+    }
+    const existing = await existingQuery.lean();
+    if (existing) return existing._id;
+
     const doc = await Skill.findOneAndUpdate(
         { name: trimmed },
         { $setOnInsert: { name: trimmed, category, is_active: true, description: SEED_TAG } },
