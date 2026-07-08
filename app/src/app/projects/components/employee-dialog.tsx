@@ -151,6 +151,8 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
 
             const data = {
                 ...formData,
+                roleId: formData.roleId || undefined,
+                employeeCode: formData.employeeCode || undefined,
                 department: formData.department || undefined,
                 designation: formData.designation || undefined,
                 joiningDate: formData.joiningDate || undefined,

@@ -53,6 +53,11 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
         [employees]
     )
 
+    const activeEmployees = useMemo(
+        () => (employees || []).filter((e) => isActiveRosterMember(e)),
+        [employees]
+    )
+
     const isEdit = !!project
 
     // Form State
@@ -388,7 +393,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                             <div className="flex justify-between items-center">
                                 <div className="space-y-1">
                                     <h3 className="text-sm font-medium">Assigned resources</h3>
-                                    <p className="text-[10px] text-gray-500">Select employees planned for this project. Dates are optional.</p>
+                                    <p className="text-[10px] text-gray-500">Pick a role first, then choose an employee with that role.</p>
                                 </div>
                                 <Button type="button" variant="outline" size="sm" onClick={addRoleEffort}>
                                     <Plus className="w-4 h-4 mr-2" /> Add resource
@@ -396,33 +401,23 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                             </div>
 
                             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                                {formData.roleEfforts?.map((effort, index) => (
+                                {formData.roleEfforts?.map((effort, index) => {
+                                    const employeesForRole = activeEmployees.filter(
+                                        (e) => !effort.roleId || e.jobRoleId === effort.roleId
+                                    )
+                                    return (
                                     <div key={index} className="grid grid-cols-12 gap-2 items-end border p-3 rounded-lg bg-gray-50">
-                                        <div className="col-span-4 space-y-1">
-                                            <Label className="text-xs">Resource *</Label>
-                                            <Select
-                                                value={effort.employeeId || ''}
-                                                onValueChange={v => {
-                                                    const emp = (employees || []).find(e => e.id === v)
-                                                    updateRoleEffort(index, 'employeeId', v)
-                                                    if (emp?.jobRoleId) {
-                                                        updateRoleEffort(index, 'roleId', emp.jobRoleId)
-                                                    }
-                                                }}
-                                            >
-                                                <SelectTrigger className="h-8"><SelectValue placeholder="Select employee" /></SelectTrigger>
-                                                <SelectContent>
-                                                    {(employees || []).filter((e) => isActiveRosterMember(e)).map(emp => (
-                                                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="col-span-3 space-y-1">
+                                        <div className="col-span-5 space-y-1">
                                             <Label className="text-xs">Role *</Label>
                                             <Select
                                                 value={effort.roleId || ''}
-                                                onValueChange={v => updateRoleEffort(index, 'roleId', v)}
+                                                onValueChange={v => {
+                                                    updateRoleEffort(index, 'roleId', v)
+                                                    const emp = activeEmployees.find(e => e.id === effort.employeeId)
+                                                    if (emp && emp.jobRoleId !== v) {
+                                                        updateRoleEffort(index, 'employeeId', '')
+                                                    }
+                                                }}
                                             >
                                                 <SelectTrigger className="h-8"><SelectValue placeholder="Select role" /></SelectTrigger>
                                                 <SelectContent>
@@ -432,27 +427,26 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                                 </SelectContent>
                                             </Select>
                                         </div>
-                                        <div className="col-span-2 space-y-1">
-                                            <Label className="text-xs">Start Date</Label>
-                                            <Input
-                                                type="date"
-                                                className="h-8 text-[11px] px-2"
-                                                value={effort.startDate}
-                                                min={formData.startDate}
-                                                max={formData.endDate}
-                                                onChange={e => updateRoleEffort(index, 'startDate', e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="col-span-2 space-y-1">
-                                            <Label className="text-xs">End Date</Label>
-                                            <Input
-                                                type="date"
-                                                className="h-8 text-[11px] px-2"
-                                                value={effort.endDate}
-                                                min={effort.startDate || formData.startDate}
-                                                max={formData.endDate}
-                                                onChange={e => updateRoleEffort(index, 'endDate', e.target.value)}
-                                            />
+                                        <div className="col-span-6 space-y-1">
+                                            <Label className="text-xs">Resource *</Label>
+                                            <Select
+                                                value={effort.employeeId || ''}
+                                                disabled={!effort.roleId}
+                                                onValueChange={v => updateRoleEffort(index, 'employeeId', v)}
+                                            >
+                                                <SelectTrigger className="h-8">
+                                                    <SelectValue placeholder={effort.roleId ? 'Select employee' : 'Select a role first'} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {employeesForRole.length > 0 ? (
+                                                        employeesForRole.map(emp => (
+                                                            <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                                                        ))
+                                                    ) : (
+                                                        <div className="px-2 py-1.5 text-xs text-gray-500">No employees with this role</div>
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
                                         <div className="col-span-1 flex justify-end pb-1">
                                             <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => removeRoleEffort(index)}>
@@ -460,7 +454,8 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                             </Button>
                                         </div>
                                     </div>
-                                ))}
+                                    )
+                                })}
                                 {formData.roleEfforts?.length === 0 && (
                                     <div className="text-center py-8 text-gray-500 text-sm border-2 border-dashed rounded-lg">
                                         No resources assigned yet. Use “Add resource” to staff this project.
