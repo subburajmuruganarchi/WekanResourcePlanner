@@ -63,8 +63,8 @@ const PAGE_PROMPTS: Record<string, CopilotPagePrompt[]> = {
         { label: 'How am I tracking this week?', query: 'week progress' },
     ],
     '/workspace': [
-        { label: 'What should I focus on today?', query: 'today focus' },
-        { label: 'Show missing timesheet entries', query: 'missing timesheet entries' },
+        { label: 'What should I focus on this week?', query: 'my week focus' },
+        { label: 'Show my project allocations', query: 'my project allocations' },
     ],
     '/projects': [
         { label: 'Which projects are understaffed?', query: 'understaffed projects' },
@@ -95,7 +95,7 @@ const PAGE_SUMMARIES: Record<string, string> = {
     '/pm': 'Project manager workspace',
     '/approvals': 'Timesheet and approval queue',
     '/time-entry': 'Weekly time logging',
-    '/workspace': 'Employee personal workspace',
+    '/workspace': 'Employee personal workspace — projects, allocation, and weekly plan',
     '/projects': 'Projects and employee directory',
     '/inputs': 'Google Sheet import and sync controls',
     '/system-health': 'Platform health and diagnostics',

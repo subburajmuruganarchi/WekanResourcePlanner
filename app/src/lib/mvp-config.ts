@@ -75,9 +75,11 @@ export async function loadMvpFeatures(apiBase?: string): Promise<MvpFeatureFlags
 /** Paths hidden when corresponding MVP flags are off (code remains; routes blocked in UI). */
 export function isNavPathEnabled(path: string, flags: MvpFeatureFlags = getMvpFeatures()): boolean {
     if (!flags.timeEntryEnabled && path === '/time-entry') return false;
-    if (!flags.timesheetApprovalEnabled && path === '/pm-approvals') return false;
+    if (!flags.timesheetApprovalEnabled && (path === '/pm-approvals' || path === '/approvals')) return false;
     if (flags.mvpMode) {
         const mvpHidden = new Set([
+            '/approvals',
+            '/resource-requests',
             '/okrs',
             '/insights',
             '/executive/risk-radar',
