@@ -21,6 +21,8 @@ export interface EmployeeListParams {
     minLevel?: string;
     isActive?: boolean;
     employeeIds?: string[];
+    /** Include active project assignments for each employee. */
+    includeAssignments?: boolean;
 }
 
 export interface EmployeeProjectAssignment {
@@ -203,13 +205,19 @@ export class EmployeeService {
 
         const availabilityByEmployee = await this.loadAvailabilityByEmployee(employeeIds);
 
-        return employees.map(emp =>
+        let responses = employees.map((emp) =>
             this.mapToResponse(
                 emp,
                 skillsByEmployee.get(emp._id.toString()) || [],
                 availabilityByEmployee.get(emp._id.toString()) ?? 100
             )
         );
+
+        if (params.includeAssignments) {
+            responses = await this.attachProjectAssignments(responses, new Set());
+        }
+
+        return responses;
     }
 
     async findById(id: string): Promise<EmployeeResponse | null> {

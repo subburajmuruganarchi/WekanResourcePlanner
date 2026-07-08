@@ -24,22 +24,30 @@ export function isExecutiveReadOnly(role: string | undefined): boolean {
     return normalizeRoleName(role) === ROLES.CEO;
 }
 
-/** Weekly planned hours — PM (scoped) and DM (any). Admin/CEO read-only. */
+/** Weekly planned hours — PM (scoped), DM (any), Admin (any). CEO read-only. */
 export function canEditPlannedAllocations(role: string | undefined): boolean {
     const r = normalizeRoleName(role);
     const { mvpMode } = getMvpFeatures();
     if (mvpMode) {
-        return r === ROLES.PROJECT_MANAGER || r === ROLES.DELIVERY_MANAGER;
+        return (
+            r === ROLES.PROJECT_MANAGER ||
+            r === ROLES.DELIVERY_MANAGER ||
+            r === ROLES.ADMIN
+        );
     }
     return r === ROLES.DELIVERY_MANAGER;
 }
 
-/** Actual hours — PM (scoped) and DM (any). Admin/CEO cannot edit. */
+/** Actual hours — PM (scoped), DM (any), Admin (any). CEO read-only. */
 export function canEditActualAllocations(role: string | undefined): boolean {
     const r = normalizeRoleName(role);
     const { mvpMode } = getMvpFeatures();
     if (mvpMode) {
-        return r === ROLES.PROJECT_MANAGER || r === ROLES.DELIVERY_MANAGER;
+        return (
+            r === ROLES.PROJECT_MANAGER ||
+            r === ROLES.DELIVERY_MANAGER ||
+            r === ROLES.ADMIN
+        );
     }
     return r === ROLES.DELIVERY_MANAGER;
 }
@@ -77,7 +85,7 @@ export function canManageOrgEntities(role: string | undefined): boolean {
 
 export function isAllocationViewerReadOnly(role: string | undefined): boolean {
     const r = normalizeRoleName(role);
-    return r === ROLES.ADMIN || r === ROLES.CEO;
+    return r === ROLES.CEO;
 }
 export function canViewResourceAllocation(role: string | undefined): boolean {
     const { mvpMode } = getMvpFeatures();

@@ -11,6 +11,7 @@ import { normalizeRoleName } from '@/lib/role-utils';
 import { usePortfolioScope } from '@/lib/use-portfolio-scope';
 import { useEmployees } from '@/lib/use-employees';
 import { isActiveRosterMember } from '@/lib/employee-status';
+import { filterProjectsManagedByEmployee } from '@/lib/project-scope';
 import { useWeeklyAllocationGrid } from '@/lib/use-weekly-allocation-grid';
 import { rowKey } from '@/lib/weekly-grid-pivot';
 import { matchesPlannerGridSearch } from '@/lib/planner-grid-search';
@@ -57,27 +58,20 @@ export function Allocation() {
     const { user } = useAuth();
     const isViewerReadOnly = isAllocationViewerReadOnly(user?.role);
     const isAdmin = normalizeRoleName(user?.role) === ROLES.ADMIN;
+    const isCEO = normalizeRoleName(user?.role) === ROLES.CEO;
+    const isPM = normalizeRoleName(user?.role) === ROLES.PROJECT_MANAGER;
+    const isDM = normalizeRoleName(user?.role) === ROLES.DELIVERY_MANAGER;
     const canEditPlanned = canEditPlannedAllocations(user?.role);
     const canEditActual = canEditActualAllocations(user?.role);
-    const canAssignStaff = canAssignProjectStaff(user?.role) && !isViewerReadOnly;
+    const canAssignStaff = canAssignProjectStaff(user?.role) && !isViewerReadOnly && !isPM;
     const mvpMode = getMvpFeatures().mvpMode;
     const { editableProjectIds: dmPortfolioIds } = usePortfolioScope(user?.role);
 
     const { projects, loading: projLoading } = useProjects();
     const { employees } = useEmployees();
-    const isPM = normalizeRoleName(user?.role) === ROLES.PROJECT_MANAGER;
-    const isDM = normalizeRoleName(user?.role) === ROLES.DELIVERY_MANAGER;
     const managedProjectIds = useMemo(() => {
         if (!user?.id || !isPM) return undefined;
-        return new Set(
-            projects
-                .filter(
-                    (p) =>
-                        p.managerId === user.id ||
-                        (p.managerIds?.includes(user.id) ?? false)
-                )
-                .map((p) => p.id)
-        );
+        return new Set(filterProjectsManagedByEmployee(projects, user.id).map((p) => p.id));
     }, [projects, user?.id, isPM]);
 
     const editableProjectIds = useMemo(() => {
@@ -183,8 +177,7 @@ export function Allocation() {
                 (row) =>
                     row.projectCode !== BENCH_PROJECT_CODE &&
                     row.projectName !== 'Available / Bench' &&
-                    !row.rowKey.startsWith('draft:') &&
-                    (!isPM || mvpMode || managedProjectIds?.has(row.projectId))
+                    !row.rowKey.startsWith('draft:')
             )
             .map((row) => ({
                 ...row,
@@ -214,7 +207,7 @@ export function Allocation() {
                     sensitivity: 'base',
                 });
             });
-    }, [grid.plannerRows, employeeRoleMap, projectTypeById, isPM, managedProjectIds, mvpMode]);
+    }, [grid.plannerRows, employeeRoleMap, projectTypeById]);
 
     const filteredRows = useMemo(() => {
         return displayRows.filter((row) =>
@@ -317,12 +310,25 @@ export function Allocation() {
     return (
         <PageContainer className="space-y-4">
             <div>
-                <h1 className="text-2xl font-semibold text-gray-900">Resource Planning</h1>
-                <p className="text-sm text-gray-600 mt-1">
-                    Plan resources and track planned vs actual hours.
-                    {isViewerReadOnly && (
-                        <span className="ml-2 text-brand-600 font-medium">
+                <h1 className="text-2xl font-semibold text-foreground">Resource Planning</h1>
+                <p className="text-sm text-muted-foreground mt-1">
+                    {isCEO ? (
+                        <>
+                            Each week shows <strong className="text-foreground">Plan</strong>,{' '}
+                            <strong className="text-foreground">Act</strong> (approved time), and{' '}
+                            <strong className="text-foreground">Δ</strong> (actual minus plan). Read-only executive view.
+                        </>
+                    ) : (
+                        <>Plan resources and track planned vs actual hours.</>
+                    )}
+                    {isViewerReadOnly && !isCEO && (
+                        <span className="ml-2 text-brand-600 dark:text-brand-400 font-medium">
                             Read-only view — actuals are entered by Project Managers and Delivery Managers.
+                        </span>
+                    )}
+                    {isPM && mvpMode && !isViewerReadOnly && (
+                        <span className="ml-2 text-muted-foreground">
+                            You can view all projects; edit planned/actual hours only on projects you manage.
                         </span>
                     )}
                 </p>
@@ -337,7 +343,81 @@ export function Allocation() {
                 </Tabs>
             )}
 
-            {(screenTab === 'matrix' || !isAdmin) && (
+            {isCEO && (
+                <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <span className="text-sm text-muted-foreground">
+                            {new Set(filteredRows.map((r) => r.projectId).filter(Boolean)).size} projects ·{' '}
+                            {filteredRows.filter((r) => r.employeeId).length} resources
+                            {planningWeeks.length > 0 &&
+                                ` · ${format(parseISO(planningWeeks[0]), 'd MMM yyyy')} – ${format(parseISO(planningWeeks[planningWeeks.length - 1]), 'd MMM yyyy')}`}
+                        </span>
+                        {planningWeeks.length > WEEKS_VISIBLE && (
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    disabled={!canScrollWeeksBack}
+                                    onClick={() => setWeekWindowStart((s) => Math.max(0, s - WEEKS_VISIBLE))}
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </Button>
+                                <span className="text-xs text-muted-foreground">
+                                    Weeks {weekWindowStart + 1}–
+                                    {Math.min(weekWindowStart + WEEKS_VISIBLE, planningWeeks.length)} of{' '}
+                                    {planningWeeks.length}
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    disabled={!canScrollWeeksForward}
+                                    onClick={() =>
+                                        setWeekWindowStart((s) =>
+                                            Math.min(s + WEEKS_VISIBLE, planningWeeks.length - WEEKS_VISIBLE)
+                                        )
+                                    }
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+
+                    {grid.error && (
+                        <div className="flex items-start gap-2 text-critical bg-critical-bg border border-critical-border rounded-lg px-4 py-3 text-sm">
+                            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                            <p>{grid.error}</p>
+                        </div>
+                    )}
+
+                    <PlannerGridSearchBar
+                        projectSearch={searchProject}
+                        resourceSearch={searchResource}
+                        onProjectSearchChange={setSearchProject}
+                        onResourceSearchChange={setSearchResource}
+                    />
+
+                    <WeeklyPlannerGrid
+                        rows={filteredRows}
+                        weeks={visibleWeeks.length > 0 ? visibleWeeks : planningWeeks}
+                        canEdit={false}
+                        dirtyKeys={grid.dirtyKeys}
+                        onPlannedHoursChange={grid.updatePlannedHours}
+                        loading={grid.loading || projLoading}
+                    />
+
+                    <p className="text-xs text-muted-foreground">
+                        <strong>Plan</strong> = weekly planned hours · <strong>Act</strong> = approved time entries ·{' '}
+                        <strong>Δ</strong> = actual − plan (positive = overrun on that project)
+                    </p>
+                </div>
+            )}
+
+            {!isCEO && (screenTab === 'matrix' || !isAdmin) && (
             <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
@@ -354,7 +434,7 @@ export function Allocation() {
                                 Add row
                             </Button>
                         )}
-                        <span className="text-sm text-gray-500">
+                        <span className="text-sm text-muted-foreground">
                             {new Set(filteredRows.map((r) => r.projectId).filter(Boolean)).size}{' '}
                             project
                             {new Set(filteredRows.map((r) => r.projectId).filter(Boolean)).size === 1
@@ -409,11 +489,11 @@ export function Allocation() {
                         )}
 
                         {(canEditPlanned || canEditActual) && mvpMode && (
-                            <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+                            <div className="flex rounded-md border border-border overflow-hidden text-xs">
                                 {canEditPlanned && (
                                 <button
                                     type="button"
-                                    className={`px-3 py-1.5 ${gridEditField === 'planned' ? 'bg-brand-500 text-white' : 'bg-white text-gray-700'}`}
+                                    className={`px-3 py-1.5 ${gridEditField === 'planned' ? 'bg-brand-500 text-white' : 'bg-card text-foreground'}`}
                                     onClick={() => setGridEditField('planned')}
                                 >
                                     Planned hours
@@ -422,7 +502,7 @@ export function Allocation() {
                                 {canEditActual && (
                                 <button
                                     type="button"
-                                    className={`px-3 py-1.5 ${gridEditField === 'actual' ? 'bg-brand-500 text-white' : 'bg-white text-gray-700'}`}
+                                    className={`px-3 py-1.5 ${gridEditField === 'actual' ? 'bg-brand-500 text-white' : 'bg-card text-foreground'}`}
                                     onClick={() => setGridEditField('actual')}
                                 >
                                     Actual hours
@@ -461,7 +541,7 @@ export function Allocation() {
                 </div>
 
                 {grid.error && (
-                    <div className="flex items-start gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm">
+                    <div className="flex items-start gap-2 text-critical bg-critical-bg border border-critical-border rounded-lg px-4 py-3 text-sm">
                         <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                         <div>
                             <p className="font-medium">Could not load allocation grid</p>
@@ -480,7 +560,7 @@ export function Allocation() {
                 )}
 
                 {grid.saveMessage && (
-                    <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
+                    <p className="text-sm text-success bg-success-bg border border-success-border rounded-lg px-4 py-2">
                         {grid.saveMessage} Changes sync to Weekly Planner automatically.
                     </p>
                 )}
@@ -528,7 +608,7 @@ export function Allocation() {
             </div>
             )}
 
-            {isAdmin && screenTab === 'capacity' && (
+            {!isCEO && isAdmin && screenTab === 'capacity' && (
                 <div className="space-y-4">
                     <WeeklyPlannerFilters
                         draft={plannerFilters}

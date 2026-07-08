@@ -4,7 +4,8 @@ import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
-import { canEditAllocations, isExecutiveReadOnly } from '@/lib/roles';
+import { canEditPlannedAllocations, isDeliveryManager, isExecutiveReadOnly } from '@/lib/roles';
+import { getMvpFeatures } from '@/lib/mvp-config';
 import { usePortfolioScope } from '@/lib/use-portfolio-scope';
 import { useEmployees } from '@/lib/use-employees';
 import { useProjects } from '@/lib/use-projects';
@@ -20,7 +21,7 @@ import { PlannerGridSearchBar } from '@/components/weekly-planner/planner-grid-s
 import { projectTypeLabel } from '@/lib/project-type-label';
 import { CapacitySummaryPanel } from './components/capacity-summary-panel';
 import './weekly-planner-grid.css';
-import { CalendarRange, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarRange, AlertCircle, ChevronLeft, ChevronRight, Loader2, Save, Undo2 } from 'lucide-react';
 
 function defaultFilterDraft(): WeeklyGridFilters {
     const from = startOfWeek(new Date(), { weekStartsOn: 1 });
@@ -43,8 +44,11 @@ function employeeRoleLabel(emp: {
 export default function WeeklyPlannerPage() {
     const { user } = useAuth();
     const isReadOnlyExecutive = isExecutiveReadOnly(user?.role);
-    const canEdit = canEditAllocations(user?.role) && !isReadOnlyExecutive;
-    const { editableProjectIds } = usePortfolioScope(user?.role);
+    const isDM = isDeliveryManager(user?.role);
+    const mvpMode = getMvpFeatures().mvpMode;
+    const canEdit = canEditPlannedAllocations(user?.role) && !isReadOnlyExecutive;
+    const { editableProjectIds: portfolioScopeIds } = usePortfolioScope(user?.role);
+    const editableProjectIds = mvpMode && isDM ? undefined : portfolioScopeIds;
 
     const { employees } = useEmployees();
     const { projects } = useProjects();
@@ -153,20 +157,52 @@ export default function WeeklyPlannerPage() {
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                 <div>
                     <div className="flex items-center gap-2">
-                        <CalendarRange className="w-6 h-6 text-brand-600" />
-                        <h1 className="text-2xl font-semibold text-gray-900">Weekly Resource Planner</h1>
+                        <CalendarRange className="w-6 h-6 text-brand-600 dark:text-brand-400" />
+                        <h1 className="text-2xl font-semibold text-foreground">Weekly Planner</h1>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">
-                        View planned hours, actuals, and variance by resource and project. Edit allocations in Resource Allocation.
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Each week shows <strong className="text-foreground">Plan</strong> (editable weekly hours),{' '}
+                        <strong className="text-foreground">Act</strong> (approved time entries), and{' '}
+                        <strong className="text-foreground">Δ</strong> (actual minus plan — positive means overrun on that project).
                     </p>
-                    <div className="flex gap-2 mt-2">
-                        <Badge variant="info">Read-only view</Badge>
-                        {user?.role === 'Admin' && (
-                            <Badge variant="secondary">Use Resource Allocation to edit plans</Badge>
-                        )}
+                    <div className="flex flex-wrap gap-2 mt-2">
+                        {!canEdit && <Badge variant="info">Read-only</Badge>}
+                        {canEdit && isDM && <Badge variant="secondary">Edit Plan cells · save below</Badge>}
                     </div>
                 </div>
+                {canEdit && (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => grid.discardChanges()}
+                            disabled={!grid.hasDirty || grid.saving}
+                        >
+                            <Undo2 className="w-4 h-4 mr-1" />
+                            Discard
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={() => void grid.saveBulk()}
+                            disabled={!grid.hasDirty || grid.saving}
+                            className="bg-brand-500 hover:bg-brand-600"
+                        >
+                            {grid.saving ? (
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                            ) : (
+                                <Save className="w-4 h-4 mr-1" />
+                            )}
+                            Save changes
+                        </Button>
+                    </div>
+                )}
             </div>
+
+            {grid.saveMessage && (
+                <p className="text-sm text-success bg-success-bg border border-success-border rounded-lg px-4 py-2">
+                    {grid.saveMessage}
+                </p>
+            )}
 
             <WeeklyPlannerFilters
                 draft={filterDraft}
@@ -179,7 +215,7 @@ export default function WeeklyPlannerPage() {
             />
 
             {grid.error && (
-                <div className="flex items-start gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm">
+                <div className="flex items-start gap-2 text-critical bg-critical-bg border border-critical-border rounded-lg px-4 py-3 text-sm">
                     <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                     <div>
                         <p className="font-medium">Weekly planner error</p>
@@ -206,7 +242,7 @@ export default function WeeklyPlannerPage() {
                 />
 
                 <div className="space-y-3 min-w-0">
-                    <div className="flex items-center justify-between text-sm text-gray-600">
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
                         <span>
                             {gridDisplayRows.length} row(s) · {grid.weeks.length} week(s)
                             {grid.pagination.totalPages > 1 &&
@@ -260,17 +296,15 @@ export default function WeeklyPlannerPage() {
                         loading={grid.loading}
                     />
 
-                    <p className="text-xs text-gray-500">
-                        <span className="inline-block w-3 h-3 bg-amber-100 border border-amber-400 rounded mr-1 align-middle" />
+                    <p className="text-xs text-muted-foreground">
+                        <span className="inline-block w-3 h-3 bg-warning-bg border border-warning-border rounded mr-1 align-middle" />
                         Unsaved plan ·
-                        <span className="inline-block w-3 h-3 bg-slate-100 border border-slate-300 rounded mx-1 align-middle" />
+                        <span className="inline-block w-3 h-3 bg-muted border border-border rounded mx-1 align-middle" />
                         Actual (read-only) ·
-                        <span className="inline-block w-3 h-3 bg-red-100 border border-red-300 rounded mx-1 align-middle" />
+                        <span className="inline-block w-3 h-3 bg-critical-bg border border-critical-border rounded mx-1 align-middle" />
                         Δ overrun ·
-                        <span className="inline-block w-3 h-3 bg-amber-50 border border-amber-300 rounded mx-1 align-middle" />
-                        Δ under plan ·
-                        <span className="inline-block w-3 h-3 bg-red-100 border border-red-300 rounded mx-1 align-middle" />
-                        Over-allocated week
+                        <span className="inline-block w-3 h-3 bg-warning-bg border border-warning-border rounded mx-1 align-middle" />
+                        Δ under plan
                     </p>
                 </div>
             </div>

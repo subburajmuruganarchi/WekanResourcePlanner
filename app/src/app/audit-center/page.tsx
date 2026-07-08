@@ -17,12 +17,18 @@ import { api } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { ROLES } from '@/lib/roles';
 import { normalizeRoleName } from '@/lib/role-utils';
-import { getRecentApiFailures, type ApiFailureRecord } from '@/lib/error-tracker';
 import { formatDistanceToNow } from 'date-fns';
 
 interface AuditEvent {
     id: string;
-    type: 'allocation_override' | 'sync_run';
+    type:
+        | 'allocation_override'
+        | 'sync_run'
+        | 'resource_assigned'
+        | 'resource_removed'
+        | 'project_created'
+        | 'project_updated'
+        | 'allocation_created';
     timestamp: string;
     title: string;
     detail: string;
@@ -43,7 +49,24 @@ function severityVariant(severity: AuditEvent['severity']) {
 }
 
 function typeLabel(type: AuditEvent['type']) {
-    return type === 'allocation_override' ? 'Override' : 'Sync';
+    switch (type) {
+        case 'allocation_override':
+            return 'Override';
+        case 'sync_run':
+            return 'Sync';
+        case 'resource_assigned':
+            return 'Assigned';
+        case 'resource_removed':
+            return 'Removed';
+        case 'project_created':
+            return 'Project';
+        case 'project_updated':
+            return 'Updated';
+        case 'allocation_created':
+            return 'Allocation';
+        default:
+            return type;
+    }
 }
 
 export default function AuditCenterPage() {
@@ -51,7 +74,6 @@ export default function AuditCenterPage() {
     const isAdmin = normalizeRoleName(user?.role) === ROLES.ADMIN;
 
     const [events, setEvents] = useState<AuditEvent[]>([]);
-    const [apiFailures, setApiFailures] = useState<ApiFailureRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +83,6 @@ export default function AuditCenterPage() {
         try {
             const data = await api.get<AuditEvent[]>('/system/audit-center?limit=50');
             setEvents(data);
-            setApiFailures(getRecentApiFailures());
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load audit events');
             setEvents([]);
@@ -75,11 +96,16 @@ export default function AuditCenterPage() {
     }, [isAdmin, load]);
 
     const stats = useMemo(() => {
+        const operational = events.filter((e) =>
+            ['resource_assigned', 'resource_removed', 'project_created', 'project_updated', 'allocation_created'].includes(
+                e.type
+            )
+        ).length;
         const overrides = events.filter((e) => e.type === 'allocation_override').length;
         const syncs = events.filter((e) => e.type === 'sync_run').length;
         const critical = events.filter((e) => e.severity === 'critical').length;
-        return { overrides, syncs, critical, clientErrors: apiFailures.length };
-    }, [events, apiFailures]);
+        return { operational, overrides, syncs, critical };
+    }, [events]);
 
     const sortedEvents = useMemo(
         () => [...events].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
@@ -112,7 +138,9 @@ export default function AuditCenterPage() {
                 accessor: (r) => (
                     <div>
                         <p className="font-medium">{r.title}</p>
-                        <p className="text-xs text-muted-foreground line-clamp-2">{r.detail}</p>
+                        {r.detail ? (
+                            <p className="text-xs text-muted-foreground line-clamp-2">{r.detail}</p>
+                        ) : null}
                     </div>
                 ),
                 sortValue: (r) => r.title,
@@ -120,7 +148,7 @@ export default function AuditCenterPage() {
             },
             {
                 id: 'actor',
-                header: 'Actor',
+                header: 'Who',
                 accessor: (r) => r.actor ?? '—',
                 sortValue: (r) => r.actor ?? '',
                 exportValue: (r) => r.actor ?? '',
@@ -153,7 +181,7 @@ export default function AuditCenterPage() {
             <PageHeader
                 eyebrow="Admin"
                 title="Audit Center"
-                description="Allocation overrides, sheet sync history, and client-side API failures."
+                description="Who changed what — resource assignments, projects, allocation overrides, and sheet syncs."
                 action={
                     <Button variant="outline" size="sm" onClick={() => void load()}>
                         <RefreshCw className="w-4 h-4 mr-2" />
@@ -169,10 +197,10 @@ export default function AuditCenterPage() {
             )}
 
             <MetricGrid className="mb-6">
+                <MetricCard label="Operational changes" value={String(stats.operational)} hint="Assignments & projects" />
                 <MetricCard label="Allocation overrides" value={String(stats.overrides)} />
                 <MetricCard label="Sync events" value={String(stats.syncs)} />
                 <MetricCard label="Critical events" value={String(stats.critical)} />
-                <MetricCard label="Client API errors" value={String(stats.clientErrors)} hint="This browser session" />
             </MetricGrid>
 
             <Section title="Audit trail">
@@ -184,72 +212,18 @@ export default function AuditCenterPage() {
                     storageKey="r360-audit-cols"
                     searchPlaceholder="Search events…"
                     emptyTitle="No audit events"
-                    emptyDescription="No allocation overrides or sync runs recorded yet."
+                    emptyDescription="Resource assignments and other changes will appear here."
                     mobileCardRender={(r) => (
                         <div>
                             <p className="font-medium">{r.title}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{r.detail}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{r.actor ?? 'System'}</p>
+                            {r.detail ? (
+                                <p className="text-xs text-muted-foreground mt-1">{r.detail}</p>
+                            ) : null}
                         </div>
                     )}
                 />
             </Section>
-
-            {apiFailures.length > 0 && (
-                <Section title="Recent client API failures" className="mt-8">
-                    <EnterpriseDataTable
-                        rows={apiFailures}
-                        rowKey={(r) => `${r.timestamp}-${r.endpoint}`}
-                        exportFilename="client-api-failures"
-                        columns={[
-                            {
-                                id: 'when',
-                                header: 'When',
-                                accessor: (r) =>
-                                    formatDistanceToNow(new Date(r.timestamp), { addSuffix: true }),
-                                sortValue: (r) => r.timestamp,
-                                exportValue: (r) => r.timestamp,
-                            },
-                            {
-                                id: 'route',
-                                header: 'Page',
-                                accessor: (r) => r.route,
-                                sortValue: (r) => r.route,
-                                exportValue: (r) => r.route,
-                            },
-                            {
-                                id: 'endpoint',
-                                header: 'Endpoint',
-                                accessor: (r) => (
-                                    <span className="font-mono text-xs">{r.endpoint}</span>
-                                ),
-                                sortValue: (r) => r.endpoint,
-                                exportValue: (r) => r.endpoint,
-                            },
-                            {
-                                id: 'status',
-                                header: 'Status',
-                                accessor: (r) => (
-                                    <StatusBadge variant={r.status >= 500 ? 'critical' : 'warning'}>
-                                        {r.status}
-                                    </StatusBadge>
-                                ),
-                                sortValue: (r) => r.status,
-                                exportValue: (r) => String(r.status),
-                            },
-                            {
-                                id: 'message',
-                                header: 'Message',
-                                accessor: (r) => (
-                                    <span className="text-xs text-muted-foreground line-clamp-2">{r.message}</span>
-                                ),
-                                sortValue: (r) => r.message,
-                                exportValue: (r) => r.message,
-                            },
-                        ]}
-                        emptyTitle="No client failures"
-                    />
-                </Section>
-            )}
         </PageContainer>
     );
 }

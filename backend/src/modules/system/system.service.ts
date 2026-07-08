@@ -7,6 +7,7 @@ import { Employee } from '../employees/employee.model';
 import { Role } from '../roles/role.model';
 import { Notification } from '../notifications/notification.model';
 import { SyncRun } from '../google-sheet-sync/sync-run.model';
+import { OperationalAudit } from '../audit/operational-audit.model';
 import { TimeEntryStatus } from '../../common/types/enums';
 import { operationalProjectMongoFilter } from '../../common/utils/project-status.util';
 
@@ -156,7 +157,14 @@ export type AuditEventSeverity = 'info' | 'warning' | 'critical';
 
 export interface AuditEvent {
     id: string;
-    type: 'allocation_override' | 'sync_run';
+    type:
+        | 'allocation_override'
+        | 'sync_run'
+        | 'resource_assigned'
+        | 'resource_removed'
+        | 'project_created'
+        | 'project_updated'
+        | 'allocation_created';
     timestamp: string;
     title: string;
     detail: string;
@@ -168,7 +176,7 @@ export interface AuditEvent {
 export async function buildAuditCenter(limit = 50): Promise<AuditEvent[]> {
     const cap = Math.min(Math.max(limit, 1), 100);
 
-    const [overrideLogs, syncRuns] = await Promise.all([
+    const [overrideLogs, syncRuns, operationalLogs] = await Promise.all([
         AllocationOverrideLog.find()
             .sort({ created_at: -1 })
             .limit(cap)
@@ -178,6 +186,10 @@ export async function buildAuditCenter(limit = 50): Promise<AuditEvent[]> {
             .lean(),
         SyncRun.find()
             .sort({ startedAt: -1 })
+            .limit(cap)
+            .lean(),
+        OperationalAudit.find()
+            .sort({ created_at: -1 })
             .limit(cap)
             .lean(),
     ]);
@@ -226,6 +238,29 @@ export async function buildAuditCenter(limit = 50): Promise<AuditEvent[]> {
                 rowsProcessed: run.rowsProcessed,
                 rowsSkipped: run.rowsSkipped,
                 syncBatchId: run.syncBatchId ?? null,
+            },
+        });
+    }
+
+    for (const log of operationalLogs) {
+        const ts = (log as { created_at?: Date }).created_at ?? new Date();
+        const action = log.action as AuditEvent['type'];
+        const actorLabel =
+            log.actor_name ??
+            log.actor_email ??
+            (log.actor_role ? `${log.actor_role}` : undefined);
+
+        events.push({
+            id: `op-${String((log as { _id: unknown })._id)}`,
+            type: action,
+            timestamp: ts instanceof Date ? ts.toISOString() : new Date(ts).toISOString(),
+            title: log.summary,
+            detail: log.detail ?? '',
+            severity: action === 'resource_removed' ? 'warning' : 'info',
+            actor: actorLabel,
+            meta: {
+                entityType: log.entity_type ?? null,
+                entityId: log.entity_id ?? null,
             },
         });
     }

@@ -4,7 +4,6 @@ import {
     AlertTriangle,
     Ban,
     Users,
-    ClipboardList,
     Rocket,
     Sparkles,
     ArrowRight,
@@ -51,20 +50,13 @@ export default function DeliveryCommandPage() {
             <CopilotSuggestedActions />
 
             {loading ? (
-                <MetricGridSkeleton count={6} />
+                <MetricGridSkeleton count={5} />
             ) : (
                 <MetricGrid columns={{ sm: 2, xl: 3 }}>
                     <MetricCard label="Managed Projects" value={String(metrics.managedProjects)} icon={FolderKanban} onClick={() => navigate('/projects')} />
                     <MetricCard label="Projects At Risk" value={String(metrics.atRisk)} accent="amber" icon={AlertTriangle} />
                     <MetricCard label="Blocked Projects" value={String(metrics.blocked)} accent="rose" icon={Ban} />
-                    <MetricCard label="Planner Gaps" value={String(metrics.resourceGaps)} icon={Users} onClick={() => navigate('/allocation')} />
-                    <MetricCard
-                        label="Pending Approvals"
-                        value={String(metrics.pendingDecisions)}
-                        accent="sky"
-                        icon={ClipboardList}
-                        onClick={() => navigate('/pm-approvals')}
-                    />
+                    <MetricCard label="Planner Gaps" value={String(metrics.resourceGaps)} icon={Users} onClick={() => navigate('/delivery/capacity')} />
                     <MetricCard label="Active Releases (est.)" value={String(metrics.upcomingReleases)} accent="emerald" icon={Rocket} />
                 </MetricGrid>
             )}

@@ -19,12 +19,6 @@ import { canSeeManagementDashboard } from '@/lib/roles';
 import { cn } from '@/lib/utils';
 import type { EmployeeSkill } from '@/types/api';
 
-const LEVEL_RANK: Record<string, number> = {
-    Beginner: 1,
-    Intermediate: 2,
-    Expert: 3,
-};
-
 function levelColor(level: string | undefined): string {
     switch (level) {
         case 'Expert':
@@ -124,10 +118,7 @@ export default function SkillsMatrixPage() {
             return acc + (emp.skills?.filter((s) => s.skillLevel === 'Expert').length ?? 0);
         }, 0);
         const gaps = filteredSkills.filter((skill) => {
-            return !employees.some((e) => {
-                const match = findSkill(e.skills, skill.name);
-                return match && (LEVEL_RANK[match.skillLevel] ?? 0) >= 2;
-            });
+            return !employees.some((e) => findSkill(e.skills, skill.name));
         }).length;
         return { withSkills, expertCells, gaps, total: employees.length };
     }, [employees, filteredSkills]);
@@ -151,7 +142,7 @@ export default function SkillsMatrixPage() {
             <PageHeader
                 eyebrow="Resource Intelligence"
                 title="Skills Matrix"
-                description="Heatmap of employee proficiency across the organization skill catalog."
+                description="Proficiency heatmap from Resource sheet skills synced to employee profiles."
                 action={
                     user?.role === 'Admin' ? (
                         <Button variant="outline" size="sm" asChild>
@@ -169,9 +160,9 @@ export default function SkillsMatrixPage() {
                 <MetricCard label="With skills on profile" value={String(coverageStats.withSkills)} />
                 <MetricCard label="Expert-level entries" value={String(coverageStats.expertCells)} />
                 <MetricCard
-                    label="Skill gaps (no Int.+)"
+                    label="Skill gaps"
                     value={String(coverageStats.gaps)}
-                    hint="Skills without intermediate+ coverage"
+                    hint="Catalog skills with no employee coverage"
                 />
             </MetricGrid>
 
@@ -293,12 +284,7 @@ export default function SkillsMatrixPage() {
             <Section title="Gap highlights" className="mt-6">
                 <div className="flex flex-wrap gap-2">
                     {filteredSkills
-                        .filter((skill) => {
-                            return !employees.some((e) => {
-                                const match = findSkill(e.skills, skill.name);
-                                return match && (LEVEL_RANK[match.skillLevel] ?? 0) >= 2;
-                            });
-                        })
+                        .filter((skill) => !employees.some((e) => findSkill(e.skills, skill.name)))
                         .slice(0, 12)
                         .map((skill) => (
                             <StatusBadge key={skill.id} variant="warning">
@@ -306,7 +292,7 @@ export default function SkillsMatrixPage() {
                             </StatusBadge>
                         ))}
                     {coverageStats.gaps === 0 && (
-                        <p className="text-sm text-muted-foreground">All visible skills have intermediate+ coverage.</p>
+                        <p className="text-sm text-muted-foreground">All visible skills have employee coverage.</p>
                     )}
                 </div>
             </Section>

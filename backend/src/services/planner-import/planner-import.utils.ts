@@ -167,8 +167,11 @@ export function deriveProjectTypeLabel(projectType?: string, billingType?: strin
     return undefined;
 }
 
-export function inferSkillLevel(_jobRoleName: string, _skillIndex: number): SkillLevel {
-    return SkillLevel.EXPERT;
+export function inferSkillLevel(jobRoleName: string, skillIndex: number): SkillLevel {
+    const profile = roleProfile(jobRoleName);
+    if (skillIndex === 0) return profile.level;
+    if (profile.level === SkillLevel.EXPERT) return SkillLevel.INTERMEDIATE;
+    return SkillLevel.BEGINNER;
 }
 
 export function inferExperienceYears(jobRoleName: string, skillIndex: number): number {

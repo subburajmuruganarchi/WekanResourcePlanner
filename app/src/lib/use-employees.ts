@@ -7,6 +7,8 @@ interface UseEmployeesOptions {
     allocatedToMyProjects?: boolean;
     /** When true, only active employees are returned. */
     activeOnly?: boolean;
+    /** When true, include current project assignments per employee. */
+    includeAssignments?: boolean;
 }
 
 interface UseEmployeesResult {
@@ -19,7 +21,7 @@ interface UseEmployeesResult {
 }
 
 export function useEmployees(options: UseEmployeesOptions = {}): UseEmployeesResult {
-    const { allocatedToMyProjects = false, activeOnly = true } = options;
+    const { allocatedToMyProjects = false, activeOnly = true, includeAssignments = false } = options;
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -31,6 +33,7 @@ export function useEmployees(options: UseEmployeesOptions = {}): UseEmployeesRes
             const params = new URLSearchParams();
             if (allocatedToMyProjects) params.set('allocatedToMyProjects', 'true');
             if (activeOnly) params.set('isActive', 'true');
+            if (includeAssignments) params.set('includeAssignments', 'true');
             const query = params.toString() ? `?${params.toString()}` : '';
             const data = await api.get<Employee[]>(`/employees${query}`);
             setEmployees(data);
@@ -39,7 +42,7 @@ export function useEmployees(options: UseEmployeesOptions = {}): UseEmployeesRes
         } finally {
             setLoading(false);
         }
-    }, [allocatedToMyProjects, activeOnly]);
+    }, [allocatedToMyProjects, activeOnly, includeAssignments]);
 
     useEffect(() => {
         fetchEmployees();

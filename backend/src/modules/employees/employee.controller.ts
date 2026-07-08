@@ -20,6 +20,7 @@ export class EmployeeController {
                         : req.query.isActive === 'all'
                           ? undefined
                           : true,
+                includeAssignments: req.query.includeAssignments === 'true',
             };
 
             const user = req.user;

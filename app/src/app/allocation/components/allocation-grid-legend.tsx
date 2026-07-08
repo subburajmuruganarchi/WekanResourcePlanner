@@ -27,19 +27,19 @@ const LEGEND_ITEMS = [
 
 export function AllocationGridLegend() {
     return (
-        <Card className="border-gray-200 bg-white shadow-none" aria-labelledby="allocation-colour-guide">
+        <Card className="border-border bg-card shadow-none" aria-labelledby="allocation-colour-guide">
             <CardContent className="p-4 sm:p-5">
                 <div className="flex items-start gap-3">
-                    <Info className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" aria-hidden />
+                    <Info className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" aria-hidden />
                     <div className="min-w-0 flex-1 space-y-4">
                         <div>
                             <h2
                                 id="allocation-colour-guide"
-                                className="text-sm font-semibold text-gray-900"
+                                className="text-sm font-semibold text-foreground"
                             >
                                 Colour guide
                             </h2>
-                            <p className="mt-1 text-xs text-gray-500">
+                            <p className="mt-1 text-xs text-muted-foreground">
                                 Highlights apply to weekly planned-hour cells in the table above.
                             </p>
                         </div>
@@ -48,15 +48,15 @@ export function AllocationGridLegend() {
                             {LEGEND_ITEMS.map((item) => (
                                 <li
                                     key={item.label}
-                                    className="flex items-start gap-2.5 rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2.5"
+                                    className="flex items-start gap-2.5 rounded-lg border border-border bg-muted/40 px-3 py-2.5"
                                 >
                                     <span
                                         className={`wp-legend-swatch ${item.swatchClass} mt-0.5`}
                                         aria-hidden
                                     />
                                     <div className="min-w-0">
-                                        <p className="text-xs font-medium text-gray-900">{item.label}</p>
-                                        <p className="text-[11px] leading-snug text-gray-500 mt-0.5">
+                                        <p className="text-xs font-medium text-foreground">{item.label}</p>
+                                        <p className="text-[11px] leading-snug text-muted-foreground mt-0.5">
                                             {item.detail}
                                         </p>
                                     </div>
@@ -64,7 +64,7 @@ export function AllocationGridLegend() {
                             ))}
                         </ul>
 
-                        <p className="text-[11px] text-gray-500 border-t border-gray-100 pt-3">
+                        <p className="text-[11px] text-muted-foreground border-t border-border pt-3">
                             Standard weekly capacity is {DEFAULT_WEEKLY_CAPACITY_HOURS} hours per
                             resource. Week columns show planned hours only — hover a cell for approved
                             actuals and variance.

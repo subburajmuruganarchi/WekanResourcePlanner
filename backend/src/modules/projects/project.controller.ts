@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { projectService } from './project.service';
 import { CreateProjectSchema } from './project.schema';
 import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
+import { auditActorFromRequest } from '../audit/operational-audit.service';
 import { ROLES } from '../../common/constants/roles';
 import { normalizeRoleName, isEmployeeAccessRole } from '../../common/utils/role-normalize.util';
 import { resolveEmployeeAssignedProjectIds } from '../../common/utils/employee-project-scope.util';
@@ -135,8 +136,9 @@ export class ProjectController {
             const mappedBody = this.mapRequestBody(req.body);
             // Validate request body with Zod
             const validatedData = CreateProjectSchema.parse(mappedBody);
+            const auditActor = auditActorFromRequest(req.user);
 
-            const project = await projectService.create(validatedData as any);
+            const project = await projectService.create(validatedData as any, { auditActor });
             res.status(201).json({
                 status: 'success',
                 data: project,
@@ -150,7 +152,8 @@ export class ProjectController {
         try {
             const { id } = req.params;
             const mappedBody = this.mapRequestBody(req.body);
-            const project = await projectService.update(id, mappedBody);
+            const auditActor = auditActorFromRequest(req.user);
+            const project = await projectService.update(id, mappedBody, { auditActor });
 
             res.json({
                 status: 'success',

@@ -50,7 +50,7 @@ function formatDate(value?: string): string {
 export function ProjectListCards({ projects, onEdit, onOpen }: ProjectListCardsProps) {
     if (projects.length === 0) {
         return (
-            <p className="text-center text-gray-500 py-12 bg-white border border-gray-200 rounded-xl">
+            <p className="text-center text-muted-foreground py-12 dashboard-card border border-border rounded-xl">
                 No projects match your search or filters.
             </p>
         );
@@ -75,14 +75,14 @@ export function ProjectListCards({ projects, onEdit, onOpen }: ProjectListCardsP
                                     onOpen(project.id);
                                 }
                             }}
-                            className="p-4 border-gray-200 shadow-sm hover:border-brand-200 hover:shadow-md transition-all cursor-pointer text-left"
+                            className="p-4 border-border shadow-sm hover:border-brand-200 dark:hover:border-brand-500/40 hover:shadow-md transition-all cursor-pointer text-left"
                         >
                             <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0 flex-1">
-                                    <h4 className="font-semibold text-brand-700 leading-snug line-clamp-2">
+                                    <h4 className="font-semibold text-brand-700 dark:text-brand-400 leading-snug line-clamp-2">
                                         {project.name}
                                     </h4>
-                                    <p className="text-xs font-mono text-gray-500 mt-1">{project.code}</p>
+                                    <p className="text-xs font-mono text-muted-foreground mt-1">{project.code}</p>
                                 </div>
                                 <Button
                                     variant="ghost"
@@ -94,7 +94,7 @@ export function ProjectListCards({ projects, onEdit, onOpen }: ProjectListCardsP
                                     }}
                                     aria-label={`Edit ${project.name}`}
                                 >
-                                    <Edit className="w-4 h-4 text-gray-400 hover:text-brand-600" />
+                                    <Edit className="w-4 h-4 text-muted-foreground hover:text-brand-600" />
                                 </Button>
                             </div>
 
@@ -106,7 +106,7 @@ export function ProjectListCards({ projects, onEdit, onOpen }: ProjectListCardsP
                                     {projectStatusLabel(project.status)}
                                 </Badge>
                                 {project.type && (
-                                    <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-700 border-slate-200">
+                                    <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground border-border">
                                         {project.type}
                                     </Badge>
                                 )}
@@ -115,17 +115,17 @@ export function ProjectListCards({ projects, onEdit, onOpen }: ProjectListCardsP
                                 </Badge>
                             </div>
 
-                            <div className="mt-3 space-y-2 text-xs text-gray-700">
+                            <div className="mt-3 space-y-2 text-xs text-foreground">
                                 <p>
-                                    <span className="text-gray-400">Owner </span>
+                                    <span className="text-muted-foreground">Owner </span>
                                     <span className="font-medium">{project.owner}</span>
                                 </p>
                                 <p>
-                                    <span className="text-gray-400">Project Manager </span>
+                                    <span className="text-muted-foreground">Project Manager </span>
                                     <span className="font-medium">{project.managerName || 'Unassigned'}</span>
                                 </p>
                                 <p>
-                                    <span className="text-gray-400">Delivery Manager </span>
+                                    <span className="text-muted-foreground">Delivery Manager </span>
                                     <span className="font-medium">
                                         {project.deliveryManagerNames?.length
                                             ? project.deliveryManagerNames.join(', ')
@@ -133,7 +133,7 @@ export function ProjectListCards({ projects, onEdit, onOpen }: ProjectListCardsP
                                     </span>
                                 </p>
                                 <p className="tabular-nums">
-                                    <span className="text-gray-400">Timeline </span>
+                                    <span className="text-muted-foreground">Timeline </span>
                                     {timeline}
                                 </p>
                                 <p className="flex items-center gap-1 font-medium">

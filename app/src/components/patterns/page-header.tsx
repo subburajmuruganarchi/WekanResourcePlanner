@@ -4,13 +4,13 @@ import type { LucideIcon } from 'lucide-react';
 type Accent = 'brand' | 'emerald' | 'amber' | 'rose' | 'slate' | 'sky' | 'violet';
 
 const accentMap: Record<Accent, string> = {
-    brand: 'text-brand-600 bg-brand-50 border-brand-100',
-    emerald: 'text-emerald-600 bg-emerald-50 border-emerald-100',
-    amber: 'text-amber-700 bg-amber-50 border-amber-100',
-    rose: 'text-rose-600 bg-rose-50 border-rose-100',
-    slate: 'text-slate-700 bg-slate-50 border-slate-100',
-    sky: 'text-sky-600 bg-sky-50 border-sky-100',
-    violet: 'text-violet-600 bg-violet-50 border-violet-100',
+    brand: 'text-brand-600 dark:text-brand-400 bg-brand-500/10 border-brand-500/20',
+    emerald: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+    amber: 'text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/20',
+    rose: 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20',
+    slate: 'text-slate-700 dark:text-slate-300 bg-slate-500/10 border-slate-500/20',
+    sky: 'text-sky-600 dark:text-sky-400 bg-sky-500/10 border-sky-500/20',
+    violet: 'text-violet-600 dark:text-violet-400 bg-violet-500/10 border-violet-500/20',
 };
 
 interface PageHeaderProps {
@@ -26,7 +26,7 @@ export function PageHeader({ eyebrow, title, description, action, className }: P
         <header className={cn('flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-8', className)}>
             <div className="max-w-3xl">
                 {eyebrow && (
-                    <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 mb-2">{eyebrow}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400 mb-2">{eyebrow}</p>
                 )}
                 <h1 className="text-2xl lg:text-3xl font-bold text-card-foreground tracking-tight">{title}</h1>
                 {description && (

@@ -54,7 +54,11 @@ export function canEditPlannedAllocationGrid(role: string | undefined): boolean 
     if (!features.mvpMode) {
         return r === ROLES.DELIVERY_MANAGER;
     }
-    return r === ROLES.PROJECT_MANAGER || r === ROLES.DELIVERY_MANAGER;
+    return (
+        r === ROLES.PROJECT_MANAGER ||
+        r === ROLES.DELIVERY_MANAGER ||
+        r === ROLES.ADMIN
+    );
 }
 
 /** Actual hours — PM (scoped) and DM (any). Admin/CEO cannot edit. */
@@ -63,7 +67,11 @@ export function canEditActualAllocationGrid(role: string | undefined): boolean {
     if (!features.mvpMode) {
         return r === ROLES.DELIVERY_MANAGER;
     }
-    return r === ROLES.PROJECT_MANAGER || r === ROLES.DELIVERY_MANAGER;
+    return (
+        r === ROLES.PROJECT_MANAGER ||
+        r === ROLES.DELIVERY_MANAGER ||
+        r === ROLES.ADMIN
+    );
 }
 
 /** @deprecated use canEditPlannedAllocationGrid */
@@ -125,7 +133,7 @@ export async function assertCanEditWeeklyGridForProjects(
         );
     }
 
-    if (r === ROLES.DELIVERY_MANAGER) {
+    if (r === ROLES.DELIVERY_MANAGER || r === ROLES.ADMIN || r === ROLES.CEO) {
         return;
     }
 

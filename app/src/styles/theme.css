@@ -38,3 +38,49 @@
 [data-theme="dark"] .sidebar-nav-scroll::-webkit-scrollbar-thumb {
   background-color: #3d4a5c;
 }
+
+/* AG Grid — allocation / weekly planner */
+[data-theme="dark"] .wp-grid.ag-theme-quartz {
+  --ag-background-color: var(--color-card);
+  --ag-foreground-color: var(--color-foreground);
+  --ag-borders: solid 1px var(--color-border);
+  --ag-header-background-color: var(--color-muted);
+  --ag-odd-row-background-color: var(--color-card);
+  --ag-row-hover-color: rgb(37 99 235 / 0.12);
+  --ag-header-foreground-color: var(--color-foreground);
+  --ag-secondary-foreground-color: var(--color-muted-foreground);
+  --ag-border-color: var(--color-border);
+  --ag-selected-row-background-color: rgb(238 47 88 / 0.12);
+}
+
+[data-theme="dark"] .wp-grid .ag-header-cell-label {
+  color: var(--color-foreground);
+}
+
+[data-theme="dark"] .wp-grid .wp-pinned-cell {
+  background-color: var(--color-muted);
+  color: var(--color-foreground);
+}
+
+[data-theme="dark"] .wp-grid .wp-cell-dirty {
+  background-color: rgb(217 119 6 / 0.2) !important;
+  border-color: rgb(217 119 6 / 0.5) !important;
+}
+
+[data-theme="dark"] .wp-grid .wp-cell-over {
+  background-color: rgb(220 38 38 / 0.18) !important;
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .wp-grid .wp-cell-high-util {
+  background-color: rgb(37 99 235 / 0.15) !important;
+}
+
+[data-theme="dark"] .wp-grid .wp-cell-bench {
+  background-color: rgb(5 150 105 / 0.15) !important;
+}
+
+[data-theme="dark"] .wp-legend-swatch--default {
+  background-color: var(--color-card);
+  border-color: var(--color-border);
+}

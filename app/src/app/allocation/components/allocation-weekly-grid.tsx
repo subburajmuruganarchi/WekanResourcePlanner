@@ -292,7 +292,7 @@ export function AllocationWeeklyGrid({
                 lockPinned: true,
                 suppressMovable: true,
                 editable: (params: EditableCallbackParams<AllocationGridRow>) =>
-                    canEdit && !!params.data?.projectId,
+                    canEdit && isProjectEditable(params.data),
                 cellClass: 'wp-pinned-cell',
                 filter: false,
                 cellEditor: 'agSelectCellEditor',
@@ -351,7 +351,7 @@ export function AllocationWeeklyGrid({
 
     return (
         <div
-            className="wp-grid ag-theme-quartz w-full rounded-xl border border-gray-200 overflow-hidden"
+            className="wp-grid ag-theme-quartz w-full rounded-xl border border-border overflow-hidden"
             style={{ height: 'min(78vh, 720px)', width: '100%' }}
         >
             <AgGridReact<AllocationGridRow>

@@ -36,6 +36,7 @@ const ExecutiveDashboardPage = lazy(() => import("@/app/executive/page"))
 const RiskRadarPage = lazy(() => import("@/app/executive/risk-radar/page"))
 const DeliveryCommandPage = lazy(() => import("@/app/delivery/page"))
 const DeliveryCapacityPage = lazy(() => import("@/app/delivery/capacity/page"))
+const DeliveryWeeklyPlannerPage = lazy(() => import("@/app/weekly-planner/page"))
 const DeliveryRecommendationsPage = lazy(() => import("@/app/delivery/recommendations/page"))
 const PmDashboardPage = lazy(() => import("@/app/pm-workspace/page"))
 const PmTimelinePage = lazy(() => import("@/app/pm-workspace/timeline/page"))
@@ -137,6 +138,7 @@ function AppRoutes() {
         <Route path="/delivery" element={<LazyPage><DeliveryCommandPage /></LazyPage>} />
         <Route path="/delivery/milestones" element={<Navigate to="/delivery" replace />} />
         <Route path="/delivery/capacity" element={<LazyPage><DeliveryCapacityPage /></LazyPage>} />
+        <Route path="/delivery/weekly-planner" element={<LazyPage><DeliveryWeeklyPlannerPage /></LazyPage>} />
         <Route path="/delivery/raid" element={<Navigate to="/delivery" replace />} />
         <Route path="/delivery/recommendations" element={<LazyPage><DeliveryRecommendationsPage /></LazyPage>} />
         <Route path="/pm" element={<LazyPage><PmDashboardPage /></LazyPage>} />

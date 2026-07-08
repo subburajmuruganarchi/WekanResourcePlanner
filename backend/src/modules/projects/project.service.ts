@@ -3,11 +3,16 @@ import { ProjectSkillRequirement, IProjectSkillRequirement } from './project-ski
 import { ProjectRoleEffort, IProjectRoleEffort } from './project-role-effort.model';
 import { ProjectAllocation } from '../allocations/allocation.model';
 import { EmployeeSkill } from '../employees/employee-skill.model';
+import { Employee } from '../employees/employee.model';
 import { Role } from '../roles/role.model';
 import { Skill } from '../skills/skill.model';
 import { Types } from 'mongoose';
 import { AppError } from '../../common/errors/app-error';
 import { deriveProjectTypeLabel } from '../../services/planner-import/planner-import.utils';
+import {
+    AuditActor,
+    recordOperationalAudit,
+} from '../audit/operational-audit.service';
 import {
     normalizeProjectStatus,
     projectStatusListMongoFilter,
@@ -18,6 +23,10 @@ import {
     getDeliveryManagersForProject,
     type ProjectDeliveryManagers,
 } from '../../common/utils/project-delivery-managers.util';
+
+export interface ProjectWriteOptions {
+    auditActor?: AuditActor;
+}
 
 export interface ProjectListParams {
     status?: string;
@@ -274,7 +283,7 @@ export class ProjectService {
         return this.mapToResponse(project, skillReqs, roleEfforts, allocations, employeeSkills, dm);
     }
 
-    async create(data: Partial<IProject>): Promise<ProjectResponse> {
+    async create(data: Partial<IProject>, options?: ProjectWriteOptions): Promise<ProjectResponse> {
         // Check code uniqueness
         const existing = await Project.findOne({ project_code: data.project_code });
         if (existing) {
@@ -312,8 +321,24 @@ export class ProjectService {
             project._id.toString(),
             (data as any).resources,
             project.start_date,
-            project.end_date
+            project.end_date,
+            {
+                actor: options?.auditActor,
+                projectName: project.project_name,
+                projectCode: project.project_code,
+            }
         );
+
+        if (options?.auditActor) {
+            await recordOperationalAudit({
+                action: 'project_created',
+                actor: options.auditActor,
+                summary: `Project created: ${project.project_name}`,
+                detail: `Code ${project.project_code}`,
+                entityType: 'project',
+                entityId: project._id.toString(),
+            });
+        }
 
         return this.findById(project._id.toString()) as Promise<ProjectResponse>;
     }
@@ -334,11 +359,20 @@ export class ProjectService {
             endDate?: string | Date;
         }> | undefined,
         projectStart?: Date,
-        projectEnd?: Date
+        projectEnd?: Date,
+        audit?: { actor?: AuditActor; projectName?: string; projectCode?: string }
     ): Promise<void> {
         if (!Array.isArray(resources)) {
             return;
         }
+
+        const beforeActive = await ProjectAllocation.find({
+            project_id: projectId,
+            is_active: true,
+        })
+            .select('employee_id')
+            .lean();
+        const beforeIds = new Set(beforeActive.map((a) => a.employee_id.toString()));
 
         const valid = resources.filter(
             (r) => r.employeeId && Types.ObjectId.isValid(r.employeeId) && r.roleId && Types.ObjectId.isValid(r.roleId)
@@ -380,9 +414,58 @@ export class ProjectService {
                 { upsert: true }
             );
         }
+
+        if (audit?.actor) {
+            const afterIds = new Set(valid.map((r) => r.employeeId as string));
+            const addedIds = [...afterIds].filter((id) => !beforeIds.has(id));
+            const removedIds = [...beforeIds].filter((id) => !afterIds.has(id));
+
+            if (addedIds.length > 0 || removedIds.length > 0) {
+                const nameById = await this.loadEmployeeNames([...addedIds, ...removedIds]);
+                const projectLabel = audit.projectName ?? audit.projectCode ?? 'project';
+
+                for (const empId of addedIds) {
+                    const empName = nameById.get(empId) ?? 'Employee';
+                    await recordOperationalAudit({
+                        action: 'resource_assigned',
+                        actor: audit.actor,
+                        summary: `${empName} assigned to ${projectLabel}`,
+                        entityType: 'project',
+                        entityId: projectId,
+                        metadata: { employeeId: empId, projectCode: audit.projectCode },
+                    });
+                }
+
+                for (const empId of removedIds) {
+                    const empName = nameById.get(empId) ?? 'Employee';
+                    await recordOperationalAudit({
+                        action: 'resource_removed',
+                        actor: audit.actor,
+                        summary: `${empName} removed from ${projectLabel}`,
+                        entityType: 'project',
+                        entityId: projectId,
+                        metadata: { employeeId: empId, projectCode: audit.projectCode },
+                    });
+                }
+            }
+        }
     }
 
-    async update(id: string, data: any): Promise<ProjectResponse> {
+    private async loadEmployeeNames(employeeIds: string[]): Promise<Map<string, string>> {
+        const unique = [...new Set(employeeIds.filter((id) => Types.ObjectId.isValid(id)))];
+        if (unique.length === 0) return new Map();
+
+        const rows = await Employee.find({ _id: { $in: unique } })
+            .select('first_name last_name')
+            .lean();
+        const map = new Map<string, string>();
+        for (const row of rows) {
+            map.set(row._id.toString(), `${row.first_name} ${row.last_name}`.trim());
+        }
+        return map;
+    }
+
+    async update(id: string, data: any, options?: ProjectWriteOptions): Promise<ProjectResponse> {
         if (!Types.ObjectId.isValid(id)) {
             throw new AppError('Invalid project ID', 400);
         }
@@ -448,7 +531,12 @@ export class ProjectService {
             id,
             (data as any).resources,
             project.start_date,
-            project.end_date
+            project.end_date,
+            {
+                actor: options?.auditActor,
+                projectName: project.project_name,
+                projectCode: project.project_code,
+            }
         );
 
         return this.findById(id) as Promise<ProjectResponse>;

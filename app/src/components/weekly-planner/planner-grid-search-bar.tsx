@@ -25,7 +25,7 @@ export function PlannerGridSearchBar({
             className={`grid gap-2 ${showRole ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}
         >
             <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                     placeholder="Search project…"
                     value={projectSearch}
@@ -34,7 +34,7 @@ export function PlannerGridSearchBar({
                 />
             </div>
             <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                     placeholder="Search resource…"
                     value={resourceSearch}
@@ -44,7 +44,7 @@ export function PlannerGridSearchBar({
             </div>
             {showRole && onRoleSearchChange && (
                 <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                         placeholder="Search resource role…"
                         value={roleSearch}

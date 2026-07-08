@@ -277,7 +277,7 @@ export function WeeklyPlannerGrid({
 
     return (
         <div
-            className="wp-grid ag-theme-quartz w-full rounded-xl border border-gray-200 overflow-hidden"
+            className="wp-grid ag-theme-quartz w-full rounded-xl border border-border overflow-hidden"
             style={{ height: 'min(70vh, 640px)', width: '100%' }}
         >
             <AgGridReact<WeeklyPlannerDisplayRow>
