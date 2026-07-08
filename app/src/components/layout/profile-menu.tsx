@@ -68,11 +68,10 @@ export function ProfileMenu() {
                     <button
                         type="button"
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-muted text-card-foreground"
-                        disabled
-                        title="Coming soon"
+                        onClick={() => navigate('/account')}
                     >
                         <User className="w-4 h-4" />
-                        Profile
+                        Account & password
                     </button>
                 </div>
                 <div className="p-1 border-t border-border">

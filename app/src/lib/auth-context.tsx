@@ -14,6 +14,8 @@ export interface User {
     jobRole?: string
     /** Fallback title when job role is not set. */
     position?: string
+    /** Set after admin password reset — user should update from account settings. */
+    passwordMustChange?: boolean
 }
 
 interface BackendAuthUser {
@@ -24,6 +26,7 @@ interface BackendAuthUser {
     role: string
     jobRole?: string
     position?: string
+    passwordMustChange?: boolean
 }
 
 function mapBackendUser(userData: BackendAuthUser): User {
@@ -34,6 +37,7 @@ function mapBackendUser(userData: BackendAuthUser): User {
         role: normalizeRoleName(userData.role) as Role,
         jobRole: userData.jobRole?.trim() || undefined,
         position: userData.position?.trim() || undefined,
+        passwordMustChange: userData.passwordMustChange === true,
     }
 }
 

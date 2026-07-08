@@ -12,6 +12,8 @@ export interface IEmployee extends Document {
     department?: string;
     position?: string;  // DB uses 'position' not 'designation'
     password?: string; // Hashed password
+    /** When true, user should set a new password from account settings after admin reset. */
+    password_must_change?: boolean;
     max_allocation_percent?: number;
     join_date?: Date;  // DB uses 'join_date' not 'joining_date'
     exit_date?: Date;
@@ -35,6 +37,7 @@ const EmployeeSchema = new Schema<IEmployee>({
     department: { type: String, trim: true },
     position: { type: String, trim: true },
     password: { type: String, select: false },
+    password_must_change: { type: Boolean, default: false },
     max_allocation_percent: { type: Number, default: 100, min: 1, max: 100 },
     join_date: { type: Date },
     exit_date: { type: Date },

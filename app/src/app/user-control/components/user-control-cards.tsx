@@ -1,4 +1,4 @@
-import { ToggleLeft, ToggleRight } from 'lucide-react'
+import { ToggleLeft, ToggleRight, KeyRound } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { MasonryGrid, MasonryItem } from '@/components/shared/masonry-grid'
@@ -36,6 +36,8 @@ interface UserControlCardsProps {
     systemRoles: SystemRole[]
     onRoleChange: (userId: string, roleId: string) => Promise<void>
     onToggleActive: (user: UserEntry) => void
+    onResetPassword: (user: UserEntry) => void
+    resettingUserId?: string | null
 }
 
 export function UserControlCards({
@@ -43,6 +45,8 @@ export function UserControlCards({
     systemRoles,
     onRoleChange,
     onToggleActive,
+    onResetPassword,
+    resettingUserId,
 }: UserControlCardsProps) {
     if (users.length === 0) {
         return (
@@ -136,6 +140,16 @@ export function UserControlCards({
                                         )}
                                     </button>
                                 </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => onResetPassword(user)}
+                                    disabled={resettingUserId === user.id}
+                                    className="w-full flex items-center justify-center gap-2 text-xs font-medium rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 disabled:opacity-60"
+                                >
+                                    <KeyRound className="w-3.5 h-3.5" />
+                                    {resettingUserId === user.id ? 'Generating…' : 'Reset password'}
+                                </button>
                             </div>
                         </Card>
                     </MasonryItem>

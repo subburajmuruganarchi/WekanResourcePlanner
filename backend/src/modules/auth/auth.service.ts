@@ -9,6 +9,8 @@ import { OAuth2Client } from 'google-auth-library';
 import { env } from '../../config/env';
 import { normalizeRoleName } from '../../common/utils/auth-user.util';
 import { IEmployee } from '../employees/employee.model';
+import { generateTempPassword } from '../../common/utils/password.util';
+import { ChangePasswordInput } from './password.schema';
 
 const client = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
@@ -29,6 +31,7 @@ function mapEmployeeToAuthUser(employee: PopulatedEmployee, roleName: string) {
         role: roleName,
         jobRole: jobRole || undefined,
         position: employee.position?.trim() || undefined,
+        passwordMustChange: employee.password_must_change === true,
     };
 }
 
@@ -139,5 +142,39 @@ export class AuthService {
         return {
             user: mapEmployeeToAuthUser(employee, roleName),
         };
+    }
+
+    async changePassword(employeeId: string, input: ChangePasswordInput): Promise<void> {
+        const employee = await Employee.findById(employeeId).select('+password');
+        if (!employee || !employee.password) {
+            throw new AppError('Account not found or password login is not configured.', 404);
+        }
+
+        const valid = await bcrypt.compare(input.currentPassword, employee.password);
+        if (!valid) {
+            throw new AppError('Current password is incorrect.', 401);
+        }
+
+        if (input.currentPassword === input.newPassword) {
+            throw new AppError('New password must be different from the current password.', 400);
+        }
+
+        employee.password = await bcrypt.hash(input.newPassword, 10);
+        employee.password_must_change = false;
+        await employee.save();
+    }
+
+    async resetEmployeePassword(employeeId: string): Promise<{ temporaryPassword: string }> {
+        const employee = await Employee.findById(employeeId);
+        if (!employee) {
+            throw new AppError('Employee not found.', 404);
+        }
+
+        const temporaryPassword = generateTempPassword(12);
+        employee.password = await bcrypt.hash(temporaryPassword, 10);
+        employee.password_must_change = true;
+        await employee.save();
+
+        return { temporaryPassword };
     }
 }

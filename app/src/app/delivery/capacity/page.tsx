@@ -320,8 +320,16 @@ export default function DeliveryCapacityPage() {
             </MetricGrid>
 
             {forecast?.recommendation && (
-                <div className="dashboard-card p-5 border-l-4 border-l-brand-500">
-                    <p className="text-sm font-semibold text-foreground mb-1">Recommended action</p>
+                <div
+                    className={`dashboard-card p-5 border-l-4 ${
+                        (forecast.employeeCount ?? 0) === 0 && (forecast.projectCount ?? 0) === 0
+                            ? 'border-l-amber-500'
+                            : 'border-l-brand-500'
+                    }`}
+                >
+                    <p className="text-sm font-semibold text-foreground mb-1">
+                        {(forecast.employeeCount ?? 0) === 0 ? 'Why this page is empty' : 'Recommended action'}
+                    </p>
                     <p className="text-sm text-muted-foreground">{forecast.recommendation}</p>
                 </div>
             )}

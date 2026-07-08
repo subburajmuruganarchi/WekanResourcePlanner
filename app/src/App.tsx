@@ -11,7 +11,6 @@ import { ToastProvider } from "@/lib/toast-context"
 import { loadMvpFeatures } from "@/lib/mvp-config"
 import { getHomeRoute } from "@/lib/home-route"
 import { RoleRoute } from "@/components/shared/role-route"
-import { GoogleOAuthProvider } from "@react-oauth/google"
 
 const Dashboard = lazy(() => import("@/app/dashboard/page"))
 const Projects = lazy(() => import("@/app/projects/page").then((m) => ({ default: m.Projects })))
@@ -46,8 +45,7 @@ const PmRisksPage = lazy(() => import("@/app/pm-workspace/risks/page"))
 const PmDecisionsPage = lazy(() => import("@/app/pm-workspace/decisions/page"))
 const PmCommunicationPage = lazy(() => import("@/app/pm-workspace/communication/page"))
 const EmployeeWorkspacePage = lazy(() => import("@/app/workspace/page"))
-
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID_HERE"
+const AccountSettingsPage = lazy(() => import("@/app/account/page"))
 
 function LazyPage({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
@@ -169,6 +167,7 @@ function AppRoutes() {
         <Route path="/portfolios" element={<LazyPage><PortfoliosPage /></LazyPage>} />
         <Route path="/inputs" element={<LazyPage><InputsPage /></LazyPage>} />
         <Route path="/system-health" element={<LazyPage><SystemHealthPage /></LazyPage>} />
+        <Route path="/account" element={<LazyPage><AccountSettingsPage /></LazyPage>} />
       </Route>
 
       <Route path="*" element={<HomeRedirect />} />
@@ -182,19 +181,17 @@ function App() {
   }, []);
 
   return (
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <ThemeProvider>
-        <ToastProvider>
-        <AuthProvider>
-          <BrowserRouter>
-            <ErrorBoundary>
-              <AppRoutes />
-            </ErrorBoundary>
-          </BrowserRouter>
-        </AuthProvider>
-        </ToastProvider>
-      </ThemeProvider>
-    </GoogleOAuthProvider>
+    <ThemeProvider>
+      <ToastProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <AppRoutes />
+          </ErrorBoundary>
+        </BrowserRouter>
+      </AuthProvider>
+      </ToastProvider>
+    </ThemeProvider>
   )
 }
 

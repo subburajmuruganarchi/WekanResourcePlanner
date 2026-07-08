@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { employeeController } from './employee.controller';
 import { requireRole } from '../../common/middleware/role.middleware';
 import { employeeCrudRoles } from '../../common/utils/mvp-permissions.util';
+import { ROLES } from '../../common/constants/roles';
 
 const router = Router();
 const crudRoles = employeeCrudRoles();
@@ -23,6 +24,11 @@ router.patch('/:id/role', requireRole(...crudRoles), (req, res, next) => employe
 
 // PATCH /api/employees/:id/access
 router.patch('/:id/access', requireRole(...crudRoles), (req, res, next) => employeeController.updateAccess(req, res, next));
+
+// POST /api/employees/:id/reset-password — Admin only
+router.post('/:id/reset-password', requireRole(ROLES.ADMIN), (req, res, next) =>
+    employeeController.resetPassword(req, res, next)
+);
 
 // DELETE /api/employees/:id — soft-delete
 router.delete('/:id', requireRole(...crudRoles), (req, res, next) => employeeController.remove(req, res, next));

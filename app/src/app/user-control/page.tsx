@@ -15,6 +15,12 @@ export default function UserControlPage() {
     const [loading, setLoading] = useState(true)
     const [toastMsg, setToastMsg] = useState<string | null>(null)
     const [toastType, setToastType] = useState<"success" | "error">("success")
+    const [resetDialog, setResetDialog] = useState<{
+        userName: string
+        email: string
+        temporaryPassword: string
+    } | null>(null)
+    const [resettingUserId, setResettingUserId] = useState<string | null>(null)
 
     const showToast = (msg: string, type: "success" | "error" = "success") => {
         setToastMsg(msg)
@@ -97,6 +103,30 @@ export default function UserControlPage() {
         }
     }
 
+    const handleResetPassword = async (user: UserEntry) => {
+        setResettingUserId(user.id)
+        try {
+            const res = await api.post(`/employees/${user.id}/reset-password`, {})
+            const temp = res.data?.data?.temporaryPassword as string | undefined
+            if (!temp) {
+                throw new Error('No temporary password returned')
+            }
+            setResetDialog({
+                userName: user.name,
+                email: user.email,
+                temporaryPassword: temp,
+            })
+            showToast(`Temporary password generated for ${user.name}`, 'success')
+        } catch (err: unknown) {
+            const msg =
+                (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+                (err instanceof Error ? err.message : 'Failed to reset password')
+            showToast(msg, 'error')
+        } finally {
+            setResettingUserId(null)
+        }
+    }
+
     const filtered = users.filter(u => {
         const matchSearch = !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())
         const matchRole = filterRole === "all" || (u.role ?? "No Role") === filterRole
@@ -109,6 +139,40 @@ export default function UserControlPage() {
 
     return (
         <PageContainer className="space-y-6">
+            {resetDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="w-full max-w-md rounded-xl bg-white border border-gray-200 shadow-xl p-6">
+                        <h2 className="text-lg font-semibold text-gray-900">Temporary password</h2>
+                        <p className="text-sm text-gray-600 mt-2">
+                            Share this password securely with <strong>{resetDialog.userName}</strong> ({resetDialog.email}).
+                            They must sign in and update it under Account & password.
+                        </p>
+                        <div className="mt-4 rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 font-mono text-sm text-gray-900 select-all">
+                            {resetDialog.temporaryPassword}
+                        </div>
+                        <div className="mt-5 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50"
+                                onClick={() => {
+                                    void navigator.clipboard.writeText(resetDialog.temporaryPassword)
+                                    showToast('Copied to clipboard', 'success')
+                                }}
+                            >
+                                Copy
+                            </button>
+                            <button
+                                type="button"
+                                className="px-4 py-2 text-sm rounded-lg bg-brand-600 text-white hover:bg-brand-700"
+                                onClick={() => setResetDialog(null)}
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {toastMsg && (
                 <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-medium transition-all ${toastType === 'success' ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-700'}`}>
                     {toastType === 'success' ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
@@ -176,6 +240,8 @@ export default function UserControlPage() {
                     systemRoles={systemRoles}
                     onRoleChange={handleRoleChange}
                     onToggleActive={handleToggleActive}
+                    onResetPassword={handleResetPassword}
+                    resettingUserId={resettingUserId}
                 />
             )}
         </PageContainer>

@@ -180,6 +180,7 @@ export const ROUTE_ACCESS: Record<string, SystemRoleName[] | '*'> = {
     '/user-control': [ROLES.ADMIN],
     '/portfolios': [ROLES.ADMIN],
     '/system-health': [ROLES.ADMIN],
+    '/account': '*',
 };
 
 export function getNavGroupsForRole(role: string | undefined): NavGroupDef[] {
@@ -252,4 +253,5 @@ export const ROUTE_TITLES: Record<string, { title: string; breadcrumb: string[] 
     '/user-control': { title: 'User Management', breadcrumb: ['Admin', 'Users'] },
     '/portfolios': { title: 'Portfolios', breadcrumb: ['Admin', 'Portfolios'] },
     '/system-health': { title: 'Settings', breadcrumb: ['Admin', 'Settings'] },
+    '/account': { title: 'Account Settings', breadcrumb: ['Account', 'Password'] },
 };

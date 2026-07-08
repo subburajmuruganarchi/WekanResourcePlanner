@@ -143,8 +143,6 @@ async function importProjectRowsBulk(
         const setFields: Record<string, unknown> = {
             project_name: p.row.name,
             project_code: p.code,
-            project_owner_id: ctx.defaultAdminId,
-            project_manager_id: ctx.pmFallbackId,
             status: p.status,
             priority: mapPriority(p.row.type, p.status),
             start_date: p.start,
@@ -159,7 +157,13 @@ async function importProjectRowsBulk(
         return {
             updateOne: {
                 filter: { project_code: p.code },
-                update: { $set: setFields },
+                update: {
+                    $set: setFields,
+                    $setOnInsert: {
+                        project_owner_id: ctx.defaultAdminId,
+                        project_manager_id: ctx.pmFallbackId,
+                    },
+                },
                 upsert: true,
             },
         };
@@ -340,8 +344,6 @@ async function importProjectRowsSequential(
             const setFields: Record<string, unknown> = {
                 project_name: row.name,
                 project_code: code,
-                project_owner_id: ctx.defaultAdminId,
-                project_manager_id: ctx.pmFallbackId,
                 status,
                 priority: mapPriority(row.type, status),
                 start_date: start,
@@ -355,7 +357,13 @@ async function importProjectRowsSequential(
 
             const doc = await Project.findOneAndUpdate(
                 { project_code: code },
-                { $set: setFields },
+                {
+                    $set: setFields,
+                    $setOnInsert: {
+                        project_owner_id: ctx.defaultAdminId,
+                        project_manager_id: ctx.pmFallbackId,
+                    },
+                },
                 { upsert: true, new: true, ...sessionOpts }
             );
 

@@ -7,6 +7,9 @@ import { Employee } from './employee.model';
 import { Role } from '../roles/role.model';
 import { Types } from 'mongoose';
 import { getAuthEmployeeId } from '../../common/utils/auth-user.util';
+import { AuthService } from '../auth/auth.service';
+
+const authService = new AuthService();
 
 export class EmployeeController {
     async list(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -195,6 +198,29 @@ export class EmployeeController {
             res.json({
                 status: 'success',
                 data: employee,
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { id } = req.params;
+            if (!Types.ObjectId.isValid(id)) {
+                throw new AppError('Invalid employee ID', 400);
+            }
+
+            const result = await authService.resetEmployeePassword(id);
+
+            res.json({
+                status: 'success',
+                data: {
+                    employeeId: id,
+                    temporaryPassword: result.temporaryPassword,
+                    passwordMustChange: true,
+                },
+                message: 'Temporary password generated. Share it securely with the user.',
             });
         } catch (error) {
             next(error);

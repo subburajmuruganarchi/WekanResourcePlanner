@@ -2,6 +2,7 @@ import { TokenPayload } from './jwt.utils';
 import { ROLES, isExecutiveReadOnly } from '../constants/roles';
 import { getManagedProjectIds } from './pm-scope.util';
 import { getPortfolioProjectIds } from './delivery-scope.util';
+import { features } from '../../config/features';
 
 export interface DataScope {
     orgWide: boolean;
@@ -50,6 +51,9 @@ export async function resolveDataScope(user?: TokenPayload): Promise<DataScope> 
                 readOnly: false,
             };
         case ROLES.DELIVERY_MANAGER:
+            if (features.mvpMode) {
+                return { orgWide: true, readOnly: false };
+            }
             return {
                 orgWide: false,
                 projectIds: await getPortfolioProjectIds(user.employeeId),
