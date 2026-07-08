@@ -119,7 +119,7 @@ export default function EmployeeWorkspacePage() {
             <MetricGrid columns={{ sm: 2, xl: 4 }}>
                 <MetricCard
                     label="Active Projects"
-                    value={activeProjectCount}
+                    value={String(activeProjectCount)}
                     hint={`${projects.length} total assigned`}
                     icon={FolderKanban}
                     accent="brand"

@@ -19,7 +19,6 @@ import {
     Grid3x3,
     ClipboardList,
     Wrench,
-    UserPlus,
     type LucideIcon,
 } from 'lucide-react';
 import { ROLES, type SystemRoleName } from './roles';

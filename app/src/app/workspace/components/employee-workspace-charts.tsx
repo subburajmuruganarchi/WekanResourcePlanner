@@ -92,7 +92,7 @@ export function EmployeeWorkspaceCharts({
                             <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                             <YAxis tick={{ fontSize: 12 }} />
                             <Tooltip
-                                formatter={(value: number, name: string) => [`${value}h`, name]}
+                                formatter={(value, name) => [`${value ?? 0}h`, String(name)]}
                                 labelFormatter={(_, payload) =>
                                     payload?.[0]?.payload?.fullName ?? ''
                                 }
