@@ -51,8 +51,13 @@ function levelAbbrev(level: string | undefined): string {
     }
 }
 
+function normalizeSkillName(name: string): string {
+    return name.trim().toLowerCase();
+}
+
 function findSkill(employeeSkills: EmployeeSkill[] | undefined, skillName: string): EmployeeSkill | undefined {
-    return employeeSkills?.find((s) => s.name.toLowerCase() === skillName.toLowerCase());
+    const target = normalizeSkillName(skillName);
+    return employeeSkills?.find((s) => normalizeSkillName(s.name) === target);
 }
 
 export default function SkillsMatrixPage() {
@@ -69,16 +74,37 @@ export default function SkillsMatrixPage() {
         [skills]
     );
 
+    /** Catalog skills plus any skills on employee profiles not yet in Skill Master. */
+    const matrixSkills = useMemo(() => {
+        const catalogByName = new Map(activeSkills.map((s) => [normalizeSkillName(s.name), s]));
+        const extras: { id: string; name: string; category: string }[] = [];
+
+        for (const emp of employees) {
+            for (const sk of emp.skills ?? []) {
+                const key = normalizeSkillName(sk.name);
+                if (!key || catalogByName.has(key)) continue;
+                if (extras.some((e) => normalizeSkillName(e.name) === key)) continue;
+                extras.push({
+                    id: `profile-${key}`,
+                    name: sk.name,
+                    category: 'From profiles',
+                });
+            }
+        }
+
+        return [...activeSkills, ...extras.sort((a, b) => a.name.localeCompare(b.name))];
+    }, [activeSkills, employees]);
+
     const categories = useMemo(() => {
-        const set = new Set(activeSkills.map((s) => s.category).filter(Boolean));
+        const set = new Set(matrixSkills.map((s) => s.category).filter(Boolean));
         return ['all', ...Array.from(set).sort()];
-    }, [activeSkills]);
+    }, [matrixSkills]);
 
     const filteredSkills = useMemo(() => {
-        let list = activeSkills;
+        let list = matrixSkills;
         if (category !== 'all') list = list.filter((s) => s.category === category);
         return list;
-    }, [activeSkills, category]);
+    }, [matrixSkills, category]);
 
     const filteredEmployees = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -87,6 +113,7 @@ export default function SkillsMatrixPage() {
             (e) =>
                 e.name.toLowerCase().includes(q) ||
                 e.department?.toLowerCase().includes(q) ||
+                e.jobRole?.toLowerCase().includes(q) ||
                 e.role?.toLowerCase().includes(q)
         );
     }, [employees, search]);
@@ -212,7 +239,7 @@ export default function SkillsMatrixPage() {
                                         >
                                             <div>{emp.name}</div>
                                             <div className="text-xs text-muted-foreground font-normal">
-                                                {emp.department ?? emp.role ?? '—'}
+                                                {emp.jobRole || emp.department || emp.role || '—'}
                                             </div>
                                         </th>
                                         {filteredSkills.map((skill) => {

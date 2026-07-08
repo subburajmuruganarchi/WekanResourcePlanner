@@ -57,7 +57,8 @@ export function useProjects(options: UseProjectsOptions = {}): UseProjectsResult
     const createProject = async (data: Partial<Project>) => {
         try {
             await api.post('/projects', data);
-            fetchProjects();
+            await fetchProjects();
+            notifyProjectsChanged();
         } catch (err) {
             throw err;
         }
@@ -66,7 +67,8 @@ export function useProjects(options: UseProjectsOptions = {}): UseProjectsResult
     const updateProject = async (id: string, data: Partial<Project>) => {
         try {
             await api.put(`/projects/${id}`, data);
-            fetchProjects();
+            await fetchProjects();
+            notifyProjectsChanged();
         } catch (err) {
             throw err;
         }

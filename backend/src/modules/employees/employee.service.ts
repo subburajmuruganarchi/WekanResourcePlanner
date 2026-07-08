@@ -3,6 +3,8 @@ import { EmployeeSkill, IEmployeeSkill } from './employee-skill.model';
 import { Skill } from '../skills/skill.model';
 import { Role } from '../roles/role.model';
 import { ProjectAllocation } from '../allocations/allocation.model';
+import type { CreateEmployeeDto, UpdateEmployeeDto } from './employee.schema';
+import { PASSWORD_PLAIN } from '../../services/planner-import/planner-import.utils';
 import {
     computeEmployeeAvailabilityPercent,
     type AllocationCapacitySlice,
@@ -82,6 +84,67 @@ interface PopulatedEmployeeSkill {
     skill_level: string;
     experience_years: number;
     is_primary: boolean;
+}
+
+type EmployeeSkillInput = NonNullable<CreateEmployeeDto['skills']>[number];
+
+function mapEmployeeDtoToDocument(
+    data: CreateEmployeeDto | UpdateEmployeeDto
+): { employeeFields: Partial<IEmployee>; skills?: EmployeeSkillInput[] } {
+    const employeeFields: Partial<IEmployee> = {};
+
+    if (data.firstName !== undefined) employeeFields.first_name = data.firstName;
+    if (data.lastName !== undefined) employeeFields.last_name = data.lastName;
+    if (data.email !== undefined) employeeFields.email = data.email;
+    if (data.password !== undefined) employeeFields.password = data.password;
+    if (data.employeeCode !== undefined) employeeFields.employee_code = data.employeeCode;
+    if (data.status !== undefined) employeeFields.status = data.status;
+    if (data.roleId !== undefined) employeeFields.role_id = new Types.ObjectId(data.roleId);
+    if (data.department !== undefined) employeeFields.department = data.department;
+    if (data.designation !== undefined) employeeFields.position = data.designation;
+    if (data.maxAllocationPercent !== undefined) {
+        employeeFields.max_allocation_percent = data.maxAllocationPercent;
+    }
+    if (data.joiningDate !== undefined) employeeFields.join_date = new Date(data.joiningDate);
+    if (data.exitDate !== undefined) employeeFields.exit_date = new Date(data.exitDate);
+
+    return {
+        employeeFields,
+        skills: 'skills' in data ? data.skills : undefined,
+    };
+}
+
+async function resolveJobRoleId(designation?: string): Promise<Types.ObjectId | undefined> {
+    if (!designation?.trim()) return undefined;
+    const doc = await Role.findOneAndUpdate(
+        { role_name: designation.trim() },
+        {
+            $setOnInsert: {
+                role_name: designation.trim(),
+                is_active: true,
+                department: 'Engineering',
+            },
+        },
+        { upsert: true, new: true }
+    );
+    return doc?._id as Types.ObjectId;
+}
+
+async function insertEmployeeSkills(
+    employeeId: string,
+    skills: EmployeeSkillInput[]
+): Promise<void> {
+    if (skills.length === 0) return;
+
+    const skillInserts = skills.map((s) => ({
+        employee_id: employeeId,
+        skill_id: s.skillId,
+        skill_level: s.level,
+        experience_years: s.experienceYears ?? 0,
+        is_primary: s.skillType === 'Primary',
+    }));
+
+    await EmployeeSkill.insertMany(skillInserts);
 }
 
 export class EmployeeService {
@@ -177,75 +240,85 @@ export class EmployeeService {
         );
     }
 
-    async update(id: string, data: any): Promise<EmployeeResponse> {
+    async update(id: string, data: UpdateEmployeeDto): Promise<EmployeeResponse> {
         if (!Types.ObjectId.isValid(id)) {
             throw new AppError('Invalid employee ID', 400);
         }
 
-        // 1. Update basic info
-        const employee = await Employee.findByIdAndUpdate(id, data, { new: true });
-        if (!employee) {
-            throw new AppError('Employee not found', 404);
+        const { employeeFields, skills } = mapEmployeeDtoToDocument(data);
+
+        if (data.designation) {
+            const jobRoleId = await resolveJobRoleId(data.designation);
+            if (jobRoleId) employeeFields.job_role_id = jobRoleId;
         }
 
-        // 2. Update skills if provided
-        if (data.skills && Array.isArray(data.skills)) {
-            // Simplistic approach: delete all and re-create
-            // This is safer for synchronization when the entire skill set is sent from frontend
-            await EmployeeSkill.deleteMany({ employee_id: id });
-
-            const skillInserts = data.skills.map((s: any) => ({
-                employee_id: id,
-                skill_id: s.skillId,
-                skill_level: s.level || s.skillLevel,
-                experience_years: s.experienceYears || s.yearsOfExperience,
-                is_primary: s.skillType === 'Primary' || s.isPrimary
-            }));
-
-            if (skillInserts.length > 0) {
-                await EmployeeSkill.insertMany(skillInserts);
+        if (Object.keys(employeeFields).length > 0) {
+            const employee = await Employee.findByIdAndUpdate(id, employeeFields, { new: true });
+            if (!employee) {
+                throw new AppError('Employee not found', 404);
             }
+        }
+
+        if (skills && Array.isArray(skills)) {
+            await EmployeeSkill.deleteMany({ employee_id: id });
+            await insertEmployeeSkills(id, skills);
         }
 
         return this.findById(id) as Promise<EmployeeResponse>;
     }
 
-    async create(data: Partial<IEmployee>): Promise<EmployeeResponse> {
-        // Verify Role existence if provided
-        if (!data.role_id) {
+    async create(data: CreateEmployeeDto): Promise<EmployeeResponse> {
+        const { employeeFields, skills } = mapEmployeeDtoToDocument(data);
+
+        if (!employeeFields.role_id) {
             const employeeRole = await Role.findOne({ role_name: 'Employee' }).select('_id').lean();
             if (employeeRole?._id) {
-                data.role_id = employeeRole._id;
+                employeeFields.role_id = employeeRole._id as Types.ObjectId;
             }
         }
 
-        if (data.role_id) {
-            const roleExists = await Role.exists({ _id: data.role_id });
+        if (employeeFields.role_id) {
+            const roleExists = await Role.exists({ _id: employeeFields.role_id });
             if (!roleExists) {
                 throw new AppError('Specified Role does not exist.', 400);
             }
         }
 
-        if (!data.employee_code) {
+        if (!employeeFields.employee_code) {
             const suffix = Date.now().toString(36).toUpperCase();
-            data.employee_code = `EMP-${suffix}`;
+            employeeFields.employee_code = `EMP-${suffix}`;
         }
 
-        // Hash password before saving
-        if (data.password) {
-            const bcrypt = await import('bcryptjs');
-            data.password = await bcrypt.hash(data.password, 12);
+        if (data.designation) {
+            const jobRoleId = await resolveJobRoleId(data.designation);
+            if (jobRoleId) employeeFields.job_role_id = jobRoleId;
         }
 
-        const employee = new Employee(data);
-        await employee.save();
+        const bcrypt = await import('bcryptjs');
+        employeeFields.password = await bcrypt.hash(
+            employeeFields.password ?? PASSWORD_PLAIN,
+            12
+        );
 
-        const populated = await Employee.findById(employee._id)
-            .populate('role_id', 'role_name')
-            .populate('job_role_id', 'role_name')
-            .lean() as unknown as PopulatedEmployee;
+        employeeFields.is_active = true;
+        employeeFields.status = employeeFields.status ?? 'Active';
 
-        return this.mapToResponse(populated, [], 100);
+        try {
+            const employee = new Employee(employeeFields);
+            await employee.save();
+
+            if (skills?.length) {
+                await insertEmployeeSkills(employee._id.toString(), skills);
+            }
+
+            return this.findById(employee._id.toString()) as Promise<EmployeeResponse>;
+        } catch (err: unknown) {
+            const code = (err as { code?: number })?.code;
+            if (code === 11000) {
+                throw new AppError('An employee with this email or employee code already exists.', 409);
+            }
+            throw err;
+        }
     }
 
     async deactivate(id: string): Promise<EmployeeResponse> {
@@ -374,6 +447,14 @@ export class EmployeeService {
         }));
     }
 
+    private normalizeSkillLevel(level: string | undefined): SkillLevel {
+        const normalized = String(level ?? '').trim();
+        if (normalized === SkillLevel.BEGINNER) return SkillLevel.BEGINNER;
+        if (normalized === SkillLevel.INTERMEDIATE) return SkillLevel.INTERMEDIATE;
+        if (normalized === SkillLevel.EXPERT) return SkillLevel.EXPERT;
+        return SkillLevel.BEGINNER;
+    }
+
     private mapToResponse(
         emp: PopulatedEmployee,
         skills: PopulatedEmployeeSkill[],
@@ -400,11 +481,11 @@ export class EmployeeService {
             jobRoleId: jobRole?._id?.toString(),
             department: emp.department,
             position: emp.position,
-            skills: skills.map(s => ({
+            skills: skills.map((s) => ({
                 name: (s.skill_id as { name: string })?.name || 'Unknown',
-                skillLevel: SkillLevel.EXPERT,
+                skillLevel: this.normalizeSkillLevel(s.skill_level),
                 yearsOfExperience: s.experience_years || 0,
-                isPrimary: s.is_primary || false
+                isPrimary: s.is_primary || false,
             })),
             availability,
             maxAllocationPercent: emp.max_allocation_percent || 100,

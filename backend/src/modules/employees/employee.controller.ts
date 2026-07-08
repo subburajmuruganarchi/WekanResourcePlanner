@@ -76,7 +76,7 @@ export class EmployeeController {
             // Validate request body with Zod
             const validatedData = CreateEmployeeSchema.parse(req.body);
 
-            const employee = await employeeService.create(validatedData as any);
+            const employee = await employeeService.create(validatedData);
             res.status(201).json({
                 status: 'success',
                 data: employee,
