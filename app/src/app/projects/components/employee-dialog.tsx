@@ -23,6 +23,7 @@ import { useRoles } from "@/lib/use-roles"
 import { useSkills } from "@/lib/use-skills"
 import { Loader2, Plus, Trash2, AlertCircle } from "lucide-react"
 import type { SkillLevel, EmployeeStatus, EmployeeDepartment, EmployeeRole, Employee } from "@/types/api"
+import { rolesForDepartment } from "@/lib/employee-department-roles"
 
 interface SkillEntry {
     skillId: string;
@@ -120,8 +121,19 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
     }, [employee, open, roles, availableSkills])
 
     const updateField = (field: string, value: any) => {
-        setFormData(prev => ({ ...prev, [field]: value }))
+        setFormData((prev) => {
+            const next = { ...prev, [field]: value }
+            if (field === 'department') {
+                const allowed = rolesForDepartment(value as EmployeeDepartment)
+                if (next.designation && !allowed.includes(next.designation as EmployeeRole)) {
+                    next.designation = '' as EmployeeRole | ''
+                }
+            }
+            return next
+        })
     }
+
+    const departmentRoles = rolesForDepartment(formData.department)
 
     const handleAddSkill = () => {
         setSelectedSkills([...selectedSkills, { skillId: '', skillType: 'Secondary', level: 'Expert', experienceYears: 0 }])
@@ -145,10 +157,6 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
         const skillRows = selectedSkills.filter((s) => s.skillId !== '');
 
         try {
-            if (skillRows.length === 0) {
-                throw new Error('At least one skill is required.');
-            }
-
             const data = {
                 ...formData,
                 roleId: formData.roleId || undefined,
@@ -268,24 +276,18 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="designation">Role</Label>
-                            <Select value={formData.designation} onValueChange={v => updateField('designation', v)}>
+                            <Select
+                                value={formData.designation}
+                                onValueChange={v => updateField('designation', v)}
+                                disabled={!formData.department}
+                            >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Select role" />
+                                    <SelectValue placeholder={formData.department ? 'Select role' : 'Select department first'} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Architect">Architect</SelectItem>
-                                    <SelectItem value="Mobile Architect">Mobile Architect</SelectItem>
-                                    <SelectItem value="Associate Architect">Associate Architect</SelectItem>
-                                    <SelectItem value="SDE III (Full Stack)">SDE III (Full Stack)</SelectItem>
-                                    <SelectItem value="SDE (Full Stack)">SDE (Full Stack)</SelectItem>
-                                    <SelectItem value="SDE II (Full Stack)">SDE II (Full Stack)</SelectItem>
-                                    <SelectItem value="SDE (Backend)">SDE (Backend)</SelectItem>
-                                    <SelectItem value="SDE II (Backend)">SDE II (Backend)</SelectItem>
-                                    <SelectItem value="SDE II (Frontend)">SDE II (Frontend)</SelectItem>
-                                    <SelectItem value="SDE III (Mobile)">SDE III (Mobile)</SelectItem>
-                                    <SelectItem value="SDE II (Mobile)">SDE II (Mobile)</SelectItem>
-                                    <SelectItem value="QA Engineer">QA Engineer</SelectItem>
-                                    <SelectItem value="DBA">DBA</SelectItem>
+                                    {departmentRoles.map((role) => (
+                                        <SelectItem key={role} value={role}>{role}</SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -297,7 +299,7 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
 
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <Label className="text-base font-semibold">Skills *</Label>
+                            <Label className="text-base font-semibold">Skills</Label>
                             <Button type="button" variant="outline" size="sm" onClick={handleAddSkill}>
                                 <Plus className="h-4 w-4 mr-1" /> Add Skill
                             </Button>
@@ -306,7 +308,7 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
                         {selectedSkills.map((entry, index) => (
                             <div key={index} className="grid grid-cols-12 gap-2 items-end border p-3 rounded-md bg-gray-50">
                                 <div className="col-span-8 space-y-1">
-                                    <Label className="text-xs">Skill *</Label>
+                                    <Label className="text-xs">Skill</Label>
                                     <Select
                                         value={entry.skillId}
                                         onValueChange={(val) => updateSkill(index, 'skillId', val)}
@@ -358,7 +360,7 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
 
                     <DialogFooter>
                         <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                        <Button type="submit" disabled={loading || !selectedSkills.some(s => s.skillType === 'Primary' && s.skillId !== '')}>
+                        <Button type="submit" disabled={loading}>
                             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {isEdit ? 'Update Employee' : 'Create Employee'}
                         </Button>

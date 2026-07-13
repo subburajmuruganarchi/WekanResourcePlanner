@@ -150,3 +150,11 @@ UAT_LOAD_CONFIRM=true npx ts-node scripts/uat-load.ts
 ```
 
 Refuses to run when `NODE_ENV=production`.
+
+---
+
+## 9. AWS migration
+
+Migrating from **Vercel (SPA) + Render (API)** to AWS (S3/CloudFront, ECS Fargate, etc.):
+
+**[docs/AWS_DEPLOYMENT.md](./docs/AWS_DEPLOYMENT.md)**

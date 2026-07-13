@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api-client';
 import { getHomeRoute } from '@/lib/home-route';
+
 export default function AccountSettingsPage() {
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     const navigate = useNavigate();
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -37,14 +38,14 @@ export default function AccountSettingsPage() {
                 currentPassword,
                 newPassword,
             });
-            setSuccess('Password updated successfully.');
+            setSuccess('Password updated successfully. Please sign in again with your new password.');
             setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
-            if (user?.passwordMustChange) {
-                window.location.assign(getHomeRoute(user.role));
-                return;
-            }
+            setTimeout(() => {
+                logout();
+                navigate('/login', { replace: true, state: { passwordChanged: true } });
+            }, 2000);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to update password.');
         } finally {

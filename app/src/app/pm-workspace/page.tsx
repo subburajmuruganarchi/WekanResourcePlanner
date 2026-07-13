@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
     FolderKanban,
     Users,
-    AlertTriangle,
     Layers,
     Clock,
     Info,
@@ -25,7 +24,7 @@ import { pmProjectDeliveryColumns } from '@/app/pm-workspace/components/pm-proje
 import { useProjects } from '@/lib/use-projects';
 import { useEmployees } from '@/lib/use-employees';
 import { useAuth } from '@/lib/auth-context';
-import { countMyActiveProjects, buildPmDashboardSnapshot, buildPmProjectHoursRows } from '@/lib/pm-dashboard-metrics';
+import { buildPmDashboardSnapshot, buildPmProjectHoursRows } from '@/lib/pm-dashboard-metrics';
 import { buildPortfolioHealthRows } from '@/lib/portfolio-health-rows';
 import { fetchDeliveryRisks, type DeliveryRiskItem } from '@/lib/risk-intelligence';
 import { useUtilizationVariance } from '@/lib/use-utilization';
@@ -99,8 +98,6 @@ export default function PmDashboardPage() {
             .catch(() => setRisks([]));
     }, [snapshot.myProjects]);
 
-    const myActiveCount = countMyActiveProjects(snapshot.myProjects);
-
     if (loading) {
         return <PageSkeleton />;
     }
@@ -152,12 +149,6 @@ export default function PmDashboardPage() {
                     hint="All active projects visible in the org (MVP)"
                 />
                 <MetricCard
-                    label="My active"
-                    value={String(myActiveCount)}
-                    accent="emerald"
-                    hint={`${snapshot.statusBreakdown.Proposal} in proposal · ${snapshot.statusBreakdown.OnHold} on hold`}
-                />
-                <MetricCard
                     label="Unique team members"
                     value={teamLoading ? '—' : String(snapshot.uniqueTeamMembers)}
                     icon={Users}
@@ -173,18 +164,6 @@ export default function PmDashboardPage() {
                     value={utilLoading ? '—' : `${Math.round(snapshot.plannedHoursWeek)}h`}
                     icon={Clock}
                     hint={periodLabel}
-                />
-                <MetricCard
-                    label="At risk"
-                    value={String(snapshot.atRiskCount)}
-                    accent="amber"
-                    icon={AlertTriangle}
-                    hint={
-                        snapshot.highRiskCount > 0
-                            ? `${snapshot.highRiskCount} high severity`
-                            : 'Medium or high delivery risks'
-                    }
-                    onClick={() => navigate('/pm/risks')}
                 />
             </MetricGrid>
 

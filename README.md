@@ -304,7 +304,9 @@ Production checklist, CORS, smoke tests, backups:
 
 **[DEPLOYMENT.md](./DEPLOYMENT.md)**
 
-Recommended hosting: MongoDB Atlas + Render/Fly.io (API) + Vercel/Netlify/Cloudflare Pages (SPA).
+AWS migration from Vercel + Render:
+
+**[docs/AWS_DEPLOYMENT.md](./docs/AWS_DEPLOYMENT.md)**
 
 ## Project layout
 

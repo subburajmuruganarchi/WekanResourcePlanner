@@ -24,6 +24,7 @@ export const CreateProjectSchema = z
             .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid Date Format'))
             .optional(),
         billing_type: z.nativeEnum(BillingType).optional(),
+        project_type: z.string().trim().optional(),
         delivery_model: z.nativeEnum(DeliveryModel).optional(),
         project_logo: z.string().optional(),
         projected_total_hours: z.number().optional(),

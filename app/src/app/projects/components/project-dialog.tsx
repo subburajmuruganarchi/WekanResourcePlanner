@@ -27,6 +27,8 @@ import { Loader2, Plus, Trash2, AlertCircle } from "lucide-react"
 import type { CreateProjectRequest, RoleEffort, ProjectStatus, BillingType, Project } from "@/types/api"
 import { PROJECT_STATUS_OPTIONS } from "@/lib/project-status"
 import { normalizeRoleName } from "@/lib/role-utils"
+import { ROLES } from "@/lib/roles"
+import { projectTypeLabel } from "@/lib/project-type-label"
 
 interface ProjectDialogProps {
     project?: Project;
@@ -48,7 +50,16 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
         () =>
             (employees || []).filter((emp) => {
                 const accessRole = normalizeRoleName(emp.role || '')
-                return accessRole === 'Project Manager' || accessRole === 'Admin'
+                return accessRole === ROLES.PROJECT_MANAGER || accessRole === ROLES.ADMIN
+            }),
+        [employees]
+    )
+
+    const deliveryManagerOptions = useMemo(
+        () =>
+            (employees || []).filter((emp) => {
+                const accessRole = normalizeRoleName(emp.role || '')
+                return accessRole === ROLES.DELIVERY_MANAGER || accessRole === ROLES.ADMIN
             }),
         [employees]
     )
@@ -64,6 +75,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
     const [formData, setFormData] = useState<Partial<CreateProjectRequest>>({
         status: 'Active',
         priority: 'Medium',
+        type: 'Customer',
         billingType: 'Billable',
         deliveryModel: 'T&M',
         skillRequirements: [],
@@ -96,6 +108,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                 startDate: project.startDate ? new Date(project.startDate).toISOString().split('T')[0] : '',
                 endDate: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : '',
                 priority: project.priority,
+                type: project.type || projectTypeLabel(project.type, project.billingType),
                 billingType: project.billingType as BillingType,
                 skillRequirements: project.skillRequirements || [],
                 roleEfforts: teamRoleEfforts.length > 0 ? teamRoleEfforts : (project.roleEfforts || [])
@@ -105,6 +118,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
             setFormData({
                 status: 'Active',
                 priority: 'Medium',
+                type: 'Customer',
                 billingType: 'Billable',
                 deliveryModel: 'T&M',
                 skillRequirements: [],
@@ -118,7 +132,13 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
 
     // Handlers
     const updateField = (field: keyof CreateProjectRequest, value: any) => {
-        setFormData(prev => ({ ...prev, [field]: value }))
+        setFormData((prev) => {
+            const next = { ...prev, [field]: value }
+            if (field === 'type') {
+                next.billingType = value === 'Internal' ? 'Non-billable' : 'Billable'
+            }
+            return next
+        })
     }
 
     const addRoleEffort = () => {
@@ -162,7 +182,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
         try {
             // Basic Frontend Validation
             if (!formData.name || !formData.ownerId || !formData.managerId) {
-                throw new Error("Please fill in project name, owner, and project manager.")
+                throw new Error("Please fill in project name, delivery manager, and project manager.")
             }
 
             const mappedRoleEfforts = (formData.roleEfforts || [])
@@ -219,6 +239,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                 setFormData({
                     status: 'Active',
                     priority: 'Medium',
+                    type: 'Customer',
                     billingType: 'Billable',
                     deliveryModel: 'T&M',
                     skillRequirements: [],
@@ -279,16 +300,20 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                     </div>
                                 )}
                                 <div className="space-y-2">
-                                    <Label>Owner *</Label>
+                                    <Label>Delivery Manager *</Label>
                                     <Select
                                         value={formData.ownerId}
                                         onValueChange={v => updateField('ownerId', v)}
                                     >
-                                        <SelectTrigger><SelectValue placeholder="Select Owner" /></SelectTrigger>
+                                        <SelectTrigger><SelectValue placeholder="Select delivery manager" /></SelectTrigger>
                                         <SelectContent>
-                                            {(employees || []).map(emp => (
-                                                <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                                            ))}
+                                            {deliveryManagerOptions.length > 0 ? (
+                                                deliveryManagerOptions.map(emp => (
+                                                    <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                                                ))
+                                            ) : (
+                                                <div className="px-2 py-1.5 text-xs text-gray-500">No delivery managers found</div>
+                                            )}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -373,17 +398,39 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Billing Type</Label>
+                                    <Label>Priority</Label>
                                     <Select
-                                        value={formData.billingType}
-                                        onValueChange={(v: BillingType) => updateField('billingType', v)}
+                                        value={formData.priority}
+                                        onValueChange={(v) => updateField('priority', v)}
+                                    >
+                                        <SelectTrigger><SelectValue placeholder="Select priority" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="High">High</SelectItem>
+                                            <SelectItem value="Medium">Medium</SelectItem>
+                                            <SelectItem value="Low">Low</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Project Type</Label>
+                                    <Select
+                                        value={formData.type || 'Customer'}
+                                        onValueChange={(v) => updateField('type', v)}
                                     >
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="Billable">Billable</SelectItem>
-                                            <SelectItem value="Non-billable">Non-billable</SelectItem>
+                                            <SelectItem value="Customer">Customer (billable)</SelectItem>
+                                            <SelectItem value="Internal">Internal (non-billable)</SelectItem>
                                         </SelectContent>
                                     </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Billing Type</Label>
+                                    <Input
+                                        value={formData.billingType || '—'}
+                                        disabled
+                                        className="bg-gray-50"
+                                    />
                                 </div>
                             </div>
                         </TabsContent>

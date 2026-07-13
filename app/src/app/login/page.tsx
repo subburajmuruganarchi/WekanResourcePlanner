@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { getHomeRoute } from '@/lib/home-route';
 import { BrandLogo } from '@/components/brand/brand-logo';
@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 export function LoginPage() {
     const { login, isLoading } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
+    const passwordChanged = (location.state as { passwordChanged?: boolean } | null)?.passwordChanged;
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -61,6 +63,15 @@ export function LoginPage() {
                     aria-label="Sign in"
                     className="bg-white/5 backdrop-blur-sm border border-white/10 p-8 rounded-2xl shadow-2xl"
                 >
+                    {passwordChanged && (
+                        <div
+                            role="status"
+                            className="mb-6 p-4 rounded-lg bg-emerald-950/40 border border-emerald-400/30 text-emerald-200 text-sm"
+                        >
+                            Your password was updated. Please sign in with your new password.
+                        </div>
+                    )}
+
                     {error && (
                         <div
                             role="alert"

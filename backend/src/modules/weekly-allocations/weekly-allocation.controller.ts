@@ -10,6 +10,8 @@ import {
     assertCanEditWeeklyGridForProjects,
 } from '../../common/utils/mvp-permissions.util';
 import { weeklyAllocationService } from './weekly-allocation.service';
+import { normalizeRoleName } from '../../common/utils/role-normalize.util';
+import { notifyProjectManagersOfAllocationChanges } from '../notifications/notify-pm-allocation-change.util';
 import {
     parseIdList,
     weeklyGridPutBodySchema,
@@ -108,6 +110,17 @@ export class WeeklyAllocationController {
             await weeklyAllocationService.assertEntitiesExist(employeeIds, projectIds);
 
             const result = await weeklyAllocationService.bulkUpdateGrid(parsed, actorId);
+
+            if (
+                actorId &&
+                normalizeRoleName(req.user?.role) === ROLES.DELIVERY_MANAGER &&
+                result.upserted + result.modified > 0
+            ) {
+                const changedProjectIds = parsed.updates
+                    .filter((_, idx) => !result.rejected.some((r) => r.index === idx))
+                    .map((u) => u.projectId);
+                void notifyProjectManagersOfAllocationChanges(actorId, changedProjectIds);
+            }
 
             res.json({ status: 'success', data: result });
         } catch (error) {

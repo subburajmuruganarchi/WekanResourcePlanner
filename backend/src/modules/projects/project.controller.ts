@@ -24,6 +24,7 @@ export class ProjectController {
         if (mapped.startDate !== undefined) { mapped.start_date = mapped.startDate; delete mapped.startDate; }
         if (mapped.endDate !== undefined) { mapped.end_date = mapped.endDate; delete mapped.endDate; }
         if (mapped.billingType !== undefined) { mapped.billing_type = mapped.billingType; delete mapped.billingType; }
+        if (mapped.type !== undefined) { mapped.project_type = mapped.type; delete mapped.type; }
         if (mapped.deliveryModel !== undefined) { mapped.delivery_model = mapped.deliveryModel; delete mapped.deliveryModel; }
         if (mapped.businessGoal !== undefined) { mapped.business_goal = mapped.businessGoal; delete mapped.businessGoal; }
         if (mapped.staffingStrategy !== undefined) { mapped.staffing_strategy = mapped.staffingStrategy; delete mapped.staffingStrategy; }

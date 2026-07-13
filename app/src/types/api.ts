@@ -18,7 +18,30 @@ export type EmployeeRole =
     | 'SDE III (Mobile)'
     | 'SDE II (Mobile)'
     | 'QA Engineer'
-    | 'DBA';
+    | 'QA Lead'
+    | 'DBA'
+    | 'HR Manager'
+    | 'HR Executive'
+    | 'Product Manager'
+    | 'Product Owner'
+    | 'UX Designer'
+    | 'UI Designer'
+    | 'DevOps Engineer'
+    | 'Site Reliability Engineer'
+    | 'Data Analyst'
+    | 'Data Engineer'
+    | 'Sales Executive'
+    | 'Account Manager'
+    | 'Marketing Manager'
+    | 'Marketing Specialist'
+    | 'Customer Support Specialist'
+    | 'Support Lead'
+    | 'Finance Analyst'
+    | 'Accountant'
+    | 'Operations Manager'
+    | 'Operations Coordinator'
+    | 'Office Administrator'
+    | 'Executive Assistant';
 
 export type EmployeeDepartment =
     | 'Engineering'
@@ -191,6 +214,7 @@ export interface CreateProjectRequest {
     priority: ProjectPriority;
     billingType?: string;
     deliveryModel?: string;
+    type?: string;
     businessGoal?: string;
     staffingStrategy?: StaffingStrategy;
     skillRequirements?: SkillRequirement[];
@@ -217,7 +241,7 @@ export interface CreateEmployeeRequest {
     designation?: EmployeeRole;
     maxAllocationPercent: number;
     joiningDate?: string;
-    skills: {
+    skills?: {
         skillId: string;
         skillType: 'Primary' | 'Secondary';
         level: SkillLevel;

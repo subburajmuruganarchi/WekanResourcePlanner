@@ -102,15 +102,21 @@ export default function SkillsMatrixPage() {
 
     const filteredEmployees = useMemo(() => {
         const q = search.trim().toLowerCase();
-        if (!q) return employees;
-        return employees.filter(
+        let list = employees;
+        if (category !== 'all') {
+            list = list.filter((emp) =>
+                filteredSkills.some((skill) => findSkill(emp.skills, skill.name))
+            );
+        }
+        if (!q) return list;
+        return list.filter(
             (e) =>
                 e.name.toLowerCase().includes(q) ||
                 e.department?.toLowerCase().includes(q) ||
                 e.jobRole?.toLowerCase().includes(q) ||
                 e.role?.toLowerCase().includes(q)
         );
-    }, [employees, search]);
+    }, [employees, search, category, filteredSkills]);
 
     const coverageStats = useMemo(() => {
         const withSkills = employees.filter((e) => (e.skills?.length ?? 0) > 0).length;

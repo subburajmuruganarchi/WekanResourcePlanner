@@ -16,7 +16,7 @@ export const CreateEmployeeSchema = z.object({
         skillType: z.nativeEnum(SkillType),
         level: z.nativeEnum(SkillLevel),
         experienceYears: z.number().min(0).optional()
-    })).min(1, 'At least one skill is required'),
+    })).optional().default([]),
     maxAllocationPercent: z.number().min(1).max(100).optional().default(100),
     joiningDate: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
     exitDate: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),

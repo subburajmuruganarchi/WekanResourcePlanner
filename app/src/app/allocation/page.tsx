@@ -5,7 +5,7 @@ import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { useProjects } from '@/lib/use-projects';
 import { useAuth } from '@/lib/auth-context';
-import { canEditPlannedAllocations, canEditActualAllocations, canAssignProjectStaff, isAllocationViewerReadOnly, ROLES } from '@/lib/roles';
+import { canEditPlannedAllocations, canEditActualAllocations, canAssignProjectStaff, isAllocationViewerReadOnly, ROLES, isEmployeeAccessRole } from '@/lib/roles';
 import { getMvpFeatures } from '@/lib/mvp-config';
 import { normalizeRoleName } from '@/lib/role-utils';
 import { usePortfolioScope } from '@/lib/use-portfolio-scope';
@@ -63,7 +63,8 @@ export function Allocation() {
     const isDM = normalizeRoleName(user?.role) === ROLES.DELIVERY_MANAGER;
     const canEditPlanned = canEditPlannedAllocations(user?.role);
     const canEditActual = canEditActualAllocations(user?.role);
-    const canAssignStaff = canAssignProjectStaff(user?.role) && !isViewerReadOnly && !isPM;
+    const isEmployeeUser = isEmployeeAccessRole(user?.role);
+    const canAssignStaff = canAssignProjectStaff(user?.role) && !isViewerReadOnly;
     const mvpMode = getMvpFeatures().mvpMode;
     const { editableProjectIds: dmPortfolioIds } = usePortfolioScope(user?.role);
 
@@ -105,11 +106,21 @@ export function Allocation() {
     });
 
     const projectOptions = useMemo(
-        () =>
-            projects
+        () => {
+            let list = projects;
+            if (isPM && managedProjectIds) {
+                list = projects.filter((p) => managedProjectIds.has(p.id));
+            }
+            if (isEmployeeUser && user?.id) {
+                list = list.filter((p) =>
+                    p.teamMembers?.some((m) => m.employeeId === user.id)
+                );
+            }
+            return list
                 .map((p) => ({ id: p.id, name: p.name, code: p.code }))
-                .sort((a, b) => a.name.localeCompare(b.name)),
-        [projects]
+                .sort((a, b) => a.name.localeCompare(b.name));
+        },
+        [projects, isPM, managedProjectIds, isEmployeeUser, user?.id]
     );
 
     const projectTypeById = useMemo(() => {
@@ -171,8 +182,17 @@ export function Allocation() {
     const canScrollWeeksBack = weekWindowStart > 0;
     const canScrollWeeksForward = weekWindowStart + WEEKS_VISIBLE < planningWeeks.length;
 
+    const employeeAssignedProjectIds = useMemo(() => {
+        if (!isEmployeeUser || !user?.id) return null;
+        return new Set(
+            projects
+                .filter((p) => p.teamMembers?.some((m) => m.employeeId === user.id))
+                .map((p) => p.id)
+        );
+    }, [projects, isEmployeeUser, user?.id]);
+
     const displayRows = useMemo((): AllocationGridRow[] => {
-        return grid.plannerRows
+        let rows = grid.plannerRows
             .filter(
                 (row) =>
                     row.projectCode !== BENCH_PROJECT_CODE &&
@@ -207,7 +227,17 @@ export function Allocation() {
                     sensitivity: 'base',
                 });
             });
-    }, [grid.plannerRows, employeeRoleMap, projectTypeById]);
+
+        if (isEmployeeUser && user?.id && employeeAssignedProjectIds) {
+            rows = rows.filter(
+                (row) =>
+                    row.employeeId === user.id &&
+                    employeeAssignedProjectIds.has(row.projectId)
+            );
+        }
+
+        return rows;
+    }, [grid.plannerRows, employeeRoleMap, projectTypeById, isEmployeeUser, user?.id, employeeAssignedProjectIds]);
 
     const filteredRows = useMemo(() => {
         return displayRows.filter((row) =>
@@ -285,6 +315,11 @@ export function Allocation() {
             return;
         }
 
+        if (isPM && managedProjectIds && !managedProjectIds.has(draftProjectId)) {
+            setDraftError('You can only add resources to projects you manage.');
+            return;
+        }
+
         const newKey = rowKey(emp.id, project.id);
         if (grid.plannerRows.some((r) => r.rowKey === newKey)) {
             setDraftError('This resource is already allocated to that project.');
@@ -301,7 +336,7 @@ export function Allocation() {
             weekCells: {},
         });
         handleCancelDraft();
-    }, [draftProjectId, draftEmployeeId, projectOptions, employeeOptions, grid, handleCancelDraft]);
+    }, [draftProjectId, draftEmployeeId, projectOptions, employeeOptions, grid, handleCancelDraft, isPM, managedProjectIds]);
 
     const handleSave = async () => {
         await grid.saveBulk();
