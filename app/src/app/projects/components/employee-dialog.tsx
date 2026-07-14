@@ -262,6 +262,7 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
                                     <SelectItem value="Human Resources">Human Resources</SelectItem>
                                     <SelectItem value="Product Management">Product Management</SelectItem>
                                     <SelectItem value="Project Management">Project Management</SelectItem>
+                                    <SelectItem value="Delivery Management">Delivery Management</SelectItem>
                                     <SelectItem value="Quality Assurance">Quality Assurance</SelectItem>
                                     <SelectItem value="Design">Design</SelectItem>
                                     <SelectItem value="DevOps / Infrastructure">DevOps / Infrastructure</SelectItem>

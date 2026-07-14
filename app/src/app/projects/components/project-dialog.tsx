@@ -30,6 +30,46 @@ import { normalizeRoleName } from "@/lib/role-utils"
 import { ROLES } from "@/lib/roles"
 import { projectTypeLabel } from "@/lib/project-type-label"
 
+/** Job titles eligible to appear in the Project Manager picker. */
+const PROJECT_MANAGER_JOB_ROLES = new Set([
+    'Program Manager',
+    'Senior Project Manager',
+    'Project Manager',
+    'Associate Project Manager',
+])
+
+/** Job titles eligible to appear in the Delivery Manager picker. */
+const DELIVERY_MANAGER_JOB_ROLES = new Set([
+    'Program Delivery Manager',
+    'Senior Delivery Manager',
+    'Delivery Manager',
+    'Associate Delivery Manager',
+])
+
+function employeeJobTitle(emp: { jobRole?: string; position?: string }): string {
+    return (emp.jobRole || emp.position || '').trim()
+}
+
+function isProjectManagerCandidate(emp: {
+    role?: string
+    jobRole?: string
+    position?: string
+}): boolean {
+    const accessRole = normalizeRoleName(emp.role || '')
+    if (accessRole === ROLES.PROJECT_MANAGER || accessRole === ROLES.ADMIN) return true
+    return PROJECT_MANAGER_JOB_ROLES.has(employeeJobTitle(emp))
+}
+
+function isDeliveryManagerCandidate(emp: {
+    role?: string
+    jobRole?: string
+    position?: string
+}): boolean {
+    const accessRole = normalizeRoleName(emp.role || '')
+    if (accessRole === ROLES.DELIVERY_MANAGER || accessRole === ROLES.ADMIN) return true
+    return DELIVERY_MANAGER_JOB_ROLES.has(employeeJobTitle(emp))
+}
+
 interface ProjectDialogProps {
     project?: Project;
     open?: boolean;
@@ -47,20 +87,12 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
     const { roles } = useRoles()
 
     const projectManagerOptions = useMemo(
-        () =>
-            (employees || []).filter((emp) => {
-                const accessRole = normalizeRoleName(emp.role || '')
-                return accessRole === ROLES.PROJECT_MANAGER || accessRole === ROLES.ADMIN
-            }),
+        () => (employees || []).filter(isProjectManagerCandidate),
         [employees]
     )
 
     const deliveryManagerOptions = useMemo(
-        () =>
-            (employees || []).filter((emp) => {
-                const accessRole = normalizeRoleName(emp.role || '')
-                return accessRole === ROLES.DELIVERY_MANAGER || accessRole === ROLES.ADMIN
-            }),
+        () => (employees || []).filter(isDeliveryManagerCandidate),
         [employees]
     )
 

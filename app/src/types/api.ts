@@ -47,13 +47,20 @@ export type EmployeeRole =
     | 'Senior Project Manager'
     | 'Project Manager'
     | 'Associate Project Manager'
-    | 'Project Coordinator';
+    | 'Project Coordinator'
+    | 'Delivery Head'
+    | 'Program Delivery Manager'
+    | 'Senior Delivery Manager'
+    | 'Delivery Manager'
+    | 'Associate Delivery Manager'
+    | 'Delivery Coordinator';
 
 export type EmployeeDepartment =
     | 'Engineering'
     | 'Human Resources'
     | 'Product Management'
     | 'Project Management'
+    | 'Delivery Management'
     | 'Quality Assurance'
     | 'Design'
     | 'DevOps / Infrastructure'

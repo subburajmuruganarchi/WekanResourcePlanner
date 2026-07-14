@@ -87,6 +87,12 @@ export enum EmployeeRole {
     PROJECT_MANAGER = 'Project Manager',
     ASSOCIATE_PROJECT_MANAGER = 'Associate Project Manager',
     PROJECT_COORDINATOR = 'Project Coordinator',
+    DELIVERY_HEAD = 'Delivery Head',
+    PROGRAM_DELIVERY_MANAGER = 'Program Delivery Manager',
+    SENIOR_DELIVERY_MANAGER = 'Senior Delivery Manager',
+    DELIVERY_MANAGER = 'Delivery Manager',
+    ASSOCIATE_DELIVERY_MANAGER = 'Associate Delivery Manager',
+    DELIVERY_COORDINATOR = 'Delivery Coordinator',
 }
 
 export enum EmployeeDepartment {
@@ -94,6 +100,7 @@ export enum EmployeeDepartment {
     HUMAN_RESOURCES = 'Human Resources',
     PRODUCT_MANAGEMENT = 'Product Management',
     PROJECT_MANAGEMENT = 'Project Management',
+    DELIVERY_MANAGEMENT = 'Delivery Management',
     QUALITY_ASSURANCE = 'Quality Assurance',
     DESIGN = 'Design',
     DEVOPS_INFRASTRUCTURE = 'DevOps / Infrastructure',
