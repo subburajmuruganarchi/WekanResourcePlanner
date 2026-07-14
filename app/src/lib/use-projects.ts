@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
+import useSWR from 'swr';
 import { api } from './api-client';
+import { listSwrOptions } from './swr-defaults';
 import type { Project } from '@/types/api';
 
 interface UseProjectsOptions {
@@ -26,55 +28,44 @@ export function notifyProjectsChanged(): void {
 
 export function useProjects(options: UseProjectsOptions = {}): UseProjectsResult {
     const { forTimeEntry = false } = options;
-    const [projects, setProjects] = useState<Project[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const key = `/projects${forTimeEntry ? '?forTimeEntry=true' : ''}`;
 
-    const fetchProjects = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const query = forTimeEntry ? '?forTimeEntry=true' : '';
-            const data = await api.get<Project[]>(`/projects${query}`);
-            setProjects(data);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to fetch projects');
-        } finally {
-            setLoading(false);
-        }
-    }, [forTimeEntry]);
+    const { data, error, isLoading, mutate } = useSWR<Project[]>(
+        key,
+        (url) => api.get<Project[]>(url),
+        listSwrOptions
+    );
 
     useEffect(() => {
-        fetchProjects();
-    }, [fetchProjects]);
-
-    useEffect(() => {
-        const onChanged = () => void fetchProjects();
+        const onChanged = () => void mutate();
         window.addEventListener(PROJECTS_CHANGED_EVENT, onChanged);
         return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, onChanged);
-    }, [fetchProjects]);
+    }, [mutate]);
 
-    const createProject = async (data: Partial<Project>) => {
-        try {
-            await api.post('/projects', data);
-            await fetchProjects();
-            notifyProjectsChanged();
-        } catch (err) {
-            throw err;
-        }
+    const refetch = useCallback(() => {
+        void mutate();
+    }, [mutate]);
+
+    const createProject = async (payload: Partial<Project>) => {
+        await api.post('/projects', payload);
+        await mutate();
+        notifyProjectsChanged();
     };
 
-    const updateProject = async (id: string, data: Partial<Project>) => {
-        try {
-            await api.put(`/projects/${id}`, data);
-            await fetchProjects();
-            notifyProjectsChanged();
-        } catch (err) {
-            throw err;
-        }
+    const updateProject = async (id: string, payload: Partial<Project>) => {
+        await api.put(`/projects/${id}`, payload);
+        await mutate();
+        notifyProjectsChanged();
     };
 
-    return { projects, loading, error, refetch: fetchProjects, createProject, updateProject };
+    return {
+        projects: data ?? [],
+        loading: isLoading && !data,
+        error: error instanceof Error ? error.message : error ? String(error) : null,
+        refetch,
+        createProject,
+        updateProject,
+    };
 }
 
 interface UseProjectResult {
@@ -85,42 +76,21 @@ interface UseProjectResult {
 }
 
 export function useProject(id: string | undefined): UseProjectResult {
-    const [project, setProject] = useState<Project | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [refreshKey, setRefreshKey] = useState(0);
+    const key = id ? `/projects/${id}` : null;
+    const { data, error, isLoading, mutate } = useSWR<Project>(
+        key,
+        (url) => api.get<Project>(url),
+        listSwrOptions
+    );
 
-    useEffect(() => {
-        if (!id) {
-            setProject(null);
-            setLoading(false);
-            return;
-        }
+    const refetch = useCallback(() => {
+        void mutate();
+    }, [mutate]);
 
-        setProject(null);
-        setLoading(true);
-        setError(null);
-
-        let cancelled = false;
-        api.get<Project>(`/projects/${id}`)
-            .then((data) => {
-                if (!cancelled) setProject(data);
-            })
-            .catch((err) => {
-                if (!cancelled) {
-                    setError(err instanceof Error ? err.message : 'Failed to fetch project');
-                }
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [id, refreshKey]);
-
-    const refetch = useCallback(() => setRefreshKey((k) => k + 1), []);
-
-    return { project, loading, error, refetch };
+    return {
+        project: data ?? null,
+        loading: Boolean(id) && isLoading && !data,
+        error: error instanceof Error ? error.message : error ? String(error) : null,
+        refetch,
+    };
 }

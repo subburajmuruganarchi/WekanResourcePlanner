@@ -21,7 +21,7 @@ export function useNotifications() {
             const data = await api.get<AppNotification[]>(url);
             return data || [];
         },
-        { refreshInterval: 30000 } // Auto-refresh every 30 seconds
+        { refreshInterval: 60_000, revalidateOnFocus: false, dedupingInterval: 30_000 }
     );
 
     const unreadCount = notifications.filter(n => !n.read).length;

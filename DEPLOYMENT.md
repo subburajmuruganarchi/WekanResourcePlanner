@@ -141,6 +141,20 @@ Requires `mongodump` / `mongorestore` in PATH.
 
 ---
 
+## 7.1 Vercel + Render: reducing lag
+
+The SPA on **Vercel** calls the API on **Render** on every request (cross-origin). That feels slow when:
+
+1. **Render free/idle sleep** — After ~15 minutes idle, the API cold-starts (often 30–60s). Keep it warm:
+   - Prefer a **paid** Render instance that does not spin down, **or**
+   - Add an external ping (UptimeRobot / cron) every 5–10 minutes to `GET https://<your-api>.onrender.com/health`.
+2. **Wrong `VITE_API_URL`** — Must be the API base including `/api` (e.g. `https://r360-api.onrender.com/api`). Rebuild the Vercel app after changing it.
+3. **CORS** — `FRONTEND_URL` on Render must exactly match the Vercel origin (no trailing slash mismatch).
+
+First load after idle will always be slower than local `localhost`; warming the API removes most of the “pages barely load” feeling.
+
+---
+
 ## 8. UAT load (non-production only)
 
 ```bash

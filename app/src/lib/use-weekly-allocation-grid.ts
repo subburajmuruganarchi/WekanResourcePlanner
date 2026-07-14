@@ -114,8 +114,12 @@ export function useWeeklyAllocationGrid(options: UseWeeklyAllocationGridOptions)
                 let allFlatRows = [...first.rows];
 
                 if (options.fetchAllPages && first.pagination.totalPages > 1) {
-                    for (let p = 2; p <= first.pagination.totalPages; p++) {
-                        const next = await fetchPage(p);
+                    const rest = await Promise.all(
+                        Array.from({ length: first.pagination.totalPages - 1 }, (_, i) =>
+                            fetchPage(i + 2)
+                        )
+                    );
+                    for (const next of rest) {
                         allFlatRows = allFlatRows.concat(next.rows);
                     }
                 }

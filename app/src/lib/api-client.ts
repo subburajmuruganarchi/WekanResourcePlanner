@@ -13,6 +13,8 @@ function currentRoute(): string {
     return typeof window !== 'undefined' ? window.location.pathname : '';
 }
 
+const DEFAULT_TIMEOUT_MS = 45_000;
+
 async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const token = localStorage.getItem('r360_auth_token');
     const headers: Record<string, string> = {
@@ -24,14 +26,24 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
         headers['Authorization'] = `Bearer ${token}`;
     }
 
+    const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
+
     let response: Response;
     try {
         response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...options,
             headers,
+            signal: options?.signal ?? timeoutSignal,
         });
     } catch (networkErr) {
-        const message = networkErr instanceof Error ? networkErr.message : 'Network error';
+        const isAbort =
+            networkErr instanceof Error &&
+            (networkErr.name === 'TimeoutError' || networkErr.name === 'AbortError');
+        const message = isAbort
+            ? 'Request timed out — the API may be waking up. Retry in a moment.'
+            : networkErr instanceof Error
+              ? networkErr.message
+              : 'Network error';
         recordApiFailure({
             endpoint,
             status: 0,

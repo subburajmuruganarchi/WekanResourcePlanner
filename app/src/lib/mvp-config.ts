@@ -50,8 +50,11 @@ export async function loadMvpFeatures(apiBase?: string): Promise<MvpFeatureFlags
 
     fetchPromise = (async () => {
         try {
-            const base = apiBase ?? import.meta.env.VITE_API_URL ?? '';
-            const res = await fetch(`${base}/api/config/features`);
+            // VITE_API_URL already ends with `/api` — do not append `/api` again.
+            const base = (apiBase ?? import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+            const res = await fetch(`${base}/config/features`, {
+                signal: AbortSignal.timeout(15_000),
+            });
             if (res.ok) {
                 const json = await res.json();
                 cached = {

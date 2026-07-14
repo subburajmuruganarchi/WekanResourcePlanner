@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
+import useSWR from 'swr';
 import { api } from './api-client';
+import { listSwrOptions } from './swr-defaults';
 import type { Employee } from '@/types/api';
 
 interface UseEmployeesOptions {
@@ -20,53 +22,55 @@ interface UseEmployeesResult {
     updateEmployee: (id: string, data: Partial<Employee>) => Promise<void>;
 }
 
+function employeesKey(options: {
+    allocatedToMyProjects: boolean;
+    activeOnly: boolean;
+    includeAssignments: boolean;
+}): string {
+    const params = new URLSearchParams();
+    if (options.allocatedToMyProjects) params.set('allocatedToMyProjects', 'true');
+    if (options.activeOnly) params.set('isActive', 'true');
+    if (options.includeAssignments) params.set('includeAssignments', 'true');
+    const q = params.toString();
+    return `/employees${q ? `?${q}` : ''}`;
+}
+
 export function useEmployees(options: UseEmployeesOptions = {}): UseEmployeesResult {
-    const { allocatedToMyProjects = false, activeOnly = true, includeAssignments = false } = options;
-    const [employees, setEmployees] = useState<Employee[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const {
+        allocatedToMyProjects = false,
+        activeOnly = true,
+        includeAssignments = false,
+    } = options;
+    const key = employeesKey({ allocatedToMyProjects, activeOnly, includeAssignments });
 
-    const fetchEmployees = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const params = new URLSearchParams();
-            if (allocatedToMyProjects) params.set('allocatedToMyProjects', 'true');
-            if (activeOnly) params.set('isActive', 'true');
-            if (includeAssignments) params.set('includeAssignments', 'true');
-            const query = params.toString() ? `?${params.toString()}` : '';
-            const data = await api.get<Employee[]>(`/employees${query}`);
-            setEmployees(data);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to fetch employees');
-        } finally {
-            setLoading(false);
-        }
-    }, [allocatedToMyProjects, activeOnly, includeAssignments]);
+    const { data, error, isLoading, mutate } = useSWR<Employee[]>(
+        key,
+        (url) => api.get<Employee[]>(url),
+        listSwrOptions
+    );
 
-    useEffect(() => {
-        fetchEmployees();
-    }, [fetchEmployees]);
+    const refetch = useCallback(() => {
+        void mutate();
+    }, [mutate]);
 
-    const createEmployee = async (data: Partial<Employee>) => {
-        try {
-            await api.post('/employees', data);
-            fetchEmployees();
-        } catch (err) {
-            throw err;
-        }
+    const createEmployee = async (payload: Partial<Employee>) => {
+        await api.post('/employees', payload);
+        await mutate();
     };
 
-    const updateEmployee = async (id: string, data: Partial<Employee>) => {
-        try {
-            await api.patch(`/employees/${id}`, data);
-            fetchEmployees();
-        } catch (err) {
-            throw err;
-        }
+    const updateEmployee = async (id: string, payload: Partial<Employee>) => {
+        await api.patch(`/employees/${id}`, payload);
+        await mutate();
     };
 
-    return { employees, loading, error, refetch: fetchEmployees, createEmployee, updateEmployee };
+    return {
+        employees: data ?? [],
+        loading: isLoading && !data,
+        error: error instanceof Error ? error.message : error ? String(error) : null,
+        refetch,
+        createEmployee,
+        updateEmployee,
+    };
 }
 
 interface UseEmployeeResult {
@@ -76,31 +80,16 @@ interface UseEmployeeResult {
 }
 
 export function useEmployee(id: string | undefined): UseEmployeeResult {
-    const [employee, setEmployee] = useState<Employee | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const key = id ? `/employees/${id}` : null;
+    const { data, error, isLoading } = useSWR<Employee>(
+        key,
+        (url) => api.get<Employee>(url),
+        listSwrOptions
+    );
 
-    useEffect(() => {
-        if (!id) {
-            setLoading(false);
-            return;
-        }
-
-        const fetchEmployee = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const data = await api.get<Employee>(`/employees/${id}`);
-                setEmployee(data);
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to fetch employee');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchEmployee();
-    }, [id]);
-
-    return { employee, loading, error };
+    return {
+        employee: data ?? null,
+        loading: Boolean(id) && isLoading && !data,
+        error: error instanceof Error ? error.message : error ? String(error) : null,
+    };
 }

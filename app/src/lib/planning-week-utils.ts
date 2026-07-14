@@ -5,8 +5,8 @@ export function getCurrentWeekStart(): string {
     return format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
 }
 
-/** Planning horizon: current Monday through +51 weeks. */
-export function buildPlanningWeekRange(weeksForward = 51): {
+/** Planning horizon: current Monday through +N weeks (default 12 weeks total). */
+export function buildPlanningWeekRange(weeksForward = 11): {
     weekStartFrom: string;
     weekStartTo: string;
 } {
