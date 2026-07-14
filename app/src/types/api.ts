@@ -41,12 +41,19 @@ export type EmployeeRole =
     | 'Operations Manager'
     | 'Operations Coordinator'
     | 'Office Administrator'
-    | 'Executive Assistant';
+    | 'Executive Assistant'
+    | 'PMO Head'
+    | 'Program Manager'
+    | 'Senior Project Manager'
+    | 'Project Manager'
+    | 'Associate Project Manager'
+    | 'Project Coordinator';
 
 export type EmployeeDepartment =
     | 'Engineering'
     | 'Human Resources'
     | 'Product Management'
+    | 'Project Management'
     | 'Quality Assurance'
     | 'Design'
     | 'DevOps / Infrastructure'

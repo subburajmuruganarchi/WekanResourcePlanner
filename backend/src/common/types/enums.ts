@@ -81,12 +81,19 @@ export enum EmployeeRole {
     OPERATIONS_COORDINATOR = 'Operations Coordinator',
     OFFICE_ADMINISTRATOR = 'Office Administrator',
     EXECUTIVE_ASSISTANT = 'Executive Assistant',
+    PMO_HEAD = 'PMO Head',
+    PROGRAM_MANAGER = 'Program Manager',
+    SENIOR_PROJECT_MANAGER = 'Senior Project Manager',
+    PROJECT_MANAGER = 'Project Manager',
+    ASSOCIATE_PROJECT_MANAGER = 'Associate Project Manager',
+    PROJECT_COORDINATOR = 'Project Coordinator',
 }
 
 export enum EmployeeDepartment {
     ENGINEERING = 'Engineering',
     HUMAN_RESOURCES = 'Human Resources',
     PRODUCT_MANAGEMENT = 'Product Management',
+    PROJECT_MANAGEMENT = 'Project Management',
     QUALITY_ASSURANCE = 'Quality Assurance',
     DESIGN = 'Design',
     DEVOPS_INFRASTRUCTURE = 'DevOps / Infrastructure',
