@@ -1,6 +1,7 @@
 import type { Employee, Project } from '@/types/api';
 import type { UtilizationVarianceRow } from '@/types/utilization';
 import { isActiveProject, projectStatusLabel, projectStatusOf } from '@/lib/project-status';
+import { DEFAULT_WEEKLY_CAPACITY_HOURS } from '@/lib/weekly-grid-pivot';
 
 export interface EmployeeWeekSnapshot {
     plannedHours: number;
@@ -22,8 +23,13 @@ export interface EmployeeProjectRow {
     deltaHours: number;
 }
 
+type PlannerHoursByProject = Map<string, { planned: number; actual: number }>;
+
 export function buildEmployeeWeekSnapshot(
-    varianceRows: UtilizationVarianceRow[]
+    varianceRows: UtilizationVarianceRow[],
+    plannerByProject?: PlannerHoursByProject,
+    /** Fallback when variance + planner have no planned hours (legacy % allocations). */
+    projectsFallback?: { projects: Project[]; employeeId?: string }
 ): EmployeeWeekSnapshot {
     let plannedHours = 0;
     let actualHours = 0;
@@ -31,6 +37,29 @@ export function buildEmployeeWeekSnapshot(
         plannedHours += row.plannedHours;
         actualHours += row.actualHours;
     }
+
+    if (plannerByProject && plannerByProject.size > 0) {
+        let fromPlannerPlanned = 0;
+        let fromPlannerActual = 0;
+        for (const hours of plannerByProject.values()) {
+            fromPlannerPlanned += hours.planned;
+            fromPlannerActual += hours.actual;
+        }
+        if (fromPlannerPlanned > 0 || plannedHours === 0) {
+            plannedHours = fromPlannerPlanned;
+        }
+        if (fromPlannerActual > 0 || actualHours === 0) {
+            actualHours = fromPlannerActual;
+        }
+    }
+
+    if (plannedHours === 0 && projectsFallback?.employeeId) {
+        plannedHours = plannedHoursFromAllocationPercent(
+            projectsFallback.projects,
+            projectsFallback.employeeId
+        );
+    }
+
     const utilizationPercent =
         plannedHours > 0 ? Math.min(100, Math.round((actualHours / plannedHours) * 100)) : null;
 
@@ -40,6 +69,16 @@ export function buildEmployeeWeekSnapshot(
         deltaHours: actualHours - plannedHours,
         utilizationPercent,
     };
+}
+
+function plannedHoursFromAllocationPercent(projects: Project[], employeeId: string): number {
+    let total = 0;
+    for (const project of projects) {
+        const pct = myAllocationOnProject(project, employeeId);
+        if (pct == null || pct <= 0) continue;
+        total += (pct / 100) * DEFAULT_WEEKLY_CAPACITY_HOURS;
+    }
+    return Math.round(total * 100) / 100;
 }
 
 export function myAllocationOnProject(project: Project, employeeId?: string): number | null {
@@ -59,7 +98,8 @@ export function sortEmployeeProjects(projects: Project[]): Project[] {
 export function buildEmployeeProjectRows(
     projects: Project[],
     employeeId: string | undefined,
-    varianceRows: UtilizationVarianceRow[]
+    varianceRows: UtilizationVarianceRow[],
+    plannerByProject?: PlannerHoursByProject
 ): EmployeeProjectRow[] {
     const hoursByProject = new Map<string, { planned: number; actual: number }>();
     for (const row of varianceRows) {
@@ -69,8 +109,22 @@ export function buildEmployeeProjectRows(
         hoursByProject.set(row.projectId, cur);
     }
 
+    if (plannerByProject) {
+        for (const [projectId, hours] of plannerByProject) {
+            const cur = hoursByProject.get(projectId) ?? { planned: 0, actual: 0 };
+            if (hours.planned > 0 || cur.planned === 0) cur.planned = hours.planned;
+            if (hours.actual > 0 || cur.actual === 0) cur.actual = hours.actual;
+            hoursByProject.set(projectId, cur);
+        }
+    }
+
     return sortEmployeeProjects(projects).map((project) => {
         const hours = hoursByProject.get(project.id) ?? { planned: 0, actual: 0 };
+        const allocationPercent = myAllocationOnProject(project, employeeId);
+        let planned = hours.planned;
+        if (planned === 0 && allocationPercent != null && allocationPercent > 0) {
+            planned = Math.round((allocationPercent / 100) * DEFAULT_WEEKLY_CAPACITY_HOURS * 100) / 100;
+        }
         return {
             projectId: project.id,
             projectName: project.name,
@@ -78,10 +132,10 @@ export function buildEmployeeProjectRows(
             status: projectStatusLabel(projectStatusOf(project)),
             isActive: isActiveProject(project),
             managerName: project.managerName || '—',
-            allocationPercent: myAllocationOnProject(project, employeeId),
-            plannedHours: hours.planned,
+            allocationPercent,
+            plannedHours: planned,
             actualHours: hours.actual,
-            deltaHours: hours.actual - hours.planned,
+            deltaHours: hours.actual - planned,
         };
     });
 }

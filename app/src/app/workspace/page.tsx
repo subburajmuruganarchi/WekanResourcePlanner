@@ -28,6 +28,8 @@ import { useProjects, PROJECTS_CHANGED_EVENT } from '@/lib/use-projects';
 import { useEmployee } from '@/lib/use-employees';
 import { useNotifications } from '@/lib/use-notifications';
 import { useUtilizationVariance } from '@/lib/use-utilization';
+import { useWeeklyAllocationGrid } from '@/lib/use-weekly-allocation-grid';
+import { hoursByProjectFromPlannerRows } from '@/lib/pm-dashboard-metrics';
 import {
     buildDashboardPeriodRange,
     formatDashboardPeriodLabel,
@@ -56,6 +58,11 @@ export default function EmployeeWorkspacePage() {
     const { employee, loading: profileLoading } = useEmployee(user?.id);
     const { notifications, unreadCount } = useNotifications();
     const { data: utilizationData, loading: utilLoading, fetchVariance } = useUtilizationVariance();
+    const allocationGrid = useWeeklyAllocationGrid({
+        canEdit: false,
+        fetchAllPages: true,
+        includeUnstaffedProjects: false,
+    });
 
     const weekStart = getCurrentWeekStart();
     const periodRange = useMemo(
@@ -64,19 +71,35 @@ export default function EmployeeWorkspacePage() {
     );
     const periodLabel = formatDashboardPeriodLabel('week', periodRange);
 
+    const plannerByProject = useMemo(
+        () => hoursByProjectFromPlannerRows(allocationGrid.plannerRows, weekStart),
+        [allocationGrid.plannerRows, weekStart]
+    );
+
     const weekSnapshot = useMemo(
-        () => buildEmployeeWeekSnapshot(utilizationData?.rows ?? []),
-        [utilizationData?.rows]
+        () =>
+            buildEmployeeWeekSnapshot(utilizationData?.rows ?? [], plannerByProject, {
+                projects,
+                employeeId: user?.id,
+            }),
+        [utilizationData?.rows, plannerByProject, projects, user?.id]
     );
 
     const projectRows = useMemo(
-        () => buildEmployeeProjectRows(projects, user?.id, utilizationData?.rows ?? []),
-        [projects, user?.id, utilizationData?.rows]
+        () =>
+            buildEmployeeProjectRows(
+                projects,
+                user?.id,
+                utilizationData?.rows ?? [],
+                plannerByProject
+            ),
+        [projects, user?.id, utilizationData?.rows, plannerByProject]
     );
 
     const activeProjectCount = countActiveProjects(projects);
     const allocationPct = allocatedPercent(employee);
     const skills = topSkills(employee);
+    const hoursLoading = utilLoading || allocationGrid.loading;
 
     useEffect(() => {
         const onProjectsChanged = () => void refetchProjects();
@@ -91,7 +114,17 @@ export default function EmployeeWorkspacePage() {
             weekStartTo: periodRange.weekStartTo,
             employeeId: user.id,
         });
-    }, [user?.id, fetchVariance, periodRange.weekStartFrom, periodRange.weekStartTo]);
+        void allocationGrid.fetchGrid(
+            {
+                weekStartFrom: periodRange.weekStartFrom,
+                weekStartTo: periodRange.weekStartTo,
+                employeeId: user.id,
+                utilization: 'all',
+                excludeBench: true,
+            },
+            1
+        );
+    }, [user?.id, fetchVariance, periodRange.weekStartFrom, periodRange.weekStartTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (projectsLoading || profileLoading) {
         return <PageSkeleton />;
@@ -127,15 +160,27 @@ export default function EmployeeWorkspacePage() {
                 />
                 <MetricCard
                     label="Planned This Week"
-                    value={utilLoading ? '—' : weekSnapshot.plannedHours > 0 ? `${Math.round(weekSnapshot.plannedHours)}h` : '—'}
+                    value={
+                        hoursLoading
+                            ? '—'
+                            : weekSnapshot.plannedHours > 0
+                              ? `${Math.round(weekSnapshot.plannedHours)}h`
+                              : '—'
+                    }
                     hint={periodLabel}
                     icon={CalendarRange}
                     accent="sky"
                 />
                 <MetricCard
                     label="Actual This Week"
-                    value={utilLoading ? '—' : weekSnapshot.actualHours > 0 ? `${Math.round(weekSnapshot.actualHours)}h` : '—'}
-                    hint={utilLoading ? 'Loading…' : formatDeltaHours(weekSnapshot.deltaHours)}
+                    value={
+                        hoursLoading
+                            ? '—'
+                            : weekSnapshot.actualHours > 0
+                              ? `${Math.round(weekSnapshot.actualHours)}h`
+                              : '0h'
+                    }
+                    hint={hoursLoading ? 'Loading…' : formatDeltaHours(weekSnapshot.deltaHours)}
                     icon={Gauge}
                     accent="violet"
                 />

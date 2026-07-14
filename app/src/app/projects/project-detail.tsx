@@ -12,7 +12,6 @@ import { projectTypeLabel } from "@/lib/project-type-label"
 import { useAuth } from "@/lib/auth-context"
 import { normalizeRoleName } from "@/lib/role-utils"
 import { ROLES, isEmployeeAccessRole } from "@/lib/roles"
-import { TimesheetApprovalsTab } from "./components/timesheet-approvals-tab"
 import { StaffingRiskBadge } from "@/components/ai/staffing-risk-badge"
 import { ProjectLeadershipPanel } from "./components/project-leadership-panel"
 import { ProjectDialog } from "./components/project-dialog"
@@ -26,8 +25,6 @@ export function ProjectDetail() {
 
     const isAdmin = normalizeRoleName(user?.role) === ROLES.ADMIN
     const isReadOnlyEmployee = isEmployeeAccessRole(user?.role)
-
-    const isPM = !!(user && project && project.managerId === user.id)
 
     const backPath = isReadOnlyEmployee ? "/workspace" : "/projects"
     const backLabel = isReadOnlyEmployee ? "Back to My Workspace" : "Back to Projects"
@@ -114,11 +111,6 @@ export function ProjectDetail() {
             <Tabs defaultValue="overview" className="bg-white border border-gray-200 rounded-lg">
                 <TabsList className="px-6 pt-4 border-b border-gray-200 w-full justify-start rounded-none h-auto bg-transparent mb-0">
                     <TabsTrigger value="overview" className="pb-4 rounded-none data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-brand-600 data-[state=active]:text-brand-600">Overview</TabsTrigger>
-                    {isPM && (
-                        <TabsTrigger value="approvals" className="pb-4 rounded-none data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-brand-600 data-[state=active]:text-brand-600">
-                            Timesheet Approvals
-                        </TabsTrigger>
-                    )}
                 </TabsList>
 
                 <TabsContent value="overview" className="p-8">
@@ -206,12 +198,6 @@ export function ProjectDetail() {
                         </div>
                     </div>
                 </TabsContent>
-
-                {isPM && (
-                    <TabsContent value="approvals" className="p-0">
-                        <TimesheetApprovalsTab projectId={id!} />
-                    </TabsContent>
-                )}
             </Tabs>
 
             <ProjectDialog

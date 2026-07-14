@@ -182,15 +182,35 @@ export function buildPmProjectHoursRows(
 export function plannedHoursByProjectFromPlannerRows(
     plannerRows: Array<{
         projectId: string;
-        weekCells: Record<string, { plannedHours?: number } | undefined>;
+        weekCells: Record<string, { plannedHours?: number; actualHours?: number } | undefined>;
     }>,
     weekStart: string
 ): Map<string, number> {
     const map = new Map<string, number>();
+    for (const [projectId, hours] of hoursByProjectFromPlannerRows(plannerRows, weekStart)) {
+        if (hours.planned > 0) map.set(projectId, hours.planned);
+    }
+    return map;
+}
+
+/** Sum planned + actual hours per project for a single week from allocation planner rows. */
+export function hoursByProjectFromPlannerRows(
+    plannerRows: Array<{
+        projectId: string;
+        weekCells: Record<string, { plannedHours?: number; actualHours?: number } | undefined>;
+    }>,
+    weekStart: string
+): Map<string, { planned: number; actual: number }> {
+    const map = new Map<string, { planned: number; actual: number }>();
     for (const row of plannerRows) {
-        const hours = row.weekCells[weekStart]?.plannedHours ?? 0;
-        if (!hours) continue;
-        map.set(row.projectId, (map.get(row.projectId) ?? 0) + hours);
+        const cell = row.weekCells[weekStart];
+        const planned = cell?.plannedHours ?? 0;
+        const actual = cell?.actualHours ?? 0;
+        if (!planned && !actual) continue;
+        const cur = map.get(row.projectId) ?? { planned: 0, actual: 0 };
+        cur.planned += planned;
+        cur.actual += actual;
+        map.set(row.projectId, cur);
     }
     return map;
 }
