@@ -15,6 +15,60 @@ import { SkillLevel } from '../../common/types/enums';
 import { getEmployeesAllocatedToManagedProjects, getManagedProjectIds } from '../../common/utils/pm-scope.util';
 import { activeEmployeeMongoFilter } from '../../common/utils/employee-status.util';
 import { getEmployeesAllocatedToPortfolioProjects, getPortfolioProjectIds } from '../../common/utils/delivery-scope.util';
+import { ROLES } from '../../common/constants/roles';
+
+/** Job titles that get Project Manager system access (login/nav). */
+const PROJECT_MANAGER_DESIGNATIONS = new Set([
+    'PMO Head',
+    'Program Manager',
+    'Senior Project Manager',
+    'Project Manager',
+    'Associate Project Manager',
+    'Project Coordinator',
+]);
+
+/** Job titles that get Delivery Manager system access (login/nav). */
+const DELIVERY_MANAGER_DESIGNATIONS = new Set([
+    'Delivery Head',
+    'Program Delivery Manager',
+    'Senior Delivery Manager',
+    'Delivery Manager',
+    'Associate Delivery Manager',
+    'Delivery Coordinator',
+]);
+
+/**
+ * Infer system access role from job title and/or department.
+ * Used when Add Employee only sends designation (not an explicit system roleId).
+ */
+export function inferSystemAccessRoleName(
+    designation?: string | null,
+    department?: string | null
+): string {
+    const title = designation?.trim() ?? '';
+    const dept = department?.trim() ?? '';
+
+    if (title && PROJECT_MANAGER_DESIGNATIONS.has(title)) return ROLES.PROJECT_MANAGER;
+    if (title && DELIVERY_MANAGER_DESIGNATIONS.has(title)) return ROLES.DELIVERY_MANAGER;
+    if (dept === 'Project Management') return ROLES.PROJECT_MANAGER;
+    if (dept === 'Delivery Management') return ROLES.DELIVERY_MANAGER;
+    return ROLES.EMPLOYEE;
+}
+
+async function resolveSystemAccessRoleId(roleName: string): Promise<Types.ObjectId | undefined> {
+    const doc = await Role.findOneAndUpdate(
+        { role_name: roleName },
+        {
+            $setOnInsert: {
+                role_name: roleName,
+                is_active: true,
+                department: 'WeKan',
+            },
+        },
+        { upsert: true, new: true }
+    );
+    return doc?._id as Types.ObjectId | undefined;
+}
 
 export interface EmployeeListParams {
     skill?: string;
@@ -116,7 +170,10 @@ function mapEmployeeDtoToDocument(
     };
 }
 
-async function resolveJobRoleId(designation?: string): Promise<Types.ObjectId | undefined> {
+async function resolveJobRoleId(
+    designation?: string,
+    department?: string
+): Promise<Types.ObjectId | undefined> {
     if (!designation?.trim()) return undefined;
     const doc = await Role.findOneAndUpdate(
         { role_name: designation.trim() },
@@ -124,7 +181,7 @@ async function resolveJobRoleId(designation?: string): Promise<Types.ObjectId | 
             $setOnInsert: {
                 role_name: designation.trim(),
                 is_active: true,
-                department: 'Engineering',
+                department: department?.trim() || 'Engineering',
             },
         },
         { upsert: true, new: true }
@@ -256,8 +313,25 @@ export class EmployeeService {
         const { employeeFields, skills } = mapEmployeeDtoToDocument(data);
 
         if (data.designation) {
-            const jobRoleId = await resolveJobRoleId(data.designation);
+            const jobRoleId = await resolveJobRoleId(data.designation, data.department);
             if (jobRoleId) employeeFields.job_role_id = jobRoleId;
+        }
+
+        // When DM/Admin edits via Add Employee (no explicit system roleId), keep system role in sync.
+        if (
+            data.roleId === undefined &&
+            (data.designation !== undefined || data.department !== undefined)
+        ) {
+            const existing = await Employee.findById(id).select('position department').lean();
+            if (!existing) {
+                throw new AppError('Employee not found', 404);
+            }
+            const designation = data.designation ?? existing.position;
+            const department = data.department ?? existing.department;
+            const systemRoleId = await resolveSystemAccessRoleId(
+                inferSystemAccessRoleName(designation, department)
+            );
+            if (systemRoleId) employeeFields.role_id = systemRoleId;
         }
 
         if (Object.keys(employeeFields).length > 0) {
@@ -279,9 +353,10 @@ export class EmployeeService {
         const { employeeFields, skills } = mapEmployeeDtoToDocument(data);
 
         if (!employeeFields.role_id) {
-            const employeeRole = await Role.findOne({ role_name: 'Employee' }).select('_id').lean();
-            if (employeeRole?._id) {
-                employeeFields.role_id = employeeRole._id as Types.ObjectId;
+            const systemRoleName = inferSystemAccessRoleName(data.designation, data.department);
+            const systemRoleId = await resolveSystemAccessRoleId(systemRoleName);
+            if (systemRoleId) {
+                employeeFields.role_id = systemRoleId;
             }
         }
 
@@ -298,7 +373,7 @@ export class EmployeeService {
         }
 
         if (data.designation) {
-            const jobRoleId = await resolveJobRoleId(data.designation);
+            const jobRoleId = await resolveJobRoleId(data.designation, data.department);
             if (jobRoleId) employeeFields.job_role_id = jobRoleId;
         }
 

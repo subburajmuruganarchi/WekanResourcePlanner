@@ -24,10 +24,11 @@ import { pmProjectDeliveryColumns } from '@/app/pm-workspace/components/pm-proje
 import { useProjects } from '@/lib/use-projects';
 import { useEmployees } from '@/lib/use-employees';
 import { useAuth } from '@/lib/auth-context';
-import { buildPmDashboardSnapshot, buildPmProjectHoursRows } from '@/lib/pm-dashboard-metrics';
+import { buildPmDashboardSnapshot, buildPmProjectHoursRows, plannedHoursByProjectFromPlannerRows } from '@/lib/pm-dashboard-metrics';
 import { buildPortfolioHealthRows } from '@/lib/portfolio-health-rows';
 import { fetchDeliveryRisks, type DeliveryRiskItem } from '@/lib/risk-intelligence';
 import { useUtilizationVariance } from '@/lib/use-utilization';
+import { useWeeklyAllocationGrid } from '@/lib/use-weekly-allocation-grid';
 import {
     buildDashboardPeriodRange,
     formatDashboardPeriodLabel,
@@ -43,6 +44,11 @@ export default function PmDashboardPage() {
     const { projects, loading } = useProjects();
     const { employees, loading: teamLoading } = useEmployees({ allocatedToMyProjects: true, activeOnly: true });
     const { data: utilizationData, loading: utilLoading, fetchVariance } = useUtilizationVariance();
+    const allocationGrid = useWeeklyAllocationGrid({
+        canEdit: false,
+        fetchAllPages: true,
+        includeUnstaffedProjects: false,
+    });
     const [risks, setRisks] = useState<DeliveryRiskItem[]>([]);
 
     const weekStart = getCurrentWeekStart();
@@ -52,6 +58,11 @@ export default function PmDashboardPage() {
     );
     const periodLabel = formatDashboardPeriodLabel('week', periodRange);
 
+    const plannerPlannedByProject = useMemo(
+        () => plannedHoursByProjectFromPlannerRows(allocationGrid.plannerRows, weekStart),
+        [allocationGrid.plannerRows, weekStart]
+    );
+
     const snapshot = useMemo(
         () =>
             buildPmDashboardSnapshot(
@@ -59,14 +70,21 @@ export default function PmDashboardPage() {
                 user?.id,
                 employees.length,
                 risks,
-                utilizationData?.rows ?? []
+                utilizationData?.rows ?? [],
+                plannerPlannedByProject
             ),
-        [projects, user?.id, employees.length, risks, utilizationData?.rows]
+        [projects, user?.id, employees.length, risks, utilizationData?.rows, plannerPlannedByProject]
     );
 
     const projectHoursRows = useMemo(
-        () => buildPmProjectHoursRows(snapshot.myProjects, utilizationData?.rows ?? [], risks),
-        [snapshot.myProjects, utilizationData?.rows, risks]
+        () =>
+            buildPmProjectHoursRows(
+                snapshot.myProjects,
+                utilizationData?.rows ?? [],
+                risks,
+                plannerPlannedByProject
+            ),
+        [snapshot.myProjects, utilizationData?.rows, risks, plannerPlannedByProject]
     );
 
     const portfolioRows = useMemo(
@@ -87,7 +105,16 @@ export default function PmDashboardPage() {
             weekStartFrom: periodRange.weekStartFrom,
             weekStartTo: periodRange.weekStartTo,
         });
-    }, [fetchVariance, periodRange.weekStartFrom, periodRange.weekStartTo]);
+        void allocationGrid.fetchGrid(
+            {
+                weekStartFrom: periodRange.weekStartFrom,
+                weekStartTo: periodRange.weekStartTo,
+                utilization: 'all',
+                excludeBench: true,
+            },
+            1
+        );
+    }, [fetchVariance, periodRange.weekStartFrom, periodRange.weekStartTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         const myProjectIds = new Set(snapshot.myProjects.map((p) => p.id));

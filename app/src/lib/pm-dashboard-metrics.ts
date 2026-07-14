@@ -80,7 +80,9 @@ export function buildPmDashboardSnapshot(
     employeeId: string | undefined,
     uniqueTeamMembers: number,
     risks: DeliveryRiskItem[],
-    varianceRows: UtilizationVarianceRow[]
+    varianceRows: UtilizationVarianceRow[],
+    /** When provided (from weekly allocation grid), preferred over variance planned hours. */
+    plannerPlannedByProject?: Map<string, number>
 ): PmDashboardSnapshot {
     const myProjects = filterProjectsManagedByEmployee(allProjects, employeeId);
     const myProjectIds = new Set(myProjects.map((p) => p.id));
@@ -91,6 +93,17 @@ export function buildPmDashboardSnapshot(
     for (const row of scopedVariance) {
         plannedHoursWeek += row.plannedHours;
         actualHoursWeek += row.actualHours;
+    }
+
+    if (plannerPlannedByProject && plannerPlannedByProject.size > 0) {
+        let fromPlanner = 0;
+        for (const projectId of myProjectIds) {
+            fromPlanner += plannerPlannedByProject.get(projectId) ?? 0;
+        }
+        // Prefer grid/planner when it has data (matches Resource Allocation UI).
+        if (fromPlanner > 0 || plannedHoursWeek === 0) {
+            plannedHoursWeek = fromPlanner;
+        }
     }
 
     const scopedRisks = risks.filter((r) => myProjectIds.has(r.projectId));
@@ -121,7 +134,8 @@ export function buildPmDashboardSnapshot(
 export function buildPmProjectHoursRows(
     myProjects: Project[],
     varianceRows: UtilizationVarianceRow[],
-    risks: DeliveryRiskItem[]
+    risks: DeliveryRiskItem[],
+    plannerPlannedByProject?: Map<string, number>
 ): PmProjectHoursRow[] {
     const myProjectIds = new Set(myProjects.map((p) => p.id));
     const hoursByProject = new Map<string, { planned: number; actual: number }>();
@@ -132,6 +146,17 @@ export function buildPmProjectHoursRows(
         cur.planned += row.plannedHours;
         cur.actual += row.actualHours;
         hoursByProject.set(row.projectId, cur);
+    }
+
+    if (plannerPlannedByProject) {
+        for (const [projectId, planned] of plannerPlannedByProject) {
+            if (!myProjectIds.has(projectId)) continue;
+            const cur = hoursByProject.get(projectId) ?? { planned: 0, actual: 0 };
+            if (planned > 0 || cur.planned === 0) {
+                cur.planned = planned;
+            }
+            hoursByProject.set(projectId, cur);
+        }
     }
 
     return myProjects
@@ -151,6 +176,23 @@ export function buildPmProjectHoursRows(
             };
         })
         .sort((a, b) => b.plannedHours - a.plannedHours);
+}
+
+/** Sum planned hours per project for a single week from allocation planner rows. */
+export function plannedHoursByProjectFromPlannerRows(
+    plannerRows: Array<{
+        projectId: string;
+        weekCells: Record<string, { plannedHours?: number } | undefined>;
+    }>,
+    weekStart: string
+): Map<string, number> {
+    const map = new Map<string, number>();
+    for (const row of plannerRows) {
+        const hours = row.weekCells[weekStart]?.plannedHours ?? 0;
+        if (!hours) continue;
+        map.set(row.projectId, (map.get(row.projectId) ?? 0) + hours);
+    }
+    return map;
 }
 
 export function countMyActiveProjects(projects: Project[]): number {

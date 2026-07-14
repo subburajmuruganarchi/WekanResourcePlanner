@@ -1,15 +1,19 @@
 import { Types, type PipelineStage } from 'mongoose';
 import { WeeklyAllocationEntry } from '../weekly-allocations/weekly-allocation-entry.model';
+import { ProjectAllocation } from '../allocations/allocation.model';
+import { weeklyAllocationSyncService } from '../weekly-allocations/weekly-allocation-sync.service';
 import { Employee } from '../employees/employee.model';
 import { Project } from '../projects/project.model';
 import {
     parseWeekStartParam,
     startOfUtcWeek,
+    endOfUtcWeek,
     weekStartToIsoDate,
     listUtcWeekStarts,
 } from '../../common/utils/week.util';
 import {
     weeklyCapacityEngine,
+    WeeklyCapacityEngine,
     type WeeklyHourCell,
 } from '../../services/weekly-capacity/weekly-capacity.engine';
 import { weeklyActualsSyncService } from '../../services/weekly-actuals/weekly-actuals-sync.service';
@@ -44,8 +48,16 @@ export class UtilizationService {
             .populate('project_id', 'project_name project_code')
             .lean();
 
-        const rows: UtilizationVarianceRow[] = entries.map((e) => {
-            const emp = e.employee_id as { _id?: Types.ObjectId; first_name?: string; last_name?: string };
+        const rowKey = (employeeId: string, projectId: string, weekStart: string) =>
+            `${employeeId}:${projectId}:${weekStart}`;
+        const rowMap = new Map<string, UtilizationVarianceRow>();
+
+        for (const e of entries) {
+            const emp = e.employee_id as {
+                _id?: Types.ObjectId;
+                first_name?: string;
+                last_name?: string;
+            };
             const proj = e.project_id as {
                 _id?: Types.ObjectId;
                 project_name?: string;
@@ -53,15 +65,18 @@ export class UtilizationService {
             };
             const planned = e.planned_hours;
             const actual = e.actual_hours;
-            return {
-                employeeId: (emp._id ?? e.employee_id).toString(),
+            const employeeId = (emp._id ?? e.employee_id).toString();
+            const projectId = (proj._id ?? e.project_id).toString();
+            const weekStart = weekStartToIsoDate(e.week_start);
+            rowMap.set(rowKey(employeeId, projectId, weekStart), {
+                employeeId,
                 employeeName: emp.first_name
                     ? `${emp.first_name} ${emp.last_name ?? ''}`.trim()
                     : undefined,
-                projectId: (proj._id ?? e.project_id).toString(),
+                projectId,
                 projectName: proj.project_name,
                 projectCode: proj.project_code,
-                weekStart: weekStartToIsoDate(e.week_start),
+                weekStart,
                 plannedHours: planned,
                 actualHours: actual,
                 forecastHours: e.forecast_hours,
@@ -73,8 +88,109 @@ export class UtilizationService {
                     e.forecast_hours,
                     actual
                 ),
+            });
+        }
+
+        // Same source as Resource Allocation grid: fill planned from project_allocations
+        // when weekly_allocation_entries do not yet exist for that week.
+        if (features.weeklyAllocationsLegacyRead) {
+            const legacyFilter: Record<string, unknown> = {
+                is_active: true,
+                start_date: { $lte: endOfUtcWeek(weekTo) },
+                end_date: { $gte: weekFrom },
             };
-        });
+            if (params.employeeId) {
+                legacyFilter.employee_id = new Types.ObjectId(params.employeeId);
+            }
+            if (params.projectId) {
+                legacyFilter.project_id = new Types.ObjectId(params.projectId);
+            }
+
+            const legacyAllocs = await ProjectAllocation.find(legacyFilter).lean();
+            const weeks = listUtcWeekStarts(weekFrom, weekTo);
+            const synthesized = weeklyAllocationSyncService.buildLegacyGridCells(
+                legacyAllocs,
+                weeks
+            );
+
+            const missingEmpIds = new Set<string>();
+            const missingProjIds = new Set<string>();
+            for (const cell of synthesized) {
+                const weekIso = weekStartToIsoDate(cell.weekStart);
+                if (rowMap.has(rowKey(cell.employeeId, cell.projectId, weekIso))) continue;
+                missingEmpIds.add(cell.employeeId);
+                missingProjIds.add(cell.projectId);
+            }
+
+            const [employees, projects] = await Promise.all([
+                missingEmpIds.size
+                    ? Employee.find({
+                          _id: { $in: [...missingEmpIds].map((id) => new Types.ObjectId(id)) },
+                      })
+                          .select('first_name last_name')
+                          .lean()
+                    : Promise.resolve([]),
+                missingProjIds.size
+                    ? Project.find({
+                          _id: { $in: [...missingProjIds].map((id) => new Types.ObjectId(id)) },
+                      })
+                          .select('project_name project_code')
+                          .lean()
+                    : Promise.resolve([]),
+            ]);
+
+            const empNameById = new Map(
+                employees.map((e) => [
+                    e._id.toString(),
+                    `${e.first_name ?? ''} ${e.last_name ?? ''}`.trim(),
+                ])
+            );
+            const projById = new Map(
+                projects.map((p) => [
+                    p._id.toString(),
+                    { name: p.project_name, code: p.project_code },
+                ])
+            );
+
+            for (const cell of synthesized) {
+                const weekIso = weekStartToIsoDate(cell.weekStart);
+                const key = rowKey(cell.employeeId, cell.projectId, weekIso);
+                const existing = rowMap.get(key);
+                // Prefer persisted weekly planned; only fill from legacy when missing or 0.
+                if (existing && existing.plannedHours > 0) continue;
+                if (existing && cell.plannedHours <= 0) continue;
+
+                const planned = cell.plannedHours;
+                const actual = existing?.actualHours ?? 0;
+                const forecast = existing?.forecastHours ?? cell.forecastHours;
+                const projMeta = projById.get(cell.projectId);
+                rowMap.set(key, {
+                    employeeId: cell.employeeId,
+                    employeeName:
+                        existing?.employeeName ??
+                        empNameById.get(cell.employeeId) ??
+                        undefined,
+                    projectId: cell.projectId,
+                    projectName: existing?.projectName ?? projMeta?.name,
+                    projectCode: existing?.projectCode ?? projMeta?.code,
+                    weekStart: weekIso,
+                    plannedHours: planned,
+                    actualHours: actual,
+                    forecastHours: forecast,
+                    varianceHours: WeeklyCapacityEngine.computeVarianceHours(planned, actual),
+                    deltaHours: weeklyCapacityEngine.actualMinusPlannedVariance(planned, actual),
+                    variancePercent: weeklyCapacityEngine.variancePercent(planned, actual),
+                    actualUtilizationPercent:
+                        weeklyCapacityEngine.actualUtilizationPercent(actual),
+                    forecastAccuracyPercent: weeklyCapacityEngine.forecastAccuracyPercent(
+                        forecast,
+                        actual
+                    ),
+                });
+            }
+        }
+
+        const rows = [...rowMap.values()];
 
         const totalPlanned = rows.reduce((s, r) => s + r.plannedHours, 0);
         const totalActual = rows.reduce((s, r) => s + r.actualHours, 0);

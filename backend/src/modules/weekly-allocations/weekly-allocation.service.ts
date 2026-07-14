@@ -210,24 +210,30 @@ export class WeeklyAllocationService {
                     cell.projectId,
                     cell.weekStart
                 );
-                if (rowMap.has(key)) continue;
+                const existing = rowMap.get(key);
+                // Prefer persisted weekly planned; fill from legacy when missing or 0.
+                if (existing && existing.plannedHours > 0) continue;
+                if (existing && cell.plannedHours <= 0) continue;
 
                 const planned = cell.plannedHours;
-                const actual = 0;
+                const actual = existing?.actualHours ?? 0;
                 rowMap.set(key, {
-                    id: `legacy:${key}`,
-                    allocationId: cell.allocationId,
+                    id: existing?.id ?? `legacy:${key}`,
+                    allocationId: existing?.allocationId ?? cell.allocationId,
                     employeeId: cell.employeeId,
                     projectId: cell.projectId,
                     weekStart: weekStartToIsoDate(cell.weekStart),
                     plannedHours: planned,
                     actualHours: actual,
-                    forecastHours: cell.forecastHours,
+                    forecastHours: existing?.forecastHours ?? cell.forecastHours,
                     varianceHours: WeeklyCapacityEngine.computeVarianceHours(planned, actual),
                     deltaHours: weeklyCapacityEngine.actualMinusPlannedVariance(planned, actual),
                     variancePercent: weeklyCapacityEngine.variancePercent(planned, actual),
-                    source: WeeklyAllocationSource.LEGACY_SYNC,
-                    status: WeeklyAllocationStatus.PUBLISHED,
+                    source: existing?.source ?? WeeklyAllocationSource.LEGACY_SYNC,
+                    status: existing?.status ?? WeeklyAllocationStatus.PUBLISHED,
+                    employeeName: existing?.employeeName,
+                    projectName: existing?.projectName,
+                    projectCode: existing?.projectCode,
                 });
                 employeeIds.add(cell.employeeId);
                 projectIds.add(cell.projectId);
