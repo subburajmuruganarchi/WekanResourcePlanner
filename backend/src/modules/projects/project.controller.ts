@@ -7,7 +7,11 @@ import { ROLES } from '../../common/constants/roles';
 import { normalizeRoleName, isEmployeeAccessRole } from '../../common/utils/role-normalize.util';
 import { resolveEmployeeAssignedProjectIds } from '../../common/utils/employee-project-scope.util';
 import { isProjectInDeliveryManagerPortfolio, getPortfolioProjectIds } from '../../common/utils/delivery-scope.util';
-import { shouldViewAllProjects } from '../../common/utils/mvp-permissions.util';
+import {
+    assertCanUpdateProject,
+    shouldViewAllProjects,
+} from '../../common/utils/mvp-permissions.util';
+import { AppError } from '../../common/errors/app-error';
 
 export class ProjectController {
     /**
@@ -152,6 +156,18 @@ export class ProjectController {
     async update(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const { id } = req.params;
+            try {
+                await assertCanUpdateProject(
+                    req.user?.role,
+                    getAuthEmployeeId(req.user),
+                    id
+                );
+            } catch (scopeError) {
+                throw new AppError(
+                    scopeError instanceof Error ? scopeError.message : 'Forbidden',
+                    403
+                );
+            }
             const mappedBody = this.mapRequestBody(req.body);
             const auditActor = auditActorFromRequest(req.user);
             const project = await projectService.update(id, mappedBody, { auditActor });

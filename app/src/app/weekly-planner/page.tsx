@@ -265,16 +265,18 @@ export default function WeeklyPlannerPage() {
             )}
 
             <div className="flex flex-col gap-6">
-                <CapacitySummaryPanel
-                    summaries={effectiveCapacity}
-                    employees={employees}
-                    weeks={grid.weeks}
-                    selectedEmployeeId={selectedRow?.employeeId ?? filterDraft.employeeId}
-                    selectedEmployeeName={selectedRow?.employeeName}
-                    selectedWeekStart={selectedWeek}
-                    onWeekChange={setSelectedWeek}
-                    loading={grid.loading}
-                />
+                {!isEmployeeUser && (
+                    <CapacitySummaryPanel
+                        summaries={effectiveCapacity}
+                        employees={employees}
+                        weeks={grid.weeks}
+                        selectedEmployeeId={selectedRow?.employeeId ?? filterDraft.employeeId}
+                        selectedEmployeeName={selectedRow?.employeeName}
+                        selectedWeekStart={selectedWeek}
+                        onWeekChange={setSelectedWeek}
+                        loading={grid.loading}
+                    />
+                )}
 
                 <div className="space-y-3 min-w-0">
                     <div className="flex items-center justify-between text-sm text-muted-foreground">

@@ -160,7 +160,27 @@ export function projectUpdateRoles(): SystemRoleName[] {
     if (!features.mvpMode) {
         return [ROLES.ADMIN, ROLES.PROJECT_MANAGER];
     }
-    return MVP_ORG_ADMIN_ROLES;
+    // PM may update projects they manage (e.g. Resources tab); scoped in controller.
+    return [ROLES.ADMIN, ROLES.CEO, ROLES.DELIVERY_MANAGER, ROLES.PROJECT_MANAGER];
+}
+
+/** Org-wide project updates (Admin/CEO/DM) or PM on managed projects only. */
+export async function assertCanUpdateProject(
+    role: string | undefined,
+    actorEmployeeId: string | undefined,
+    projectId: string
+): Promise<void> {
+    const r = normalizeRoleName(role);
+    if (r === ROLES.ADMIN || r === ROLES.CEO || r === ROLES.DELIVERY_MANAGER) {
+        return;
+    }
+    if (r === ROLES.PROJECT_MANAGER && actorEmployeeId) {
+        if (await isProjectManagedBy(actorEmployeeId, projectId)) {
+            return;
+        }
+        throw new Error('You can only update projects you manage');
+    }
+    throw new Error('You do not have permission to update this project');
 }
 
 export function employeeCrudRoles(): SystemRoleName[] {
