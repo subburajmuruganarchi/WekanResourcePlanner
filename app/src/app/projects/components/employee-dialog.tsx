@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -24,6 +24,7 @@ import { useSkills } from "@/lib/use-skills"
 import { Loader2, Plus, Trash2, AlertCircle } from "lucide-react"
 import type { SkillLevel, EmployeeStatus, EmployeeDepartment, EmployeeRole, Employee } from "@/types/api"
 import { rolesForDepartment } from "@/lib/employee-department-roles"
+import { skillsForRole } from "@/lib/skills-by-role"
 
 interface SkillEntry {
     skillId: string;
@@ -131,9 +132,24 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
             }
             return next
         })
+        if (field === 'department' || field === 'designation') {
+            setSelectedSkills((prev) =>
+                prev.map((row) => ({ ...row, skillId: '' }))
+            )
+        }
     }
 
     const departmentRoles = rolesForDepartment(formData.department)
+
+    const roleSkills = useMemo(() => {
+        const filtered = skillsForRole(availableSkills, formData.designation as EmployeeRole | '')
+        // Keep currently selected skills visible even if they fall outside the role filter (edit mode).
+        const selectedIds = new Set(selectedSkills.map((s) => s.skillId).filter(Boolean))
+        const extras = (availableSkills || []).filter(
+            (s) => selectedIds.has(s.id) && !filtered.some((f) => f.id === s.id)
+        )
+        return [...filtered, ...extras]
+    }, [availableSkills, formData.designation, selectedSkills])
 
     const handleAddSkill = () => {
         setSelectedSkills([...selectedSkills, { skillId: '', skillType: 'Secondary', level: 'Expert', experienceYears: 0 }])
@@ -302,24 +318,43 @@ export function EmployeeDialog({ employee, open: controlledOpen, onOpenChange }:
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <Label className="text-base font-semibold">Skills</Label>
-                            <Button type="button" variant="outline" size="sm" onClick={handleAddSkill}>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={handleAddSkill}
+                                disabled={!formData.designation}
+                            >
                                 <Plus className="h-4 w-4 mr-1" /> Add Skill
                             </Button>
                         </div>
+
+                        {!formData.designation && (
+                            <p className="text-xs text-muted-foreground">
+                                Select a role first to load relevant skills.
+                            </p>
+                        )}
+
+                        {formData.designation && roleSkills.length === 0 && (
+                            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-3 py-2">
+                                No skills in Skill Master yet. Ask an Admin to add skills, then try again.
+                            </p>
+                        )}
 
                         {selectedSkills.map((entry, index) => (
                             <div key={index} className="grid grid-cols-12 gap-2 items-end border p-3 rounded-md bg-gray-50">
                                 <div className="col-span-8 space-y-1">
                                     <Label className="text-xs">Skill</Label>
                                     <Select
-                                        value={entry.skillId}
+                                        value={entry.skillId || undefined}
                                         onValueChange={(val) => updateSkill(index, 'skillId', val)}
+                                        disabled={!formData.designation || roleSkills.length === 0}
                                     >
                                         <SelectTrigger className="h-8">
-                                            <SelectValue placeholder="Select skill" />
+                                            <SelectValue placeholder={formData.designation ? 'Select skill' : 'Select role first'} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {(availableSkills || []).map(skill => (
+                                            {roleSkills.map(skill => (
                                                 <SelectItem key={skill.id} value={skill.id} disabled={selectedSkills.some((s, i) => s.skillId === skill.id && i !== index)}>
                                                     {skill.name}
                                                 </SelectItem>

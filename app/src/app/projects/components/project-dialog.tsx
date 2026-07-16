@@ -23,6 +23,7 @@ import { useProjects } from "@/lib/use-projects"
 import { useEmployees } from "@/lib/use-employees"
 import { isActiveRosterMember } from "@/lib/employee-status"
 import { useRoles } from "@/lib/use-roles"
+import { isProjectStaffingRoleName } from "@/lib/employee-department-roles"
 import { Loader2, Plus, Trash2, AlertCircle } from "lucide-react"
 import type { CreateProjectRequest, RoleEffort, ProjectStatus, BillingType, Project } from "@/types/api"
 import { PROJECT_STATUS_OPTIONS } from "@/lib/project-status"
@@ -70,6 +71,24 @@ function isDeliveryManagerCandidate(emp: {
     return DELIVERY_MANAGER_JOB_ROLES.has(employeeJobTitle(emp))
 }
 
+function buildTeamRoleEfforts(
+    project: Project,
+    employees: { id: string; jobRoleId?: string }[] | undefined
+): RoleEffort[] {
+    return (project.teamMembers || []).map((m) => {
+        const emp = (employees || []).find((e) => e.id === m.employeeId)
+        return {
+            employeeId: m.employeeId,
+            roleId: emp?.jobRoleId || '',
+            roleName: m.roleName,
+            originalHeadcount: 1,
+            startDate: m.startDate ? new Date(m.startDate).toISOString().split('T')[0] : '',
+            endDate: m.endDate ? new Date(m.endDate).toISOString().split('T')[0] : '',
+            hoursPerDay: 8,
+        }
+    })
+}
+
 interface ProjectDialogProps {
     project?: Project;
     open?: boolean;
@@ -114,22 +133,23 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
         roleEfforts: []
     })
 
+    /** Engineering-family job roles only — exclude Admin/PM/DM/HR/etc. */
+    const staffingRoles = useMemo(() => {
+        const filtered = (roles || []).filter((r) => isProjectStaffingRoleName(r.name))
+        // Keep roles already on resource rows (edit) even if they fall outside the filter.
+        const selectedIds = new Set(
+            (formData.roleEfforts || []).map((e) => e.roleId).filter(Boolean) as string[]
+        )
+        const extras = (roles || []).filter(
+            (r) => selectedIds.has(r.id) && !filtered.some((f) => f.id === r.id)
+        )
+        return [...filtered, ...extras].sort((a, b) => a.name.localeCompare(b.name))
+    }, [roles, formData.roleEfforts])
+
     useEffect(() => {
         if (project && open) {
-            // Prefill the Resources section from the project's actual team (project_allocations),
-            // falling back to role efforts so previously-added resources reflect on edit.
-            const teamRoleEfforts: RoleEffort[] = (project.teamMembers || []).map((m) => {
-                const emp = (employees || []).find((e) => e.id === m.employeeId)
-                return {
-                    employeeId: m.employeeId,
-                    roleId: emp?.jobRoleId || '',
-                    roleName: m.roleName,
-                    originalHeadcount: 1,
-                    startDate: m.startDate ? new Date(m.startDate).toISOString().split('T')[0] : '',
-                    endDate: m.endDate ? new Date(m.endDate).toISOString().split('T')[0] : '',
-                    hoursPerDay: 8,
-                }
-            })
+            // Prefill Resources from project team; re-run when employees load so jobRoleId resolves.
+            const teamRoleEfforts = buildTeamRoleEfforts(project, employees)
             setFormData({
                 name: project.name,
                 code: project.code,
@@ -146,7 +166,6 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                 roleEfforts: teamRoleEfforts.length > 0 ? teamRoleEfforts : (project.roleEfforts || [])
             })
         } else if (!project && open) {
-            // Reset for create mode
             setFormData({
                 status: 'Active',
                 priority: 'Medium',
@@ -157,7 +176,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                 roleEfforts: []
             })
         }
-    }, [project, open])
+    }, [project, open, employees])
 
 
     const [error, setError] = useState<string | null>(null)
@@ -197,11 +216,11 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
         }))
     }
 
-    const updateRoleEffort = (index: number, field: keyof RoleEffort, value: any) => {
+    const updateRoleEffort = (index: number, patch: Partial<RoleEffort>) => {
         setFormData(prev => ({
             ...prev,
             roleEfforts: prev.roleEfforts?.map((item, i) =>
-                i === index ? { ...item, [field]: value } : item
+                i === index ? { ...item, ...patch } : item
             )
         }))
     }
@@ -217,11 +236,21 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                 throw new Error("Please fill in project name, delivery manager, and project manager.")
             }
 
+            const incompleteResource = (formData.roleEfforts || []).find((effort) => {
+                if (!effort.employeeId && !effort.roleId) return false
+                const emp = (employees || []).find((e) => e.id === effort.employeeId)
+                const roleId = effort.roleId || emp?.jobRoleId || ''
+                return !(effort.employeeId && roleId)
+            })
+            if (incompleteResource) {
+                throw new Error("Each resource row needs both a role and an employee.")
+            }
+
             const mappedRoleEfforts = (formData.roleEfforts || [])
                 .map((effort) => {
                     const emp = (employees || []).find((e) => e.id === effort.employeeId);
                     const roleId = effort.roleId || emp?.jobRoleId || '';
-                    if (!roleId) return null;
+                    if (!roleId || !effort.employeeId) return null;
                     return {
                         ...effort,
                         roleId,
@@ -334,7 +363,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                 <div className="space-y-2">
                                     <Label>Delivery Manager *</Label>
                                     <Select
-                                        value={formData.ownerId}
+                                        value={formData.ownerId || undefined}
                                         onValueChange={v => updateField('ownerId', v)}
                                     >
                                         <SelectTrigger><SelectValue placeholder="Select delivery manager" /></SelectTrigger>
@@ -352,7 +381,7 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                 <div className="space-y-2">
                                     <Label>Project Manager *</Label>
                                     <Select
-                                        value={formData.managerId}
+                                        value={formData.managerId || undefined}
                                         onValueChange={v => updateField('managerId', v)}
                                     >
                                         <SelectTrigger><SelectValue placeholder="Select Project Manager" /></SelectTrigger>
@@ -472,35 +501,49 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                             <div className="flex justify-between items-center">
                                 <div className="space-y-1">
                                     <h3 className="text-sm font-medium">Assigned resources</h3>
-                                    <p className="text-[10px] text-gray-500">Pick a role first, then choose an employee with that role.</p>
+                                    <p className="text-[10px] text-gray-500">Pick an engineering role first, then choose an employee with that role.</p>
                                 </div>
                                 <Button type="button" variant="outline" size="sm" onClick={addRoleEffort}>
                                     <Plus className="w-4 h-4 mr-2" /> Add resource
                                 </Button>
                             </div>
 
+                            {staffingRoles.length === 0 && (
+                                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-3 py-2">
+                                    No engineering roles found in the role catalog. Sync job roles from Resources or add them in Admin.
+                                </p>
+                            )}
+
                             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                                 {formData.roleEfforts?.map((effort, index) => {
-                                    const employeesForRole = activeEmployees.filter(
-                                        (e) => !effort.roleId || e.jobRoleId === effort.roleId
-                                    )
+                                    const employeesForRole = activeEmployees.filter((e) => {
+                                        if (!effort.roleId) return false
+                                        if (e.jobRoleId === effort.roleId) return true
+                                        const roleName = staffingRoles.find((r) => r.id === effort.roleId)?.name
+                                        if (!roleName) return false
+                                        return employeeJobTitle(e) === roleName
+                                    })
                                     return (
                                     <div key={index} className="grid grid-cols-12 gap-2 items-end border p-3 rounded-lg bg-gray-50">
                                         <div className="col-span-5 space-y-1">
                                             <Label className="text-xs">Role *</Label>
                                             <Select
-                                                value={effort.roleId || ''}
+                                                value={effort.roleId || undefined}
                                                 onValueChange={v => {
-                                                    updateRoleEffort(index, 'roleId', v)
                                                     const emp = activeEmployees.find(e => e.id === effort.employeeId)
-                                                    if (emp && emp.jobRoleId !== v) {
-                                                        updateRoleEffort(index, 'employeeId', '')
-                                                    }
+                                                    const selectedRoleName = staffingRoles.find(r => r.id === v)?.name || ''
+                                                    const clearEmployee = emp
+                                                        ? emp.jobRoleId !== v && employeeJobTitle(emp) !== selectedRoleName
+                                                        : false
+                                                    updateRoleEffort(index, {
+                                                        roleId: v,
+                                                        ...(clearEmployee ? { employeeId: '' } : {}),
+                                                    })
                                                 }}
                                             >
                                                 <SelectTrigger className="h-8"><SelectValue placeholder="Select role" /></SelectTrigger>
                                                 <SelectContent>
-                                                    {(roles || []).map(r => (
+                                                    {staffingRoles.map(r => (
                                                         <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
                                                     ))}
                                                 </SelectContent>
@@ -509,9 +552,9 @@ export function ProjectDialog({ project, open: controlledOpen, onOpenChange }: P
                                         <div className="col-span-6 space-y-1">
                                             <Label className="text-xs">Resource *</Label>
                                             <Select
-                                                value={effort.employeeId || ''}
+                                                value={effort.employeeId || undefined}
                                                 disabled={!effort.roleId}
-                                                onValueChange={v => updateRoleEffort(index, 'employeeId', v)}
+                                                onValueChange={v => updateRoleEffort(index, { employeeId: v })}
                                             >
                                                 <SelectTrigger className="h-8">
                                                     <SelectValue placeholder={effort.roleId ? 'Select employee' : 'Select a role first'} />

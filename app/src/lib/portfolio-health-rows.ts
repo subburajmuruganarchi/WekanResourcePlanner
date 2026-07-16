@@ -50,7 +50,12 @@ export function buildPortfolioHealthRows(
             progress,
             confidence: confidenceFromHealth(health, progress),
             riskLevel: health === 'Red' ? 'High' : health === 'Amber' ? 'Medium' : 'Low',
-            owner: p.managerName || '—',
+            owner:
+                p.deliveryManagerNames?.length
+                    ? p.deliveryManagerNames.join(', ')
+                    : p.owner && p.owner !== 'Unassigned'
+                      ? p.owner
+                      : p.managerName || '—',
         };
     });
 }

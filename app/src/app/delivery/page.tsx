@@ -25,14 +25,16 @@ import { useDeliveryCommandMetrics } from '@/lib/use-delivery-metrics';
 import { useDeliveryRecommendations } from '@/lib/use-delivery-recommendations';
 import { MetricGridSkeleton } from '@/components/patterns/skeleton';
 import { DeliveryPortfolioCharts } from './components/delivery-portfolio-charts';
+import { RiskCardGrid } from '@/components/dashboard/RiskCard';
 
 export default function DeliveryCommandPage() {
     const navigate = useNavigate();
-    const { metrics, portfolioRows, loading } = useDeliveryCommandMetrics();
+    const { metrics, portfolioRows, risks, loading } = useDeliveryCommandMetrics();
     const { items: recommendations, loading: recLoading } = useDeliveryRecommendations();
 
     const topRecommendations = recommendations.slice(0, 3);
     const portfolioColumns = portfolioTableColumns({ includeOwner: true });
+    const detailedRisks = risks.filter((r) => r.level === 'HIGH' || r.level === 'MEDIUM');
 
     return (
         <PageContainer className="space-y-8">
@@ -60,6 +62,23 @@ export default function DeliveryCommandPage() {
                     <MetricCard label="Active Releases (est.)" value={String(metrics.upcomingReleases)} accent="emerald" icon={Rocket} />
                 </MetricGrid>
             )}
+
+            <Section
+                title="Current delivery risk"
+                description="Allocation and planner capacity signals — score, operational issues, and recommended actions (same model as Admin)"
+                action={
+                    <Button variant="ghost" size="sm" className="gap-1.5 text-brand-600">
+                        <Sparkles className="w-4 h-4" />
+                        Powered by R360 AI
+                    </Button>
+                }
+            >
+                <RiskCardGrid
+                    risks={detailedRisks}
+                    loading={loading}
+                    onView={(id) => navigate(`/projects/${id}`)}
+                />
+            </Section>
 
             <Section
                 title="Portfolio trends"

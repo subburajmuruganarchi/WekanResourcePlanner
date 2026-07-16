@@ -1,4 +1,4 @@
-import { ROLES, isExecutiveReadOnly, isEmployeeAccessRole, canViewResourceAllocation } from '@/lib/roles';
+import { ROLES, isExecutiveReadOnly, isEmployeeAccessRole } from '@/lib/roles';
 import { ROUTE_ACCESS } from '@/lib/navigation-config';
 import type { SystemRoleName } from '@/lib/roles';
 import { normalizeRoleName } from '@/lib/role-utils';
@@ -40,9 +40,9 @@ export function canAccessRoute(role: string | undefined, path: string): boolean 
     if (r === ROLES.ADMIN) return true;
     if (isExecutiveReadOnly(r) && path === '/time-entry') return false;
 
-    // Employees: allocation view in MVP; project list restricted to management roles.
+    // Employees: weekly planner in MVP; project list restricted to management roles.
     if (isEmployeeAccessRole(r)) {
-        if (path === '/allocation' && canViewResourceAllocation(r)) return true;
+        if (path === '/weekly-planner') return true;
         if (PROJECT_DETAIL_PATH.test(path)) return true;
         if (path === '/projects' || path.startsWith('/projects/')) return false;
     }

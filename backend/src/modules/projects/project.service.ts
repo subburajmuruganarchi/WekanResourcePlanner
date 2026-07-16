@@ -600,6 +600,19 @@ export class ProjectService {
         ).filter(Boolean) as string[];
         const uniqueManagerIds = [...new Set([managerId, ...managerIds].filter(Boolean))];
 
+        // Project owner (create/edit form "Delivery Manager") is the primary DM.
+        // Portfolio assignments may add additional DMs.
+        const deliveryManagerIds: string[] = [...(deliveryManagers?.deliveryManagerIds ?? [])];
+        const deliveryManagerNames: string[] = [...(deliveryManagers?.deliveryManagerNames ?? [])];
+        if (ownerId && ownerName && ownerName !== 'Unassigned') {
+            if (!deliveryManagerIds.includes(ownerId)) {
+                deliveryManagerIds.unshift(ownerId);
+            }
+            if (!deliveryManagerNames.includes(ownerName)) {
+                deliveryManagerNames.unshift(ownerName);
+            }
+        }
+
         const formatDate = (date: Date | string | undefined): string => {
             if (!date) return '';
             if (typeof date === 'string') return date.split('T')[0];
@@ -756,8 +769,8 @@ export class ProjectService {
                     endDate: formatDate(a.end_date),
                 };
             }),
-            deliveryManagerIds: deliveryManagers?.deliveryManagerIds ?? [],
-            deliveryManagerNames: deliveryManagers?.deliveryManagerNames ?? [],
+            deliveryManagerIds,
+            deliveryManagerNames,
         };
     }
 }

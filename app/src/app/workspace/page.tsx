@@ -141,9 +141,9 @@ export default function EmployeeWorkspacePage() {
                         variant="outline"
                         size="sm"
                         className="gap-2"
-                        onClick={() => navigate('/allocation')}
+                        onClick={() => navigate('/weekly-planner')}
                     >
-                        View my allocation
+                        View weekly planner
                         <CalendarRange className="w-4 h-4" />
                     </Button>
                 }
@@ -196,7 +196,7 @@ export default function EmployeeWorkspacePage() {
                     }
                     icon={Layers}
                     accent="emerald"
-                    onClick={() => navigate('/allocation')}
+                    onClick={() => navigate('/weekly-planner')}
                 />
             </MetricGrid>
 
@@ -217,8 +217,8 @@ export default function EmployeeWorkspacePage() {
                                 title="No projects assigned"
                                 description="You are not on any project rosters yet. Your PM or delivery manager will add you when staffing is confirmed."
                                 action={
-                                    <Button variant="outline" onClick={() => navigate('/allocation')}>
-                                        Check allocation grid
+                                    <Button variant="outline" onClick={() => navigate('/weekly-planner')}>
+                                        Open weekly planner
                                     </Button>
                                 }
                             />

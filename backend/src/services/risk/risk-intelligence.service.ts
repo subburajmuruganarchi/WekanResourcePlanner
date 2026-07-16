@@ -21,7 +21,7 @@ function scoreDeliveryRisk(
     capacityCount: number
 ): number {
     let score = 0;
-    if (allocationLevel === 'HIGH') score += 45;
+    if (allocationLevel === 'HIGH') score += 50;
     else if (allocationLevel === 'MEDIUM') score += 22;
     if (capacityLevel === 'HIGH') score += 40;
     else if (capacityLevel === 'MEDIUM') score += 20;
@@ -29,9 +29,14 @@ function scoreDeliveryRisk(
     return Math.min(100, score);
 }
 
-function combineLevel(score: number): RiskLevel {
-    if (score >= 55) return 'HIGH';
-    if (score >= 25) return 'MEDIUM';
+function combineLevel(
+    score: number,
+    allocationLevel: RiskLevel,
+    capacityLevel: RiskLevel
+): RiskLevel {
+    // Component severity wins: a HIGH allocation/capacity finding must surface as HIGH.
+    if (allocationLevel === 'HIGH' || capacityLevel === 'HIGH' || score >= 55) return 'HIGH';
+    if (allocationLevel === 'MEDIUM' || capacityLevel === 'MEDIUM' || score >= 25) return 'MEDIUM';
     return 'LOW';
 }
 
@@ -85,7 +90,7 @@ export async function assessProjectDeliveryRisk(
         allocation.findings.length,
         capacity.findings.length
     );
-    const level = combineLevel(score);
+    const level = combineLevel(score, allocation.level, capacity.level);
 
     if (level === 'LOW' && reasons.length === 0) {
         reasons.push('Current-week allocation and planner coverage appear operational.');

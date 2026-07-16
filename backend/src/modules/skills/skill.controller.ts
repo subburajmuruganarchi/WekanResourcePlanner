@@ -10,19 +10,19 @@ function escapeRegex(str: string): string {
 export class SkillController {
     async list(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const skills = await Skill.find({
-                $or: [
-                    { is_active: true },
-                    { status: 'Active' }
-                ]
-            }).lean();
+            // Active skills, plus legacy rows that never set is_active (treat as active).
+            const skills = await Skill.find({ is_active: { $ne: false } }).lean();
             res.json({
                 status: 'success',
                 data: skills.map(s => ({
                     id: s._id.toString(),
-                    name: s.name,
-                    category: s.category,
-                    isActive: s.is_active
+                    name: (s as { name?: string; skill_name?: string }).name
+                        || (s as { skill_name?: string }).skill_name
+                        || 'Unnamed',
+                    category: (s as { category?: string; skill_category?: string }).category
+                        || (s as { skill_category?: string }).skill_category
+                        || 'Other',
+                    isActive: s.is_active !== false
                 }))
             });
         } catch (error) {

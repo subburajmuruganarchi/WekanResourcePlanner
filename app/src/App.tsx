@@ -150,7 +150,7 @@ function AppRoutes() {
         <Route path="/projects" element={<LazyPage><Projects /></LazyPage>} />
         <Route path="/projects/:id" element={<LazyPage><ProjectDetail /></LazyPage>} />
         <Route path="/allocation" element={<LazyPage><Allocation /></LazyPage>} />
-        <Route path="/weekly-planner" element={<Navigate to="/allocation" replace />} />
+        <Route path="/weekly-planner" element={<LazyPage><DeliveryWeeklyPlannerPage /></LazyPage>} />
         <Route path="/time-entry" element={<LazyPage><TimeEntry /></LazyPage>} />
         <Route path="/pm-approvals" element={<LazyPage><PmApprovalsPage /></LazyPage>} />
         <Route path="/approvals" element={<LazyPage><ApprovalsPage /></LazyPage>} />

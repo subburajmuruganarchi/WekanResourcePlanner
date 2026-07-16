@@ -117,10 +117,6 @@ export function ProjectListCards({ projects, onEdit, onOpen }: ProjectListCardsP
 
                             <div className="mt-3 space-y-2 text-xs text-foreground">
                                 <p>
-                                    <span className="text-muted-foreground">Owner </span>
-                                    <span className="font-medium">{project.owner}</span>
-                                </p>
-                                <p>
                                     <span className="text-muted-foreground">Project Manager </span>
                                     <span className="font-medium">{project.managerName || 'Unassigned'}</span>
                                 </p>
@@ -129,7 +125,9 @@ export function ProjectListCards({ projects, onEdit, onOpen }: ProjectListCardsP
                                     <span className="font-medium">
                                         {project.deliveryManagerNames?.length
                                             ? project.deliveryManagerNames.join(', ')
-                                            : 'Unassigned'}
+                                            : project.owner && project.owner !== 'Unassigned'
+                                              ? project.owner
+                                              : 'Unassigned'}
                                     </span>
                                 </p>
                                 <p className="tabular-nums">

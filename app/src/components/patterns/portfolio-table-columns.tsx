@@ -37,7 +37,7 @@ export function portfolioTableColumns(options?: { includeOwner?: boolean }): Dat
     if (options?.includeOwner !== false) {
         cols.push({
             id: 'owner',
-            header: 'Owner',
+            header: 'Delivery Manager',
             accessor: (row) => <span className="text-muted-foreground">{row.owner}</span>,
             sortValue: (row) => row.owner,
             exportValue: (row) => row.owner,

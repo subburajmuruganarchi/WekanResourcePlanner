@@ -4,7 +4,14 @@ import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
-import { canEditPlannedAllocations, isDeliveryManager, isExecutiveReadOnly } from '@/lib/roles';
+import {
+    canEditPlannedAllocations,
+    isDeliveryManager,
+    isEmployeeAccessRole,
+    isExecutiveReadOnly,
+    ROLES,
+} from '@/lib/roles';
+import { normalizeRoleName } from '@/lib/role-utils';
 import { getMvpFeatures } from '@/lib/mvp-config';
 import { usePortfolioScope } from '@/lib/use-portfolio-scope';
 import { useEmployees } from '@/lib/use-employees';
@@ -45,8 +52,15 @@ export default function WeeklyPlannerPage() {
     const { user } = useAuth();
     const isReadOnlyExecutive = isExecutiveReadOnly(user?.role);
     const isDM = isDeliveryManager(user?.role);
+    const isPM = normalizeRoleName(user?.role) === ROLES.PROJECT_MANAGER;
+    const isEmployeeUser = isEmployeeAccessRole(user?.role);
     const mvpMode = getMvpFeatures().mvpMode;
-    const canEdit = canEditPlannedAllocations(user?.role) && !isReadOnlyExecutive;
+    // PM + Employee: view-only weekly planner (same UI as Admin/DM, no edits).
+    const canEdit =
+        canEditPlannedAllocations(user?.role) &&
+        !isReadOnlyExecutive &&
+        !isPM &&
+        !isEmployeeUser;
     const { editableProjectIds: portfolioScopeIds } = usePortfolioScope(user?.role);
     const editableProjectIds = mvpMode && isDM ? undefined : portfolioScopeIds;
 
@@ -107,13 +121,14 @@ export default function WeeklyPlannerPage() {
                       ? 'Unassigned'
                       : row.employeeName,
             }))
-            .filter((row) =>
-                matchesPlannerGridSearch(row, {
+            .filter((row) => {
+                if (isEmployeeUser && user?.id && row.employeeId !== user.id) return false;
+                return matchesPlannerGridSearch(row, {
                     project: searchProject,
                     resource: searchResource,
                     role: searchRole,
-                })
-            )
+                });
+            })
             .sort((a, b) => {
                 const byProject = a.projectName.localeCompare(b.projectName, undefined, {
                     sensitivity: 'base',
@@ -123,7 +138,16 @@ export default function WeeklyPlannerPage() {
                     sensitivity: 'base',
                 });
             });
-    }, [visibleRows, employeeRoleMap, projectTypeById, searchProject, searchResource, searchRole]);
+    }, [
+        visibleRows,
+        employeeRoleMap,
+        projectTypeById,
+        searchProject,
+        searchResource,
+        searchRole,
+        isEmployeeUser,
+        user?.id,
+    ]);
     const effectiveCapacity = useMemo(() => {
         if (grid.capacitySummary.length > 0) return grid.capacitySummary;
         if (grid.weeks.length === 0) return [];
@@ -161,9 +185,20 @@ export default function WeeklyPlannerPage() {
                         <h1 className="text-2xl font-semibold text-foreground">Weekly Planner</h1>
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
-                        Each week shows <strong className="text-foreground">Plan</strong> (editable weekly hours),{' '}
-                        <strong className="text-foreground">Act</strong> (approved time entries), and{' '}
-                        <strong className="text-foreground">Δ</strong> (actual minus plan — positive means overrun on that project).
+                        {canEdit ? (
+                            <>
+                                Each week shows <strong className="text-foreground">Plan</strong> (editable weekly hours),{' '}
+                                <strong className="text-foreground">Act</strong> (approved time entries), and{' '}
+                                <strong className="text-foreground">Δ</strong> (actual minus plan — positive means overrun on that project).
+                            </>
+                        ) : (
+                            <>
+                                View-only planner — each week shows <strong className="text-foreground">Plan</strong>,{' '}
+                                <strong className="text-foreground">Act</strong> (approved time), and{' '}
+                                <strong className="text-foreground">Δ</strong> (actual minus plan).
+                                {isEmployeeUser ? ' Showing your assigned projects only.' : ''}
+                            </>
+                        )}
                     </p>
                     <div className="flex flex-wrap gap-2 mt-2">
                         {!canEdit && <Badge variant="info">Read-only</Badge>}
