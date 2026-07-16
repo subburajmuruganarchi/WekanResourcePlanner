@@ -172,12 +172,6 @@ export default function Dashboard() {
         ];
     }, [heatmap, benchCount]);
 
-    const riskByProject = useMemo(() => {
-        const m = new Map<string, DeliveryRiskItem>();
-        for (const r of staffingRisks) m.set(r.projectId, r);
-        return m;
-    }, [staffingRisks]);
-
     const projectRows: ProjectPerformanceRow[] = useMemo(() => {
         const rows = utilizationData?.rows ?? [];
         const byProject = new Map<
@@ -199,7 +193,6 @@ export default function Dashboard() {
         }
         return [...byProject.entries()]
             .map(([projectId, v]) => {
-                const risk = riskByProject.get(projectId);
                 const util =
                     v.planned > 0 ? Math.min(999, Math.round((v.actual / v.planned) * 100)) : 0;
                 return {
@@ -211,12 +204,12 @@ export default function Dashboard() {
                     allocatedHours: v.planned,
                     actualHours: v.actual,
                     utilizationPercent: util,
-                    risk: healthFromRisk(risk?.score ?? 0, risk?.level),
-                    status: risk?.level === 'HIGH' ? 'At Risk' : 'Active',
+                    risk: util > 110 ? 'Critical' : util > 95 ? 'At Risk' : 'Healthy',
+                    status: util > 110 ? 'At Risk' : 'Active',
                 };
             })
             .sort((a, b) => b.allocatedHours - a.allocatedHours);
-    }, [utilizationData, riskByProject]);
+    }, [utilizationData]);
 
     const intelligenceItems = useMemo(
         () => [
@@ -233,8 +226,8 @@ export default function Dashboard() {
             {
                 title: 'Planner capacity',
                 headline:
-                    staffingRisks.length > 0
-                        ? `${staffingRisks.length} projects flagged for current delivery risk`
+                    heatmap?.projects?.length
+                        ? `${heatmap.projects.length} active projects in current allocation view`
                         : 'No planner capacity issues detected',
                 icon: Brain,
                 tone: 'amber' as const,
@@ -243,15 +236,15 @@ export default function Dashboard() {
             {
                 title: 'Delivery forecast',
                 headline:
-                    staffingRisks.filter((r) => r.level === 'HIGH').length > 0
-                        ? `${staffingRisks.filter((r) => r.level === 'HIGH').length} projects need immediate planner action`
+                    utilizationTrend.some((point) => point.value > 100)
+                        ? 'Some teams are operating above planned pace'
                         : 'Delivery pipeline appears on track',
                 icon: LineChart,
                 tone: 'emerald' as const,
                 onClick: () => navigate('/reports'),
             },
         ],
-        [benchCount, staffingRisks, navigate]
+        [benchCount, heatmap, utilizationTrend, navigate]
     );
 
     return (
