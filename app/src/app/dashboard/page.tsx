@@ -59,12 +59,6 @@ interface DashboardStatsPayload {
     pendingApprovals: number;
 }
 
-function healthFromRisk(score: number, level?: string): ProjectHealth {
-    if (level === 'HIGH' || score >= 55) return 'Critical';
-    if (level === 'MEDIUM' || score >= 25) return 'At Risk';
-    return 'Healthy';
-}
-
 export default function Dashboard() {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -195,6 +189,7 @@ export default function Dashboard() {
             .map(([projectId, v]) => {
                 const util =
                     v.planned > 0 ? Math.min(999, Math.round((v.actual / v.planned) * 100)) : 0;
+                const health: ProjectHealth = util > 110 ? 'Critical' : util > 95 ? 'At Risk' : 'Healthy';
                 return {
                     projectId,
                     projectName: v.name,
@@ -204,7 +199,7 @@ export default function Dashboard() {
                     allocatedHours: v.planned,
                     actualHours: v.actual,
                     utilizationPercent: util,
-                    risk: util > 110 ? 'Critical' : util > 95 ? 'At Risk' : 'Healthy',
+                    risk: health,
                     status: util > 110 ? 'At Risk' : 'Active',
                 };
             })
@@ -236,7 +231,7 @@ export default function Dashboard() {
             {
                 title: 'Delivery forecast',
                 headline:
-                    utilizationTrend.some((point) => point.value > 100)
+                    utilizationTrend.some((point) => point.actualUtilization > 100)
                         ? 'Some teams are operating above planned pace'
                         : 'Delivery pipeline appears on track',
                 icon: LineChart,
