@@ -25,8 +25,6 @@ import { normalizeRoleName } from '@/lib/role-utils';
 import { useDashboardInsight } from '@/lib/use-ai-insights';
 import { useNavigate } from 'react-router-dom';
 import type { HeatmapCell, HeatmapMeta } from '@/components/dashboard/allocation-heatmap';
-import type { DeliveryRiskItem } from '@/lib/risk-intelligence';
-import { fetchDeliveryRisks } from '@/lib/risk-intelligence';
 import { useUtilizationVariance } from '@/lib/use-utilization';
 import { api as apiClient } from '@/lib/api-client';
 import {
@@ -80,9 +78,6 @@ export default function Dashboard() {
         meta?: HeatmapMeta;
     } | null>(null);
     const [heatmapLoading, setHeatmapLoading] = useState(true);
-    const [staffingRisks, setStaffingRisks] = useState<DeliveryRiskItem[]>([]);
-    const [risksLoading, setRisksLoading] = useState(true);
-
     const [periodMode, setPeriodMode] = useState<DashboardPeriodMode>('week');
     const [selectedWeek, setSelectedWeek] = useState(getCurrentWeekStart);
     const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue);
@@ -125,7 +120,6 @@ export default function Dashboard() {
         if (canSeeInsights) {
             void fetchInsight(periodRange);
             setHeatmapLoading(true);
-            setRisksLoading(true);
             apiClient
                 .get<{
                     projects: { id: string; name: string; code: string }[];
@@ -136,14 +130,9 @@ export default function Dashboard() {
                 .then((data) => setHeatmap(data))
                 .catch(() => setHeatmap(null))
                 .finally(() => setHeatmapLoading(false));
-            fetchDeliveryRisks()
-                .then(setStaffingRisks)
-                .catch(() => setStaffingRisks([]))
-                .finally(() => setRisksLoading(false));
             void fetchVariance(periodRange);
         } else {
             setHeatmapLoading(false);
-            setRisksLoading(false);
         }
     }, [canSeeInsights, fetchInsight, periodQuery, periodRange, fetchVariance]);
 
