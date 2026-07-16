@@ -9,7 +9,6 @@ import {
     UserMinus,
     Plus,
     FileDown,
-    Sparkles,
 } from 'lucide-react';
 import { PageContainer } from '@/components/layout/page-container';
 import { DashboardPeriodFilters } from './components/dashboard-period-filters';
@@ -48,7 +47,6 @@ import {
     type ProjectHealth,
 } from '@/components/dashboard/ProjectPerformanceGrid';
 import { EnterpriseHeatmap } from '@/components/dashboard/EnterpriseHeatmap';
-import { RiskCardGrid } from '@/components/dashboard/RiskCard';
 import { WorkforceIntelligenceSection } from '@/components/dashboard/InsightCard';
 import { Brain, Gauge, LineChart } from 'lucide-react';
 
@@ -415,24 +413,6 @@ export default function Dashboard() {
                                 onOptimize={() => navigate('/insights')}
                             />
                         </DashboardCard>
-                    </section>
-
-                    <section>
-                        <DashboardSectionHeader
-                            title="Current delivery risk"
-                            description="Allocation and planner capacity signals from Project_Allocation — not project-plan skill estimates."
-                            action={
-                                <Button variant="ghost" size="sm" className="gap-1.5 text-brand-600">
-                                    <Sparkles className="w-4 h-4" />
-                                    Powered by R360 AI
-                                </Button>
-                            }
-                        />
-                        <RiskCardGrid
-                            risks={staffingRisks}
-                            loading={risksLoading}
-                            onView={(id) => navigate(`/projects/${id}`)}
-                        />
                     </section>
 
                     <WorkforceIntelligenceSection items={intelligenceItems} />
