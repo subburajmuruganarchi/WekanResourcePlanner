@@ -6,6 +6,7 @@ import {
     Layers,
     Clock,
     Info,
+    Sparkles,
 } from 'lucide-react';
 import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import {
     StatusBadge,
 } from '@/components/patterns';
 import { TeamWorkloadChart, aggregateTeamWorkload } from '@/components/dashboard/TeamWorkloadChart';
+import { RiskCardGrid } from '@/components/dashboard/RiskCard';
 import { PmDashboardCharts } from '@/app/pm-workspace/components/pm-dashboard-charts';
 import { pmProjectDeliveryColumns } from '@/app/pm-workspace/components/pm-project-delivery-columns';
 import { useProjects } from '@/lib/use-projects';
@@ -50,8 +52,13 @@ export default function PmDashboardPage() {
         includeUnstaffedProjects: false,
     });
     const [risks, setRisks] = useState<DeliveryRiskItem[]>([]);
+    const [risksLoading, setRisksLoading] = useState(true);
 
     const weekStart = getCurrentWeekStart();
+    const detailedRisks = useMemo(
+        () => risks.filter((r) => r.level === 'HIGH' || r.level === 'MEDIUM'),
+        [risks]
+    );
     const periodRange = useMemo(
         () => buildDashboardPeriodRange('week', weekStart, getCurrentMonthValue()),
         [weekStart]
@@ -118,11 +125,13 @@ export default function PmDashboardPage() {
 
     useEffect(() => {
         const myProjectIds = new Set(snapshot.myProjects.map((p) => p.id));
+        setRisksLoading(true);
         fetchDeliveryRisks()
             .then((all) => {
                 setRisks((all ?? []).filter((r) => myProjectIds.has(r.projectId)));
             })
-            .catch(() => setRisks([]));
+            .catch(() => setRisks([]))
+            .finally(() => setRisksLoading(false));
     }, [snapshot.myProjects]);
 
     if (loading) {
@@ -193,6 +202,23 @@ export default function PmDashboardPage() {
                     hint={periodLabel}
                 />
             </MetricGrid>
+
+            <Section
+                title="Current delivery risk"
+                description="Allocation and planner capacity signals — score, operational issues, and recommended actions (same model as Delivery Manager)"
+                action={
+                    <Button variant="ghost" size="sm" className="gap-1.5 text-brand-600">
+                        <Sparkles className="w-4 h-4" />
+                        Powered by R360 AI
+                    </Button>
+                }
+            >
+                <RiskCardGrid
+                    risks={detailedRisks}
+                    loading={risksLoading}
+                    onView={(id) => navigate(`/projects/${id}`)}
+                />
+            </Section>
 
             <Section
                 title="Delivery visuals"

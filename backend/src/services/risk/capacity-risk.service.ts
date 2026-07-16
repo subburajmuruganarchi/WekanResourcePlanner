@@ -1,7 +1,7 @@
 import { Types } from 'mongoose';
 import { ProjectAllocation } from '../../modules/allocations/allocation.model';
 import { WeeklyAllocationEntry } from '../../modules/weekly-allocations/weekly-allocation-entry.model';
-import { getCurrentUtcWeekBounds } from '../../modules/dashboard/dashboard-metrics.service';
+import { endOfUtcWeek, startOfUtcWeek } from '../../common/utils/week.util';
 import { features } from '../../config/features';
 import type { CapacityRiskFinding, RiskLevel } from './risk-intelligence.types';
 
@@ -12,7 +12,8 @@ function maxSeverity(findings: CapacityRiskFinding[]): RiskLevel {
 }
 
 /**
- * Capacity risk — source: WeeklyAllocationEntry (current week) + active Project_Allocation.
+ * Capacity risk — source: WeeklyAllocationEntry (current UTC week) + active Project_Allocation.
+ * Week bounds use the same startOfUtcWeek helper as planner saves so planned hours match.
  */
 export async function assessCapacityRisk(projectId: string): Promise<{
     findings: CapacityRiskFinding[];
@@ -20,22 +21,20 @@ export async function assessCapacityRisk(projectId: string): Promise<{
 }> {
     const findings: CapacityRiskFinding[] = [];
     const oid = new Types.ObjectId(projectId);
-    const { weekStart } = getCurrentUtcWeekBounds();
+    const weekStart = startOfUtcWeek(new Date());
+    const weekEnd = endOfUtcWeek(weekStart);
     const capacity = features.weeklyCapacityHours;
 
-    const activeAllocations = await ProjectAllocation.find({
-        project_id: oid,
-        is_active: true,
-    }).lean();
-
-    if (activeAllocations.length === 0) {
-        return { findings, level: 'LOW' };
-    }
-
-    const weekEntries = await WeeklyAllocationEntry.find({
-        project_id: oid,
-        week_start: weekStart,
-    }).lean();
+    const [activeAllocations, weekEntries] = await Promise.all([
+        ProjectAllocation.find({
+            project_id: oid,
+            is_active: true,
+        }).lean(),
+        WeeklyAllocationEntry.find({
+            project_id: oid,
+            week_start: { $gte: weekStart, $lte: weekEnd },
+        }).lean(),
+    ]);
 
     const plannedByEmployee = new Map<string, number>();
     for (const entry of weekEntries) {
@@ -43,9 +42,21 @@ export async function assessCapacityRisk(projectId: string): Promise<{
         plannedByEmployee.set(id, (plannedByEmployee.get(id) ?? 0) + (entry.planned_hours ?? 0));
     }
 
+    // Staff set: active Project_Allocation members, or anyone with planner hours this week.
+    const staffIds = new Set<string>([
+        ...activeAllocations.map((a) => a.employee_id.toString()),
+        ...[...plannedByEmployee.keys()].filter((id) => (plannedByEmployee.get(id) ?? 0) > 0),
+    ]);
+
+    if (staffIds.size === 0) {
+        return { findings, level: 'LOW' };
+    }
+
     let zeroHourMembers = 0;
-    for (const alloc of activeAllocations) {
-        const id = alloc.employee_id.toString();
+    for (const id of staffIds) {
+        // Only flag Project_Allocation members with no planner hours (not pure planner-only rows).
+        const onAllocation = activeAllocations.some((a) => a.employee_id.toString() === id);
+        if (!onAllocation) continue;
         const planned = plannedByEmployee.get(id) ?? 0;
         if (planned <= 0) zeroHourMembers++;
     }
@@ -60,10 +71,13 @@ export async function assessCapacityRisk(projectId: string): Promise<{
         });
     }
 
-    const expectedHours = activeAllocations.reduce(
-        (sum, a) => sum + ((a.allocation_percent ?? 0) / 100) * capacity,
-        0
-    );
+    const expectedHours =
+        activeAllocations.length > 0
+            ? activeAllocations.reduce(
+                  (sum, a) => sum + ((a.allocation_percent ?? 0) / 100) * capacity,
+                  0
+              )
+            : 0;
     const actualPlanned = weekEntries.reduce((sum, e) => sum + (e.planned_hours ?? 0), 0);
 
     if (expectedHours > 0 && actualPlanned < expectedHours * 0.4) {
@@ -76,11 +90,10 @@ export async function assessCapacityRisk(projectId: string): Promise<{
         });
     }
 
-    // Over-allocation: compare weekly planned hours (all projects) vs capacity — not legacy allocation %.
-    const employeeIds = [...new Set(activeAllocations.map((a) => a.employee_id.toString()))];
+    const employeeIds = [...staffIds];
     const orgWeekEntries = await WeeklyAllocationEntry.find({
         employee_id: { $in: employeeIds.map((id) => new Types.ObjectId(id)) },
-        week_start: weekStart,
+        week_start: { $gte: weekStart, $lte: weekEnd },
     }).lean();
 
     const orgPlannedByEmployee = new Map<string, number>();

@@ -46,8 +46,8 @@ function buildRecommendations(
 ): string[] {
     const recs: string[] = [];
     for (const f of allocationFindings) {
-        if (f.message.includes('No team members')) {
-            recs.push('Assign members in Project_Allocation for this project.');
+        if (f.message.includes('No team members') || f.message.includes('no planned hours for the current week')) {
+            recs.push('Assign members on the project and add current-week planned hours in the planner.');
         } else if (f.message.includes('none are active')) {
             recs.push('Reactivate allocation rows in Project_Allocation or assign new members.');
         }

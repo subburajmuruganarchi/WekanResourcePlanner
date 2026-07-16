@@ -11,6 +11,7 @@ import { features } from '../../config/features';
 import { computePeakCommittedPercent } from '../allocations/allocation-availability.util';
 import type { DashboardPeriodRange } from './dashboard-period.util';
 import { isScopedEmptyFilter } from '../../common/utils/data-scope.util';
+import { endOfUtcWeek, startOfUtcWeek } from '../../common/utils/week.util';
 
 export interface DashboardScopeFilter {
     projectIds?: string[];
@@ -39,17 +40,10 @@ export function operationalDashboardProjectFilter(): Record<string, unknown> {
     return operationalProjectMongoFilter();
 }
 
-/** UTC Monday 00:00 through Sunday 23:59:59.999 for current week. */
+/** UTC Monday 00:00 through Sunday 23:59:59.999 for current week (aligned with planner saves). */
 export function getCurrentUtcWeekBounds(): { weekStart: Date; weekEnd: Date } {
-    const now = new Date();
-    const day = now.getUTCDay();
-    const diff = now.getUTCDate() - day + (day === 0 ? -6 : 1);
-    const weekStart = new Date(now);
-    weekStart.setUTCDate(diff);
-    weekStart.setUTCHours(0, 0, 0, 0);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
-    weekEnd.setUTCHours(23, 59, 59, 999);
+    const weekStart = startOfUtcWeek(new Date());
+    const weekEnd = endOfUtcWeek(weekStart);
     return { weekStart, weekEnd };
 }
 
